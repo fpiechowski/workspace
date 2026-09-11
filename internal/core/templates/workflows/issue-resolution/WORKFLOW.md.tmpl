@@ -1,0 +1,77 @@
+# Issue resolution, version 1
+
+Read WORKSPACE.md before each decision. The CLI validates phase gates. Advance one
+phase with workspace workflow advance only after its required results are accepted.
+Use workspace menu --json for available actions and pending decision IDs/revisions.
+
+## Re-entry and operation identity
+
+For every step, inspect tasks, sessions, handoffs and artifacts. If the current task
+has an accepted result, reuse it. If a Session is active, collect its messages. If an
+unreviewed handoff exists, review it before launching work. Otherwise create the
+missing resources and start the task. Use keys such as planning:create,
+planning:start:1, implement:task-id:attempt and result:task-id:attempt. A changed
+payload needs a new logical operation key. Retry only after preserving partial work;
+workspace task retry invalidates dependent results and increments attempts.
+
+## Intake and planning
+
+Read inputs/issue.md, establish acceptance criteria, and resolve blocking questions.
+Create a planner Task with required_artifacts: [PLAN.md] and a planning worktree at
+the frozen workspace base. Define a planner Agent and start it with --task and
+--worktree. Default profile frontier; honor configured workflow profile overrides.
+The planning prompt requires diagnosis, evidence, alternatives, task boundaries,
+dependencies, integration strategy, risks and acceptance tests. Inspect the preserved
+PLAN.md returned by handoff submit and accept it, or reject with concrete feedback.
+Advance planning -> plan_review after acceptance.
+
+## Plan review and implementation
+
+Turn the accepted plan into implementation Tasks with goals, acceptance criteria,
+dependencies and required artifacts. Each implementation Task depends on the
+accepted planning Task; encode implementation dependencies as additional task IDs.
+Ask the user about unresolved product choices, not routine decomposition. Advance
+plan_review -> implementing once specifications are ready. Create worktrees and
+Agent personas; start ready Tasks with profile implementation unless overridden.
+Dependent tasks require accepted predecessor commits in their base. Reuse a worktree
+sequentially, never start overlapping writers. Observe configured max_parallel_tasks.
+
+Workers commit code, preserve IMPLEMENTATION.md and actual command-output evidence,
+and submit handoffs. Read evidence and review scope before handoff accept. Reject
+failed acceptance criteria with a reason file and use task retry for another attempt.
+Questions and blocked outcomes remain visible in the inbox. Advance to integrating
+only after all required implementation results are accepted.
+
+## Integration and change requests
+
+Run workspace integration prepare to freeze accepted heads in integration/manifest.json
+and obtain the dedicated worktree. Create an integrator Task depending on all selected
+implementation Tasks. Delegate merges/conflicts and integration checks to an integrator
+Agent. Accept INTEGRATION.md only for the manifest's combined commit and successful
+checks. Advance to change_requests.
+
+Prepare a CR using workspace change-request prepare on the integration worktree.
+Review its saved title, description and diff before publish. Use configured forge
+adapter; policy ask requires an actual user answer before --user-confirmed. An
+uncertain publish is reconciled by lookup/sync, not by blindly creating another CR.
+Without forge access, show the prepared local package and let the user link the real
+request or explicitly skip with a reason. For per-task CRs, cover all accepted heads
+and explain merge order. Live testing still targets the complete integrated commit.
+Advance to live_test_offer once the CR gate is satisfied.
+
+## Live testing and release
+
+Present the pending decision from menu: run live testing or explicitly skip. For run,
+clarify the environment and scenarios; record the actual answer with decision answer,
+its expected revision and environment. Default profile live-testing, configurable by
+project. Create a tester Task depending on integration, in the integrated worktree,
+after the integrator releases it. Start a separate tester Session. Require LIVE_TEST.md
+and scenario evidence tied to the exact integration HEAD. Accept the report, then
+advance live_testing -> awaiting_release. A skipped test requires the user's reason.
+
+Handle review/CI feedback through delegated tasks and new accepted integration/test
+results. A changed integration commit invalidates old live-test evidence. Do not equate
+PR merge with release. In awaiting_release, report readiness and wait for the user to
+confirm deployment/release with its reference. Only then run release confirm, using
+--user-confirmed when conveying the user's answer as orchestrator. Archive and clean
+are separate operations after completion; clean --dry-run shows preservation checks.
