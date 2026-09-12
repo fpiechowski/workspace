@@ -28,7 +28,8 @@ The wrapper receives the source URL as one argument and returns JSON on stdout:
 Authentication belongs to the wrapper or installed tracker client. The command has
 a 30-second timeout. No shell interpolation is performed by workspace.
 
-Use `--input-file description.md` to provide an offline description, optionally with
-`--issue URL` to retain its source. An inaccessible tracker yields `tracker_unavailable`;
-it never creates a workspace with guessed issue contents. Creation with the same
-operation key reuses the stored snapshot without fetching a changed issue again.
+Use `workspace create "description"` or `--input-file description.md` to provide an
+offline description, optionally with `--issue URL` to retain its source. An inaccessible
+tracker yields `tracker_unavailable`; it never creates a workspace with guessed issue
+contents. Creation with the same operation key reuses the stored snapshot without
+fetching a changed issue again.

@@ -113,6 +113,7 @@ workspace client list
 # Utworzenie i otwarcie pracy
 workspace create --issue https://tracker.example/ENG-142 --workflow issue-resolution
 workspace create --input-file ./issue.md --workflow issue-resolution
+workspace create "create workspace improvements" --workflow issue-resolution
 workspace start --workspace ws_01
 workspace attach --workspace ws_01
 workspace list

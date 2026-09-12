@@ -19,11 +19,13 @@ For a new issue or work description:
    the user's input; ask with the available choices if intent is ambiguous. A
    workspace without `--workflow` starts in `needs_workflow` for interactive selection.
 3. For a ticket URL, `create --issue URL` retrieves supported/configured trackers.
-   Otherwise save the supplied description or retrieved ticket text as an input file. Preserve
-   the source URL, relevant acceptance criteria and retrieval date. If tracker access
-   is unavailable, ask for the description instead of inventing issue contents.
-4. Use `workspace create --title <title> --input-file <file> --workflow plan-first
+   Otherwise pass the supplied description as the positional intent or save it as an input
+   file. Preserve the source URL, relevant acceptance criteria and retrieval date. If tracker
+   access is unavailable, ask for the description instead of inventing issue contents.
+4. Use `workspace create "<intent>" --title <title> --workflow plan-first
    --operation-key <stable-key> --json`; include `--issue <url>` when applicable.
+   For longer or file-based descriptions, use `--input-file <file>` instead of the
+   positional intent.
    Retain the returned workspace ID; repeat the same operation key on transport retry.
 5. Run `workspace start --workspace <id> --operation-key <start-key> --json`.
    Return its workspace ID and `workspace attach --workspace <id>` to the user.

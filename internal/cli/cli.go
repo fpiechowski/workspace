@@ -293,10 +293,16 @@ func newRoot(o *options) *cobra.Command {
 	}))
 	var create core.CreateOptions
 	var inputFile string
-	createCmd := command("create", "Create a workspace from an issue description", func(c *cobra.Command, _ []string) error {
+	createCmd := command("create [intent]", "Create a workspace from an issue description", func(c *cobra.Command, args []string) error {
 		s, err := o.service()
 		if err != nil {
 			return err
+		}
+		if len(args) == 1 {
+			if inputFile != "" {
+				return &core.Error{Code: "input_conflict", Message: "provide the intent either as an argument or with --input-file, not both"}
+			}
+			create.Input = args[0]
 		}
 		if inputFile != "" {
 			b, err := os.ReadFile(inputFile)
@@ -312,9 +318,10 @@ func newRoot(o *options) *cobra.Command {
 		}
 		return o.emit(v)
 	})
+	createCmd.Args = cobra.MaximumNArgs(1)
 	createCmd.Flags().StringVar(&create.Title, "title", "", "Workspace title")
 	createCmd.Flags().StringVar(&inputFile, "input-file", "", "Saved issue/description file")
-	createCmd.Flags().StringVar(&create.Source, "issue", "", "Issue URL; fetch from configured tracker unless --input-file is supplied")
+	createCmd.Flags().StringVar(&create.Source, "issue", "", "Issue URL; fetch from configured tracker unless an intent or --input-file is supplied")
 	createCmd.Flags().StringVar(&create.Workflow, "workflow", "", "Workflow name; omit to ask the orchestrator")
 	createCmd.Flags().StringVar(&create.Base, "base", "HEAD", "Base Git revision")
 	root.AddCommand(createCmd)

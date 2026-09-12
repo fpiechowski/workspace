@@ -111,7 +111,9 @@ Podaj agentowi ticket lub opis i użyj skilla `workspace`, albo wykonaj:
 ```sh
 workspace create --issue https://github.com/OWNER/REPO/issues/142 \
   --workflow plan-first --operation-key issue-142
-# Alternatywnie: --input-file issue.md, opcjonalnie razem z --issue URL.
+# Opis można też podać bezpośrednio jako argument albo przez --input-file issue.md.
+workspace create "Improve workspace creation" --workflow plan-first
+# --input-file można opcjonalnie połączyć z --issue URL, aby zachować źródło.
 workspace start --workspace ws_ID_Z_ODPOWIEDZI --operation-key orchestrator-1
 workspace attach --workspace ws_ID_Z_ODPOWIEDZI
 ```

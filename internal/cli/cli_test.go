@@ -2,7 +2,11 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,6 +36,48 @@ func TestStructuredErrorsAndWorkflowDiscovery(t *testing.T) {
 	code = Execute([]string{"--json", "--project", t.TempDir(), "status"}, nil, &out, &errOut)
 	if code != 1 || !bytes.Contains(out.Bytes(), []byte(`"code":"project_not_found"`)) {
 		t.Fatalf("expected structured error: %d %s", code, out.String())
+	}
+}
+
+func TestCreateAcceptsIntentArgument(t *testing.T) {
+	project := t.TempDir()
+	ctx := context.Background()
+	for _, args := range [][]string{
+		{"init"},
+		{"-c", "user.name=Workspace Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"},
+	} {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = project
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	if _, err := core.InitProject(ctx, project); err != nil {
+		t.Fatal(err)
+	}
+
+	const intent = "create workspace improvements"
+	var out, errOut bytes.Buffer
+	code := Execute([]string{"--json", "--project", project, "create", intent}, nil, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("create failed: %d %s", code, errOut.String())
+	}
+	var response struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.OK || response.Data.Directory == "" {
+		t.Fatalf("invalid create response: %s", out.String())
+	}
+	input, err := os.ReadFile(filepath.Join(response.Data.Directory, "inputs", "issue.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(input) != intent {
+		t.Fatalf("saved intent %q, want %q", input, intent)
 	}
 }
 

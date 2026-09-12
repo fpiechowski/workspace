@@ -363,7 +363,7 @@ func WorkflowNames(root string, cfg Config) []string {
 
 func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error) {
 	if strings.TrimSpace(opt.Input) == "" && opt.Source == "" {
-		return Status{}, fail("input_required", "provide an issue description/snapshot with --input-file; a URL alone is insufficient")
+		return Status{}, fail("input_required", "provide an issue description/snapshot as an argument or with --input-file; a URL alone is insufficient")
 	}
 	if opt.Title == "" {
 		opt.Title = "Untitled issue"
