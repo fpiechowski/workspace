@@ -3,7 +3,10 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
+
+	"workspace/internal/core"
 )
 
 func TestStructuredErrorsAndWorkflowDiscovery(t *testing.T) {
@@ -29,5 +32,29 @@ func TestStructuredErrorsAndWorkflowDiscovery(t *testing.T) {
 	code = Execute([]string{"--json", "--project", t.TempDir(), "status"}, nil, &out, &errOut)
 	if code != 1 || !bytes.Contains(out.Bytes(), []byte(`"code":"project_not_found"`)) {
 		t.Fatalf("expected structured error: %d %s", code, out.String())
+	}
+}
+
+func TestWorkspaceShortNamesAndSelector(t *testing.T) {
+	workspaces := []core.Status{
+		{Workspace: core.Workspace{ID: "ws_one", Title: "First", Status: "active"}},
+		{Workspace: core.Workspace{ID: "ws_two", Title: "Second", Status: "paused"}},
+	}
+	short := workspaceNameIDs(workspaces)
+	if short["First"] != "ws_one" || short["Second"] != "ws_two" {
+		t.Fatalf("unexpected short workspace map: %#v", short)
+	}
+
+	o := &options{in: strings.NewReader("2\n"), out: &bytes.Buffer{}}
+	selected, err := chooseWorkspace(o, workspaces, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected.Workspace.ID != "ws_two" {
+		t.Fatalf("selected %s, want ws_two", selected.Workspace.ID)
+	}
+	selected, err = chooseWorkspace(o, workspaces, "First")
+	if err != nil || selected.Workspace.ID != "ws_one" {
+		t.Fatalf("title lookup: %v %#v", err, selected)
 	}
 }

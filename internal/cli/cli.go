@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -23,6 +26,8 @@ type options struct {
 	in                              io.Reader
 	out, errOut                     io.Writer
 }
+
+var errWorkspaceSelectionCancelled = errors.New("workspace selection cancelled")
 
 func Execute(args []string, in io.Reader, out, errOut io.Writer) int {
 	o := &options{in: in, out: out, errOut: errOut}
@@ -129,6 +134,98 @@ func command(use, short string, fn func(*cobra.Command, []string) error) *cobra.
 	return &cobra.Command{Use: use, Short: short, Args: cobra.NoArgs, RunE: fn}
 }
 
+func firstArg(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(args[0])
+}
+
+func workspaceTitle(status core.Status) string {
+	if title := strings.TrimSpace(status.Workspace.Title); title != "" {
+		return title
+	}
+	return status.Workspace.ID
+}
+
+func workspaceNameIDs(statuses []core.Status) map[string]string {
+	out := make(map[string]string, len(statuses))
+	for _, status := range statuses {
+		name := workspaceTitle(status)
+		if _, exists := out[name]; exists {
+			name = fmt.Sprintf("%s (%s)", name, status.Workspace.ID)
+		}
+		out[name] = status.Workspace.ID
+	}
+	return out
+}
+
+func chooseWorkspace(o *options, statuses []core.Status, selector string) (core.Status, error) {
+	if selector != "" {
+		matches := make([]core.Status, 0, 1)
+		for _, status := range statuses {
+			if status.Workspace.ID == selector || strings.EqualFold(workspaceTitle(status), selector) {
+				matches = append(matches, status)
+			}
+		}
+		if len(matches) == 1 {
+			return matches[0], nil
+		}
+		if len(matches) > 1 {
+			ids := make([]string, 0, len(matches))
+			for _, match := range matches {
+				ids = append(ids, match.Workspace.ID)
+			}
+			return core.Status{}, fmt.Errorf("workspace title %q is ambiguous; use one of: %s", selector, strings.Join(ids, ", "))
+		}
+		return core.Status{}, fmt.Errorf("workspace %q not found", selector)
+	}
+	if o.json || o.nonInteractive {
+		return core.Status{}, fmt.Errorf("workspace open without a selector requires an interactive terminal")
+	}
+
+	ordered := append([]core.Status(nil), statuses...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return ordered[i].Workspace.CreatedAt.After(ordered[j].Workspace.CreatedAt)
+	})
+	fmt.Fprintln(o.out, "Available workspaces:")
+	for i, status := range ordered {
+		phase := "-"
+		if status.Workspace.Workflow != nil && status.Workspace.Workflow.Phase != "" {
+			phase = status.Workspace.Workflow.Phase
+		}
+		detail := status.Workspace.Input.Source
+		if detail == "" {
+			detail = status.Workspace.Input.Snapshot
+		}
+		fmt.Fprintf(o.out, "  %d) %s [%s / %s] %s\n", i+1, workspaceTitle(status), status.Workspace.Status, phase, status.Workspace.ID)
+		if detail != "" {
+			fmt.Fprintf(o.out, "     %s\n", detail)
+		}
+	}
+	fmt.Fprint(o.out, "Select workspace number (Enter = 1, q = cancel): ")
+	input := o.in
+	if input == nil {
+		input = os.Stdin
+	}
+	line, err := bufio.NewReader(input).ReadString('\n')
+	if err != nil && len(line) == 0 {
+		return core.Status{}, err
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ordered[0], nil
+	}
+	if strings.EqualFold(line, "q") || strings.EqualFold(line, "quit") || strings.EqualFold(line, "cancel") {
+		return core.Status{}, errWorkspaceSelectionCancelled
+	}
+	var choice int
+	if _, err := fmt.Sscanf(line, "%d", &choice); err != nil || choice < 1 || choice > len(ordered) {
+		return core.Status{}, fmt.Errorf("invalid workspace selection %q", line)
+	}
+	return ordered[choice-1], nil
+}
+
 func newRoot(o *options) *cobra.Command {
 	root := &cobra.Command{Use: "workspace", Short: "Manage agent personas and tmux sessions in Git workspaces", SilenceUsage: true, SilenceErrors: true}
 	root.PersistentPreRun = func(c *cobra.Command, _ []string) { o.commandPath = c.CommandPath() }
@@ -221,7 +318,8 @@ func newRoot(o *options) *cobra.Command {
 	createCmd.Flags().StringVar(&create.Workflow, "workflow", "", "Workflow name; omit to ask the orchestrator")
 	createCmd.Flags().StringVar(&create.Base, "base", "HEAD", "Base Git revision")
 	root.AddCommand(createCmd)
-	root.AddCommand(command("list", "List workspaces", func(c *cobra.Command, _ []string) error {
+	var shortList bool
+	listCmd := command("list", "List workspaces", func(c *cobra.Command, _ []string) error {
 		s, err := o.service()
 		if err != nil {
 			return err
@@ -230,8 +328,40 @@ func newRoot(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
+		if shortList {
+			return o.emit(workspaceNameIDs(v))
+		}
 		return o.emit(v)
-	}))
+	})
+	listCmd.Flags().BoolVar(&shortList, "short", false, "Print a compact title: ID map")
+	listCmd.Flags().BoolVar(&shortList, "map", false, "Alias for --short")
+	root.AddCommand(listCmd)
+	openCmd := command("open [workspace]", "Select a workspace and attach to its tmux session", func(c *cobra.Command, args []string) error {
+		s, err := o.service()
+		if err != nil {
+			return err
+		}
+		workspaces, err := s.List(c.Context())
+		if err != nil {
+			return err
+		}
+		if len(workspaces) == 0 {
+			return fmt.Errorf("no workspaces found")
+		}
+		selected, err := chooseWorkspace(o, workspaces, firstArg(args))
+		if err != nil {
+			if errors.Is(err, errWorkspaceSelectionCancelled) {
+				return nil
+			}
+			return err
+		}
+		if !o.json {
+			fmt.Fprintf(o.out, "Opening %s (%s)\n", workspaceTitle(selected), selected.Workspace.ID)
+		}
+		return s.Runtime.Attach(c.Context(), selected.Workspace.ID, "")
+	})
+	openCmd.Args = cobra.MaximumNArgs(1)
+	root.AddCommand(openCmd)
 	root.AddCommand(command("status", "Show durable state and session history", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {

@@ -1,0 +1,31 @@
+# Plan-first example workflow, version 1
+
+This is a deliberately small workflow for turning a task description into a plan
+and then implementing that plan. Read WORKSPACE.md before every decision and use
+workspace menu --json for the current phase and available actions.
+
+## 1. Plan
+
+Read inputs/issue.md and repository instructions. Create one planner Task with the
+required PLAN.md artifact, one planning worktree at the frozen workspace base, and
+one planner Agent. The planner analyzes the code and writes a bounded plan without
+implementing the change. Review and accept the handoff, then advance to plan_review.
+
+## 2. Prepare implementation
+
+Turn the accepted plan into one or more implementation Tasks. Every implementation
+task must depend on the accepted planner task and have clear acceptance criteria.
+Create a separate worktree for each implementation task; never run overlapping
+writers in the same worktree. Advance to implementing after the task graph is ready.
+
+## 3. Implement
+
+Start ready implementation Tasks in their worktrees. Workers commit their changes,
+write IMPLEMENTATION.md and real check evidence, then submit a handoff. Review and
+accept every successful implementation handoff. When all implementation tasks are
+accepted, advance once more; the workflow becomes completed. There is no integration,
+change-request, live-testing or release gate in this example workflow.
+
+On resume, inspect existing tasks, sessions, worktrees, handoffs and artifacts before
+creating anything. Use stable operation keys and retry only after preserving partial
+work. Ask the user only about unresolved product choices or blockers.

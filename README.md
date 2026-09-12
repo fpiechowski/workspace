@@ -121,6 +121,19 @@ workspace attach --workspace ws_ID_Z_ODPOWIEDZI
 powstaje stan `needs_workflow`; orkiestrator pyta o wybór przed delegowaniem.
 [Trackery i snapshoty](docs/trackers.md).
 
+Powrót do istniejącego workspace nie wymaga pamiętania ID:
+
+```sh
+workspace list --short
+workspace open
+# albo bez menu:
+workspace open "specification"
+workspace open ws_ID
+```
+
+`list --short` wypisuje mapę `tytuł: workspace_ID`, a `open` pokazuje interaktywny
+selector z tytułem, stanem, fazą, ID i źródłem wejścia, po czym dołącza do sesji tmux.
+
 Sesja tmux odpowiada workspace, okno worktree, panel konkretnej Session. Orkiestrator
 ma własne okno w katalogu workspace. Odłączenie użytkownika nie zatrzymuje procesów.
 

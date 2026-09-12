@@ -1,0 +1,34 @@
+schema_version: 1
+project_id: prj_01M2908Y55TCD89G78NMTKE968
+runtime: tmux
+clients:
+  opencode:
+    adapter: opencode
+    launch_argv: [opencode, --auto, --model, "{model}", --prompt, "{prompt}"]
+    resume_argv: [opencode, --auto, --session, "{thread_id}", --model, "{model}", --prompt, "{prompt}"]
+    deliver_argv: [python3, "{project_dir}/scripts/opencode-deliver.py", "{thread_id}", "{message_file}", "{message_id}"]
+
+profiles:
+  thinker:
+    routes:
+      - {id: thinker, client: opencode, provider: openai, model: openai/gpt-5.6-sol, max_concurrency: 1}
+  orchestrator:
+    routes:
+      - {id: orchestrator, client: opencode, provider: zai-coding-plan, model: zai-coding-plan/glm-5.3-flash, max_concurrency: 1}
+  supervisor:
+    routes:
+      - {id: supervisor, client: opencode, provider: opencode-go, model: opencode-go/glm-5.3, max_concurrency: 1}
+  worker:
+    routes:
+      - {id: worker, client: opencode, provider: deepseek, model: deepseek/deepseek-flash, max_concurrency: 3}
+
+defaults:
+  orchestrator_profile: orchestrator
+
+workflows:
+  plan-first:
+    profiles:
+      orchestrator: orchestrator
+      planning: thinker
+      implementation: worker
+    max_parallel_tasks: 3
