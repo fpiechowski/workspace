@@ -245,7 +245,19 @@ func newRoot(o *options) *cobra.Command {
 	}))
 	workflow := &cobra.Command{Use: "workflow", Short: "Select a workflow"}
 	workflow.AddCommand(command("list", "Show available workflows", func(c *cobra.Command, _ []string) error {
-		return o.emit([]map[string]any{{"id": "issue-resolution", "version": 1, "input": "issue URL with snapshot, or issue description"}})
+		s, err := o.service()
+		if err != nil {
+			return err
+		}
+		cfg, err := s.Config()
+		if err != nil {
+			return err
+		}
+		workflows := make([]map[string]any, 0)
+		for _, name := range core.WorkflowNames(s.Root, cfg) {
+			workflows = append(workflows, map[string]any{"id": name, "version": 1, "input": "issue URL with snapshot, or issue description"})
+		}
+		return o.emit(workflows)
 	}))
 	selectCmd := command("select <name>", "Select the workflow for an undecided workspace", func(c *cobra.Command, args []string) error {
 		s, id, err := o.scope()

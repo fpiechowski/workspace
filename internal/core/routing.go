@@ -10,6 +10,9 @@ import (
 
 func workflowProfile(cfg Config, d *Document, role, fallback string) string {
 	if d.State.Workflow == nil {
+		if role == "orchestrator" && cfg.Defaults.OrchestratorProfile != "" {
+			return cfg.Defaults.OrchestratorProfile
+		}
 		return fallback
 	}
 	key := map[string]string{"orchestrator": "orchestrator", "planner": "planning", "implementer": "implementation", "integrator": "integration", "tester": "live-testing"}[role]

@@ -38,7 +38,7 @@ def main():
         assert Path(skill["path"]).is_file()
         issue = root / "issue.md"
         issue.write_text("Fix the reproducible checkout error.\n", encoding="utf-8")
-        args = ("create", "--input-file", str(issue), "--workflow", "issue-resolution",
+        args = ("create", "--input-file", str(issue), "--workflow", "plan-first",
                 "--operation-key", "install-smoke")
         created = cli(*args)
         repeated = cli(*args)

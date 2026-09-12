@@ -19,7 +19,7 @@ workspace task retry invalidates dependent results and increments attempts.
 Read inputs/issue.md, establish acceptance criteria, and resolve blocking questions.
 Create a planner Task with required_artifacts: [PLAN.md] and a planning worktree at
 the frozen workspace base. Define a planner Agent and start it with --task and
---worktree. Default profile frontier; honor configured workflow profile overrides.
+--worktree. Use the profile configured for the workflow's planning role.
 The planning prompt requires diagnosis, evidence, alternatives, task boundaries,
 dependencies, integration strategy, risks and acceptance tests. Inspect the preserved
 PLAN.md returned by handoff submit and accept it, or reject with concrete feedback.

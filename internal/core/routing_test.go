@@ -46,6 +46,55 @@ func TestWorkflowProfilesAndParallelLimit(t *testing.T) {
 	}
 }
 
+func TestOrchestratorUsesGlobalDefaultAndWorkflowOverride(t *testing.T) {
+	s, _ := fixture(t)
+	ctx := context.Background()
+	cfg, err := s.Config()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Defaults.OrchestratorProfile = "live-testing"
+	cfg.Workflows = map[string]WorkflowConfig{
+		"issue-resolution": {
+			Profiles: map[string]string{"orchestrator": "implementation"},
+		},
+	}
+	b, _ := yaml.Marshal(cfg)
+	if err := atomicWrite(filepath.Join(s.Root, ".workspace", "config.yaml"), b); err != nil {
+		t.Fatal(err)
+	}
+
+	withoutWorkflow, err := s.Create(ctx, CreateOptions{Title: "No workflow", Input: "Choose later"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := withoutWorkflow.Agents[0].Profile; got != "live-testing" {
+		t.Fatalf("global orchestrator profile not captured: got %q", got)
+	}
+	orch, err := s.StartOrchestrator(ctx, withoutWorkflow.Workspace.ID, "default-orchestrator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if orch.Profile != "live-testing" {
+		t.Fatalf("global orchestrator profile not used: got %q", orch.Profile)
+	}
+
+	withWorkflow, err := s.Create(ctx, CreateOptions{Title: "With workflow", Input: "Use override", Workflow: "issue-resolution"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := withWorkflow.Agents[0].Profile; got != "implementation" {
+		t.Fatalf("workflow orchestrator override not captured: got %q", got)
+	}
+	orch, err = s.StartOrchestrator(ctx, withWorkflow.Workspace.ID, "workflow-orchestrator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if orch.Profile != "implementation" {
+		t.Fatalf("workflow orchestrator override not used: got %q", orch.Profile)
+	}
+}
+
 func TestRoutingCapabilityAndCooldownDiagnostics(t *testing.T) {
 	s, id := fixture(t)
 	ctx := context.Background()

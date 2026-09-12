@@ -67,7 +67,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			return fail("workspace_paused", "resume workspace before starting sessions")
 		}
 		if a.Role != "orchestrator" && d.State.Workflow == nil {
-			return decisionRequired("select a workflow before delegation", "issue-resolution")
+			return decisionRequired("select a workflow before delegation", "plan-first")
 		}
 		parent := opt.Parent
 		if parent == "" && a.Role != "orchestrator" {

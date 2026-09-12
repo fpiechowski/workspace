@@ -73,6 +73,7 @@ func configure(t *testing.T, s *Service, exe string) {
 	}
 	cfg.Clients = map[string]Client{"test": {Adapter: "command", LaunchArgv: []string{exe, "-test.run=TestWorkerProcess", "--", "{prompt_file}"}}}
 	cfg.Profiles = map[string]Profile{}
+	cfg.Defaults.OrchestratorProfile = "frontier"
 	for _, name := range []string{"frontier", "implementation", "live-testing"} {
 		cfg.Profiles[name] = Profile{Routes: []Route{{ID: name + "-a", Client: "test", Provider: "a", Model: "test-model", MaxConcurrency: 8}}}
 	}

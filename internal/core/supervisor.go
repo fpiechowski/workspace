@@ -284,8 +284,14 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 				return err
 			}
 			argv := make([]string, len(p.ClientSnapshot.DeliverArgv))
+			replace := strings.NewReplacer(
+				"{project_dir}", s.Root,
+				"{thread_id}", p.ClientThreadID,
+				"{message_file}", path,
+				"{message_id}", message.ID,
+			)
 			for i, arg := range p.ClientSnapshot.DeliverArgv {
-				argv[i] = strings.NewReplacer("{thread_id}", p.ClientThreadID, "{message_file}", path, "{message_id}", message.ID).Replace(arg)
+				argv[i] = replace.Replace(arg)
 			}
 			callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			b, err := forgeCommand(callCtx, p.CWD, argv...)

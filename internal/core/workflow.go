@@ -9,6 +9,55 @@ import (
 
 var workflowPhases = []string{"planning", "plan_review", "implementing", "integrating", "change_requests", "live_test_offer", "live_testing", "awaiting_release", "completed"}
 
+func advancePlanFirst(d *Document) error {
+	phase := d.State.Workflow.Phase
+	switch phase {
+	case "planning":
+		if _, err := acceptedRole(d, "planner"); err != nil {
+			return err
+		}
+		d.State.Workflow.Phase = "plan_review"
+	case "plan_review":
+		plans, err := acceptedRole(d, "planner")
+		if err != nil {
+			return err
+		}
+		count := 0
+		for _, t := range d.State.Tasks {
+			if t.Role != "implementer" {
+				continue
+			}
+			count++
+			linked := false
+			for _, dep := range t.DependsOn {
+				for _, p := range plans {
+					if dep == p.ID {
+						linked = true
+					}
+				}
+			}
+			if !linked {
+				return fail("workflow_gate", "implementation task %s must reference an accepted plan", t.ID)
+			}
+		}
+		if count == 0 {
+			return fail("workflow_gate", "create implementation tasks before advancing")
+		}
+		d.State.Workflow.Phase = "implementing"
+	case "implementing":
+		if _, err := acceptedRole(d, "implementer"); err != nil {
+			return err
+		}
+		d.State.Workflow.Phase = "completed"
+		d.State.Status = "completed"
+	case "completed":
+		return fail("workspace_closed", "workflow is completed")
+	default:
+		return fail("invalid_state", "unknown plan-first workflow phase %q", phase)
+	}
+	return nil
+}
+
 func acceptedRole(d *Document, role string) ([]Task, error) {
 	result := []Task{}
 	for _, t := range d.State.Tasks {
@@ -101,10 +150,20 @@ func validateIntegration(ctx context.Context, d *Document) error {
 }
 func advance(ctx context.Context, d *Document, target string) error {
 	if d.State.Workflow == nil {
-		return decisionRequired("select a workflow", "issue-resolution")
+		return decisionRequired("select a workflow", "plan-first")
 	}
 	if d.State.Status != "active" {
 		return fail("workflow_gate", "workspace is %s", d.State.Status)
+	}
+	if d.State.Workflow.ID == "plan-first" {
+		next := map[string]string{"planning": "plan_review", "plan_review": "implementing", "implementing": "completed"}[d.State.Workflow.Phase]
+		if target != "" && target != next {
+			return fail("workflow_gate", "next phase is %s; cannot skip to %s", next, target)
+		}
+		if err := advancePlanFirst(d); err != nil {
+			return err
+		}
+		return nil
 	}
 	phase := d.State.Workflow.Phase
 	next := ""
@@ -389,7 +448,7 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 	err := s.With(ctx, selector, func(d *Document) error {
 		out = Menu{Revision: d.State.Revision, PendingDecision: d.State.PendingDecision, FreeText: true, Actions: []MenuAction{{"status", "Show progress", "status"}, {"sessions", "Open an agent session", "session list"}, {"artifacts", "Inspect results", "artifact list"}, {"inbox", "Read messages", "inbox list"}}}
 		if d.State.Workflow == nil {
-			out.Actions = append(out.Actions, MenuAction{"workflow", "Select issue-resolution", "workflow select issue-resolution"})
+			out.Actions = append(out.Actions, MenuAction{"workflow", "Select plan-first", "workflow select plan-first"})
 			return nil
 		}
 		out.Phase = d.State.Workflow.Phase

@@ -1,8 +1,8 @@
 # workspace
 
 CLI do zarządzania trwałym kontekstem zadania, agentami, Git worktrees i tmux.
-Orkiestrator realizuje `issue-resolution`: planowanie, delegowanie implementacji,
-integracja, change request, oferta live testing i potwierdzenie release’u.
+Orkiestrator realizuje prosty workflow `plan-first`: planowanie w osobnym worktree
+i delegowanie implementacji do kolejnych worktree’ów.
 
 - **Agent**: persona z rolą, instrukcjami, szablonem promptu i profilem modelu.
 - **Session**: konkretne uruchomienie persony; model, prompt i native thread ID są utrwalone.
@@ -53,32 +53,27 @@ clients:
   opencode:
     adapter: opencode
 profiles:
-  frontier:
-    strategy: provider-balanced
-    provider_weights: {openai: 1, anthropic: 1}
+  thinker:
     routes:
-      - {id: codex-plan, client: codex, provider: openai, model: YOUR_CODEX_MODEL, max_concurrency: 2}
-      - {id: claude-plan, client: claude, provider: anthropic, model: YOUR_CLAUDE_MODEL, max_concurrency: 2}
+      - {id: planner, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_THINKER_MODEL, max_concurrency: 1}
   orchestrator:
-    required_capabilities: [deliver, resume]
     routes:
-      - {id: codex-orch, client: codex, provider: openai, model: YOUR_ORCHESTRATOR_MODEL, max_concurrency: 2}
-  implementation:
+      - {id: orchestrator, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_ORCHESTRATOR_MODEL, max_concurrency: 1}
+  supervisor:
     routes:
-      - {id: worker, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_MODEL, max_concurrency: 3}
-  live-testing:
+      - {id: supervisor, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_SUPERVISOR_MODEL, max_concurrency: 1}
+  worker:
     routes:
-      - {id: tester, client: codex, provider: openai, model: YOUR_TEST_MODEL, max_concurrency: 1}
+      - {id: worker, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_WORKER_MODEL, max_concurrency: 3}
+defaults:
+  orchestrator_profile: orchestrator
 workflows:
-  issue-resolution:
+  plan-first:
     profiles:
       orchestrator: orchestrator
-      planning: frontier
-      implementation: implementation
-      integration: implementation
-      live-testing: live-testing
+      planning: thinker
+      implementation: worker
     max_parallel_tasks: 3
-    change_requests: integrated
 forge:
   adapter: github
   remote: origin
@@ -115,7 +110,7 @@ Podaj agentowi ticket lub opis i użyj skilla `workspace`, albo wykonaj:
 
 ```sh
 workspace create --issue https://github.com/OWNER/REPO/issues/142 \
-  --workflow issue-resolution --operation-key issue-142
+  --workflow plan-first --operation-key issue-142
 # Alternatywnie: --input-file issue.md, opcjonalnie razem z --issue URL.
 workspace start --workspace ws_ID_Z_ODPOWIEDZI --operation-key orchestrator-1
 workspace attach --workspace ws_ID_Z_ODPOWIEDZI

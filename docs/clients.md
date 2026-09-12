@@ -36,7 +36,9 @@ clients:
 The launcher receives arguments without shell interpolation. `{prompt}` inserts the
 text as one argument; `{prompt_file}` inserts its path. A delivery wrapper reads the
 message JSON, delivers it through the client's supported API, deduplicates message ID
-and returns `{"accepted":true}` only after acceptance. A busy TUI is not a transport API.
+and returns `{"accepted":true}` only after acceptance. `{project_dir}` expands to the
+repository root, which lets a project keep its delivery wrapper in `scripts/` without
+hard-coding a machine-specific path. A busy TUI is not a transport API.
 Workspace never injects text into an unknown terminal state.
 
 Profile `required_capabilities` filters clients before launch. Native Codex advertises

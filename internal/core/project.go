@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/template"
 	"time"
@@ -207,6 +208,11 @@ func (s *Service) Config() (Config, error) {
 			}
 		}
 	}
+	if profile := cfg.Defaults.OrchestratorProfile; profile != "" {
+		if _, ok := cfg.Profiles[profile]; !ok {
+			return cfg, fail("invalid_config", "defaults.orchestrator_profile references unknown profile %q", profile)
+		}
+	}
 	for name, w := range cfg.Workflows {
 		if w.MaxParallelTasks < 0 {
 			return cfg, fail("invalid_config", "negative max_parallel_tasks in %s", name)
@@ -327,12 +333,37 @@ func (s *Service) Status(ctx context.Context, selector string) (Status, error) {
 
 type CreateOptions struct{ Title, Input, Source, Workflow, Base, OperationKey string }
 
+const exampleWorkflow = "plan-first"
+
+func workflowTemplateExists(root, name string) bool {
+	_, err := os.Stat(filepath.Join(root, ".workspace", "templates", "workflows", name, "WORKFLOW.md.tmpl"))
+	return err == nil
+}
+
+func workflowAvailable(root string, cfg Config, name string) bool {
+	if _, ok := cfg.Workflows[name]; ok {
+		return true
+	}
+	// Keep the bundled example selectable before the user has added model
+	// profiles. Existing projects may also still contain the legacy template.
+	return name == exampleWorkflow && workflowTemplateExists(root, name) || name == "issue-resolution" && workflowTemplateExists(root, name)
+}
+
+func WorkflowNames(root string, cfg Config) []string {
+	names := make([]string, 0, len(cfg.Workflows)+1)
+	for name := range cfg.Workflows {
+		names = append(names, name)
+	}
+	if !slices.Contains(names, exampleWorkflow) && workflowTemplateExists(root, exampleWorkflow) {
+		names = append(names, exampleWorkflow)
+	}
+	slices.Sort(names)
+	return names
+}
+
 func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error) {
 	if strings.TrimSpace(opt.Input) == "" && opt.Source == "" {
 		return Status{}, fail("input_required", "provide an issue description/snapshot with --input-file; a URL alone is insufficient")
-	}
-	if opt.Workflow != "" && opt.Workflow != "issue-resolution" {
-		return Status{}, fail("unknown_workflow", "available workflow: issue-resolution")
 	}
 	if opt.Title == "" {
 		opt.Title = "Untitled issue"
@@ -348,6 +379,9 @@ func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error)
 	cfg, err := s.Config()
 	if err != nil {
 		return Status{}, err
+	}
+	if opt.Workflow != "" && !workflowAvailable(s.Root, cfg, opt.Workflow) {
+		return Status{}, fail("unknown_workflow", "available workflow: %s", strings.Join(WorkflowNames(s.Root, cfg), ", "))
 	}
 	dirs, err := s.workspaceDirs()
 	if err != nil {
@@ -412,7 +446,7 @@ func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error)
 	defer os.RemoveAll(dir) // dir is an exclusively-created staging directory, never a worktree.
 	d := &Document{Dir: dir, State: Workspace{SchemaVersion: 1, ID: id, ProjectID: cfg.ProjectID, Title: opt.Title, Revision: 1, Status: "needs_workflow", Input: Input{opt.Source, "inputs/issue.md"}, Base: Base{baseRef, base}, CreatedAt: time.Now().UTC()}, Registry: Registry{Agents: []Agent{}, Worktrees: []Worktree{}, Sessions: []Session{}, Operations: map[string]Operation{}}}
 	d.State.ProjectRoot = s.Root
-	orch := Agent{ID("agent"), "orchestrator", "orchestrator", "frontier", "orchestrator", "Coordinate the workflow; delegate all code changes to workers."}
+	orch := Agent{ID("agent"), "orchestrator", "orchestrator", cfg.Defaults.OrchestratorProfile, "orchestrator", "Coordinate the workflow; delegate all code changes to workers."}
 	d.State.OrchestratorAgentID = orch.ID
 	d.Registry.Agents = append(d.Registry.Agents, orch)
 	for _, sub := range []string{"inputs", "prompts", "tasks", "artifacts", "worktrees", ".runtime"} {
@@ -425,6 +459,10 @@ func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error)
 	}
 	if err := s.snapshotTemplates(d, opt.Workflow); err != nil {
 		return Status{}, err
+	}
+	if d.State.Workflow != nil {
+		orch.Profile = workflowProfile(cfg, d, "orchestrator", orch.Profile)
+		d.Registry.Agents[0] = orch
 	}
 	body, err := s.render("WORKSPACE.md.tmpl", d.State)
 	if err != nil {
@@ -494,28 +532,40 @@ func (s *Service) snapshotTemplates(d *Document, workflow string) error {
 	if err := atomicWrite(filepath.Join(d.Dir, "prompts", "worker.AGENTS.md"), worker); err != nil {
 		return err
 	}
-	w := []byte("# Select a workflow\n\nAsk the user to select issue-resolution before delegating work.\n")
+	w := []byte("# Select a workflow\n\nAsk the user to select one of the available workflows before delegating work.\n")
 	if workflow != "" {
 		cfg, err := s.Config()
 		if err != nil {
 			return err
 		}
 		d.State.ChangeRequestMode = cfg.Workflows[workflow].ChangeRequests
-		if d.State.ChangeRequestMode == "" {
+		if d.State.ChangeRequestMode == "" && workflow == "issue-resolution" {
 			d.State.ChangeRequestMode = "integrated"
 		}
-		w, err = s.render("workflows/issue-resolution/WORKFLOW.md.tmpl", d.State)
+		w, err = s.render("workflows/"+workflow+"/WORKFLOW.md.tmpl", d.State)
 		if err != nil {
 			return err
 		}
-		d.State.Workflow = &Workflow{"issue-resolution", 1, digest(w), "planning"}
+		d.State.Workflow = &Workflow{workflow, 1, digest(w), "planning"}
 		d.State.Status = "active"
 	}
 	if err := atomicWrite(filepath.Join(d.Dir, "WORKFLOW.md"), w); err != nil {
 		return err
 	}
-	for _, name := range []string{"orchestrator", "planning", "implementation", "integration", "live-testing"} {
-		b, err := os.ReadFile(filepath.Join(s.Root, ".workspace", "templates", "workflows", "issue-resolution", "prompts", name+".md.tmpl"))
+	promptDir := filepath.Join(s.Root, ".workspace", "templates", "workflows", workflow)
+	if workflow == "" {
+		promptDir = filepath.Join(s.Root, ".workspace", "templates", "workflows", exampleWorkflow)
+	}
+	entries, err := os.ReadDir(filepath.Join(promptDir, "prompts"))
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md.tmpl") {
+			continue
+		}
+		name := strings.TrimSuffix(entry.Name(), ".md.tmpl")
+		b, err := os.ReadFile(filepath.Join(promptDir, "prompts", entry.Name()))
 		if err != nil {
 			return err
 		}
@@ -552,8 +602,12 @@ func (s *Service) SelectWorkflow(ctx context.Context, selector, name string, key
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
-		if name != "issue-resolution" {
-			return fail("unknown_workflow", "available workflow: issue-resolution")
+		cfg, err := s.Config()
+		if err != nil {
+			return err
+		}
+		if !workflowAvailable(s.Root, cfg, name) {
+			return fail("unknown_workflow", "available workflow: %s", strings.Join(WorkflowNames(s.Root, cfg), ", "))
 		}
 		if d.State.Workflow != nil {
 			if d.State.Workflow.ID != name {
@@ -584,7 +638,7 @@ func (s *Service) SetPaused(ctx context.Context, selector string, paused bool, k
 			return fail("workspace_closed", "closed workspace cannot be resumed or paused")
 		}
 		if d.State.Workflow == nil {
-			return decisionRequired("select a workflow first", "issue-resolution")
+			return decisionRequired("select a workflow first", exampleWorkflow)
 		}
 		next := "active"
 		if paused {

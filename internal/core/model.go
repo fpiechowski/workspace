@@ -33,8 +33,12 @@ type Config struct {
 	Runtime       string                    `yaml:"runtime" json:"runtime"`
 	Clients       map[string]Client         `yaml:"clients" json:"clients"`
 	Profiles      map[string]Profile        `yaml:"profiles" json:"profiles"`
+	Defaults      DefaultsConfig            `yaml:"defaults,omitempty" json:"defaults,omitempty"`
 	Forge         ForgeConfig               `yaml:"forge,omitempty" json:"forge,omitempty"`
 	Workflows     map[string]WorkflowConfig `yaml:"workflows,omitempty" json:"workflows,omitempty"`
+}
+type DefaultsConfig struct {
+	OrchestratorProfile string `yaml:"orchestrator_profile,omitempty" json:"orchestrator_profile,omitempty"`
 }
 type ForgeConfig struct {
 	Adapter     string   `yaml:"adapter" json:"adapter"`
