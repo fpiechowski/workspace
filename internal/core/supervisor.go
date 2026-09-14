@@ -60,7 +60,7 @@ func (s *Service) SupervisorStatus(ctx context.Context) (SupervisorInfo, error) 
 	return s.supervisorCall(ctx, "ping")
 }
 func (s *Service) StopSupervisor(ctx context.Context, keys ...string) error {
-	if s.Actor.AgentID != "" || s.Actor.SessionID != "" {
+	if s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "" {
 		return fail("forbidden", "stop supervision from a user terminal")
 	}
 	if key := mutationKey(keys); key != "" {
@@ -246,7 +246,9 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 	latest := map[string]Session{}
 	if err := s.With(ctx, status.Workspace.ID, func(d *Document) error {
 		for _, p := range d.Registry.Sessions {
-			latest[p.AgentID] = p
+			if prior, ok := latest[p.AgentID]; !ok || p.LastActiveAt.After(prior.LastActiveAt) || p.LastActiveAt.Equal(prior.LastActiveAt) && p.ID > prior.ID {
+				latest[p.AgentID] = p
+			}
 		}
 		messages = append(messages, d.Registry.Messages...)
 		return nil
@@ -261,7 +263,7 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 	// an explicit retry, preventing unbounded restart loops.
 	orch, exists := latest[status.Workspace.OrchestratorAgentID]
 	if exists && orch.State == "interrupted" && (status.Workspace.Status == "active" || status.Workspace.Status == "needs_workflow") {
-		resumed, err := s.ResumeAgent(ctx, status.Workspace.ID, orch.AgentID, "recover:"+orch.ID)
+		resumed, err := s.ResumeAgent(ctx, status.Workspace.ID, orch.AgentID, "recover:"+orch.LastRunID)
 		if err != nil {
 			return err
 		}
@@ -279,7 +281,7 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 			continue
 		} // The bridge owns this native connection.
 		if p.Active() && len(p.ClientSnapshot.DeliverArgv) > 0 && p.ClientThreadID != "" {
-			if message.DeliveredSessionID == p.ID {
+			if message.DeliveredRunID == p.CurrentRunID {
 				continue
 			}
 			path := filepath.Join(status.Directory, ".runtime", "delivery", message.ID+".json")
@@ -311,12 +313,12 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 			if !receipt.Accepted {
 				return fail("delivery_rejected", "client did not accept message %s", message.ID)
 			}
-			if err := s.markDelivered(ctx, status.Workspace.ID, p.ID, []string{message.ID}); err != nil {
+			if err := s.markDelivered(ctx, status.Workspace.ID, p.CurrentRunID, []string{message.ID}); err != nil {
 				return err
 			}
 			continue
 		}
-		if message.NotifiedSessionID == p.ID || p.PaneID == "" {
+		if message.NotifiedRunID == p.CurrentRunID || p.PaneID == "" {
 			continue
 		}
 		if rt, ok := s.Runtime.(Tmux); ok {
@@ -324,7 +326,7 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 			if err != nil {
 				continue
 			}
-			if pane.SessionID != p.ID {
+			if !paneOwns(pane, p.ID, p.CurrentRunID) {
 				continue
 			}
 			if _, err := rt.call(ctx, "display-message", "-t", p.PaneID, "workspace: pending "+message.Kind+" "+message.ID+" (read inbox)"); err != nil {
@@ -336,6 +338,7 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 					return err
 				}
 				m.NotifiedSessionID = p.ID
+				m.NotifiedRunID = p.CurrentRunID
 				return saveDocument(d)
 			}); err != nil {
 				return err
@@ -348,6 +351,12 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 func (s *Service) autoBindOpenCodeThreads(ctx context.Context, selector string, latest map[string]Session) error {
 	byExecutable := make(map[string][]openCodeSession)
 	failedExecutables := make(map[string]struct{})
+	claimed := make(map[string]struct{})
+	for _, session := range latest {
+		if session.Active() && session.ClientSnapshot.Adapter == "opencode" && session.ClientThreadID != "" {
+			claimed[session.ClientThreadID] = struct{}{}
+		}
+	}
 	for agentID, session := range latest {
 		if session.State != "running" || session.ClientSnapshot.Adapter != "opencode" || session.ClientThreadID != "" {
 			continue
@@ -369,13 +378,14 @@ func (s *Service) autoBindOpenCodeThreads(ctx context.Context, selector string, 
 			}
 			byExecutable[executable] = items
 		}
-		thread := chooseOpenCodeThread(items, session.CWD, nil, session.CreatedAt, false)
+		thread := chooseOpenCodeThread(items, session.CWD, claimed, session.LastActiveAt, false)
 		if thread == "" {
 			continue
 		}
-		if err := s.clientState(ctx, selector, session.ID, thread, "idle"); err != nil {
+		if err := s.clientState(ctx, selector, session.CurrentRunID, thread, "idle"); err != nil {
 			return err
 		}
+		claimed[thread] = struct{}{}
 		session.ClientThreadID = thread
 		latest[agentID] = session
 	}

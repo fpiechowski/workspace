@@ -17,7 +17,7 @@ type SessionOptions struct {
 	Agent, Worktree, Parent, Profile, OperationKey, Task, PromptTemplate, ResumeSession string
 	ReadOnly                                                                            bool
 }
-type promptData struct{ WorkspaceID, WorkspaceDir, AgentID, SessionID, ParentAgentID, BaseCommit string }
+type promptData struct{ WorkspaceID, WorkspaceDir, AgentID, SessionID, RunID, ParentAgentID, BaseCommit string }
 
 // Selection occurs under the project lock, including all workspace reservations.
 func (s *Service) chooseRoute(cfg Config, profile string) (Route, error) {
@@ -38,7 +38,8 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
-		id, err := d.previous(opt.OperationKey, opt)
+		requestOpt := opt
+		id, err := d.previous(opt.OperationKey, requestOpt)
 		if err != nil {
 			return err
 		}
@@ -53,9 +54,40 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			out = *session
 			return nil
 		}
+		var resumePrior *Session
+		if opt.ResumeSession != "" {
+			resumePrior, err = findSession(d, opt.ResumeSession)
+			if err != nil {
+				return err
+			}
+		}
 		a, err := findAgent(d, opt.Agent)
 		if err != nil {
-			return err
+			if resumePrior == nil || resumePrior.AgentSnapshot.ID == "" {
+				return err
+			}
+			a = resumePrior.AgentSnapshot
+		} else if resumePrior != nil && resumePrior.AgentSnapshot.ID != "" {
+			// Agent definitions are snapshotted into a logical Session. A later
+			// edit to the live persona must not rewrite its resumed prompt.
+			a = resumePrior.AgentSnapshot
+		}
+		if resumePrior != nil {
+			if opt.Worktree == "" {
+				opt.Worktree = resumePrior.WorktreeID
+			}
+			if opt.Parent == "" {
+				opt.Parent = resumePrior.ParentAgentID
+			}
+			if opt.Task == "" {
+				opt.Task = resumePrior.TaskID
+			}
+			if opt.Profile == "" {
+				opt.Profile = resumePrior.Profile
+			}
+			if resumePrior.ReadOnly {
+				opt.ReadOnly = true
+			}
 		}
 		if opt.ReadOnly && a.Role != "planner" {
 			return fail("invalid_role", "read-only sessions require a planning/analysis persona")
@@ -130,12 +162,15 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			}
 		}
 		profile := opt.Profile
-		if opt.Task != "" && profile == "" {
+		if opt.Task != "" {
 			task, err := findTask(d, opt.Task)
 			if err != nil {
 				return err
 			}
-			profile = task.Profile
+			opt.Task = task.ID
+			if profile == "" {
+				profile = task.Profile
+			}
 		}
 		if profile == "" {
 			profile = a.Profile
@@ -144,19 +179,61 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			}
 		}
 		thread := ""
+		var logical *Session
 		if opt.ResumeSession != "" {
-			prior, err := findSession(d, opt.ResumeSession)
-			if err != nil {
-				return err
-			}
+			prior := resumePrior
 			if prior.AgentID != a.ID || prior.Active() {
 				return fail("invalid_resume", "resume requires a terminated session of the same agent")
 			}
-			if prior.ClientThreadID != "" {
-				if _, ok := cfg.Clients[prior.Route.Client]; !ok {
-					return fail("client_unavailable", "original client is no longer configured")
+			if prior.ClosedAt != nil {
+				return fail("session_closed", "logical session is closed")
+			}
+			if prior.WorktreeID != wtID || prior.TaskID != opt.Task || prior.ParentAgentID != parent || prior.ReadOnly != opt.ReadOnly {
+				return fail("invalid_resume", "resume context differs from the logical session")
+			}
+			if prior.TaskID != "" {
+				task, taskErr := findTask(d, prior.TaskID)
+				if taskErr != nil {
+					return taskErr
 				}
-				cfg.Profiles = map[string]Profile{profile: {Routes: []Route{prior.Route}}}
+				currentInput, inputErr := taskInputDigest(d, task)
+				if inputErr != nil {
+					return inputErr
+				}
+				if task.Attempt != prior.TaskAttempt || task.InputDigest != prior.InputDigest || currentInput != prior.InputDigest {
+					return fail("invalid_resume", "task attempt or input lineage changed; start a new logical session")
+				}
+			}
+			logical = prior
+			// A logical Session owns its client snapshot. Keep the client identity
+			// stable across Runs even if the project config has since changed; a
+			// missing executable still fails at the normal LookPath gate.
+			if prior.Route.Client != "" && prior.ClientSnapshot.Adapter != "" {
+				if cfg.Clients == nil {
+					cfg.Clients = map[string]Client{}
+				}
+				if cfg.Profiles == nil {
+					cfg.Profiles = map[string]Profile{}
+				}
+				cfg.Clients[prior.Route.Client] = prior.ClientSnapshot
+				profileCfg := cfg.Profiles[profile]
+				if prior.ClientThreadID != "" {
+					profileCfg.Routes = []Route{prior.Route}
+				} else {
+					filtered := make([]Route, 0, len(profileCfg.Routes))
+					for _, candidate := range profileCfg.Routes {
+						if candidate.Client == prior.Route.Client {
+							filtered = append(filtered, candidate)
+						}
+					}
+					if len(filtered) == 0 {
+						filtered = []Route{prior.Route}
+					}
+					profileCfg.Routes = filtered
+				}
+				cfg.Profiles[profile] = profileCfg
+			}
+			if prior.ClientThreadID != "" {
 				thread = prior.ClientThreadID
 			}
 		}
@@ -172,7 +249,20 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		if !ok {
 			return fail("client_unavailable", "original client is no longer configured")
 		}
-		id = ID("sess")
+		if thread != "" {
+			for i := range d.Registry.Sessions {
+				other := &d.Registry.Sessions[i]
+				if (logical == nil || other.ID != logical.ID) && other.Active() && other.ClientSnapshot.Adapter == client.Adapter && other.ClientThreadID == thread {
+					return fail("thread_conflict", "client thread is already bound to active session %s", other.ID)
+				}
+			}
+		}
+		if logical == nil {
+			id = ID("sess")
+		} else {
+			id = logical.ID
+		}
+		runID := ID("run")
 		promptTemplate := a.PromptTemplate
 		if opt.PromptTemplate != "" {
 			if err := validateName(opt.PromptTemplate); err != nil {
@@ -197,7 +287,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			prompt.Write(instructions)
 			prompt.WriteString("\n\n")
 		}
-		if err = t.Execute(&prompt, promptData{d.State.ID, d.Dir, a.ID, id, parent, base}); err != nil {
+		if err = t.Execute(&prompt, promptData{d.State.ID, d.Dir, a.ID, id, runID, parent, base}); err != nil {
 			return err
 		}
 		prompt.WriteString("\n\nAgent definition instructions:\n" + a.Instructions + "\n")
@@ -225,7 +315,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				}
 			}
 		}
-		promptFile := filepath.Join(d.Dir, "prompts", id+".md")
+		promptFile := filepath.Join(d.Dir, "prompts", runID+".md")
 		if err := atomicWrite(promptFile, prompt.Bytes()); err != nil {
 			return err
 		}
@@ -246,37 +336,60 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		if err != nil {
 			return err
 		}
-		out = Session{ID: id, AgentID: a.ID, AgentSnapshot: a, ParentAgentID: parent, WorktreeID: wtID, Profile: profile, Route: route, Argv: argv, CWD: cwd, PromptFile: promptFile, State: "starting", CreatedAt: time.Now().UTC()}
-		out.ClientSnapshot = client
-		out.ReadOnly = opt.ReadOnly
-		out.RoutingDecision = &decision
-		out.ClientThreadID = thread
+		created := time.Now().UTC()
+		if logical == nil {
+			out = Session{ID: id, AgentID: a.ID, AgentSnapshot: a, ParentAgentID: parent, WorktreeID: wtID, ClientSnapshot: client, ClientThreadID: thread, ReadOnly: opt.ReadOnly, CreatedAt: created, LifecycleState: "idle"}
+			logical = &out
+		} else {
+			out = *logical
+			// A client without resume support receives a fresh bootstrap; do not
+			// leave the previous native thread attached to the logical context.
+			out.ClientThreadID = thread
+		}
+		// bindTask validates the checkout before the Run is appended; expose the
+		// pending run snapshot through the compatibility projection for that gate.
+		out.Profile, out.Route, out.RoutingDecision = profile, route, &decision
+		out.Argv, out.CWD, out.PromptFile, out.State = argv, cwd, promptFile, "starting"
 		if err := bindTask(ctx, d, &out, opt.Task); err != nil {
 			return err
 		}
-		d.Registry.Sessions = append(d.Registry.Sessions, out)
-		d.remember(opt.OperationKey, opt, out.ID)
+		run := Run{ID: runID, SessionID: out.ID, Generation: out.RunCount + 1, Profile: profile, Route: route, RoutingDecision: &decision, Argv: argv, CWD: cwd, PromptFile: promptFile, State: "starting", ClientThreadID: thread, CreatedAt: created}
+		out.CurrentRunID, out.LastRunID = run.ID, run.ID
+		if logical == &out {
+			d.Registry.Sessions = append(d.Registry.Sessions, out)
+		} else {
+			*logical = out
+		}
+		d.Registry.Runs = append(d.Registry.Runs, run)
+		if out.TaskID != "" {
+			task, _ := findTask(d, out.TaskID)
+			task.RunID = run.ID
+		}
+		d.remember(opt.OperationKey, requestOpt, out.ID)
 		if err := saveDocument(d); err != nil {
 			return err
 		}
-		pane, launchErr := s.Runtime.Launch(ctx, Launch{ProjectRoot: s.Root, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: id, WorktreeName: wtName, CWD: cwd, Executable: s.Executable, Orchestrator: a.Role == "orchestrator"})
+		pane, launchErr := s.Runtime.Launch(ctx, Launch{ProjectRoot: s.Root, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: id, RunID: runID, WorktreeName: wtName, CWD: cwd, Executable: s.Executable, Orchestrator: a.Role == "orchestrator"})
 		if launchErr != nil {
-			out.State = "failed"
+			run.State = "failed"
 			var ce *Error
 			if errors.As(launchErr, &ce) && ce.Code == "launch_uncertain" {
-				out.State = "starting"
+				run.State = "starting"
 			}
-			out.Error = launchErr.Error()
-			if out.TaskID != "" && out.State == "failed" {
+			run.Error = launchErr.Error()
+			if out.TaskID != "" && run.State == "failed" {
 				task, _ := findTask(d, out.TaskID)
 				task.State = "blocked"
 				task.Reason = launchErr.Error()
 			}
 		} else {
-			out.PaneID = pane.ID
-			out.WindowID = pane.WindowID
+			run.PaneID = pane.ID
+			run.WindowID = pane.WindowID
 		}
-		d.Registry.Sessions[len(d.Registry.Sessions)-1] = out
+		d.Registry.Runs[len(d.Registry.Runs)-1] = run
+		p, _ := findSession(d, out.ID)
+		d.syncSession(p)
+		out = *p
 		if err := saveResource(d, opt.OperationKey, out); err != nil {
 			return err
 		}
@@ -288,28 +401,46 @@ func (s *Service) StartOrchestrator(ctx context.Context, selector, key string) (
 	return s.StartSession(ctx, selector, SessionOptions{Agent: "orchestrator", OperationKey: key})
 }
 
-// ExecuteSession is invoked by tmux, not by the agent client. The claim prevents
-// replaying the same concrete Session even if its runner command is executed twice.
+// ExecuteSession is invoked by tmux with a concrete Run ID. The claim and the
+// session's current_run pointer fence replayed and superseded runners.
 func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io.Reader, out, errOut io.Writer) error {
 	var session Session
+	var run Run
 	var state Workspace
 	var dir string
 	err := s.With(ctx, selector, func(d *Document) error {
-		p, err := findSession(d, id)
+		r, err := findRun(d, id)
 		if err != nil {
-			return err
-		}
-		if p.State != "starting" {
-			return fail("session_claimed", "session %s is %s", id, p.State)
-		}
-		if p.PaneID == "" {
-			pane, err := s.recoverPane(ctx, d, *p)
+			p, sessionErr := findSession(d, id)
+			if sessionErr != nil || p.CurrentRunID == "" {
+				return err
+			}
+			r, err = findRun(d, p.CurrentRunID)
 			if err != nil {
 				return err
 			}
-			p.PaneID, p.WindowID = pane.ID, pane.WindowID
+			id = r.ID
 		}
-		p.State = "running"
+		p, err := findSession(d, r.SessionID)
+		if err != nil {
+			return err
+		}
+		if p.CurrentRunID != r.ID {
+			return fail("stale_run", "run %s no longer owns session %s", r.ID, p.ID)
+		}
+		if r.State != "starting" {
+			return fail("run_claimed", "run %s is %s", id, r.State)
+		}
+		if r.PaneID == "" {
+			pane, err := s.recoverPane(ctx, d, *p, *r)
+			if err != nil {
+				return err
+			}
+			r.PaneID, r.WindowID = pane.ID, pane.WindowID
+		}
+		r.State = "running"
+		run = *r
+		d.syncSession(p)
 		session = *p
 		state = d.State
 		dir = d.Dir
@@ -318,14 +449,14 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, session.Argv[0], session.Argv[1:]...)
-	cmd.Dir = session.CWD
+	cmd := exec.CommandContext(ctx, run.Argv[0], run.Argv[1:]...)
+	cmd.Dir = run.CWD
 	for _, e := range os.Environ() {
 		if !strings.HasPrefix(e, "WORKSPACE_") {
 			cmd.Env = append(cmd.Env, e)
 		}
 	}
-	cmd.Env = append(cmd.Env, "WORKSPACE_PROJECT_DIR="+s.Root, "WORKSPACE_PROJECT_ID="+state.ProjectID, "WORKSPACE_ID="+state.ID, "WORKSPACE_DIR="+dir, "WORKSPACE_AGENT_ID="+session.AgentID, "WORKSPACE_SESSION_ID="+id, "WORKSPACE_ORCHESTRATOR_ID="+state.OrchestratorAgentID, "WORKSPACE_PARENT_AGENT_ID="+session.ParentAgentID, "WORKSPACE_WORKTREE_ID="+session.WorktreeID, "WORKSPACE_ROLE="+session.AgentSnapshot.Role)
+	cmd.Env = append(cmd.Env, "WORKSPACE_PROJECT_DIR="+s.Root, "WORKSPACE_PROJECT_ID="+state.ProjectID, "WORKSPACE_ID="+state.ID, "WORKSPACE_DIR="+dir, "WORKSPACE_AGENT_ID="+session.AgentID, "WORKSPACE_SESSION_ID="+session.ID, "WORKSPACE_RUN_ID="+run.ID, "WORKSPACE_ORCHESTRATOR_ID="+state.OrchestratorAgentID, "WORKSPACE_PARENT_AGENT_ID="+session.ParentAgentID, "WORKSPACE_WORKTREE_ID="+session.WorktreeID, "WORKSPACE_ROLE="+session.AgentSnapshot.Role)
 	cmd.Env = append(cmd.Env, "WORKSPACE_TASK_ID="+session.TaskID)
 	if session.ReadOnly {
 		cmd.Env = append(cmd.Env, "WORKSPACE_READ_ONLY=1")
@@ -341,7 +472,7 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 	var runErr error
 	if session.ClientSnapshot.Adapter == "codex" {
 		runErr = s.runCodex(ctx, selector, session, cmd, in, out, errOut)
-	} else if session.ClientSnapshot.Adapter == "opencode" && session.ClientThreadID == "" {
+	} else if session.ClientSnapshot.Adapter == "opencode" && run.ClientThreadID == "" {
 		runErr = s.runOpenCode(ctx, selector, session, cmd, out, errOut)
 	} else {
 		runErr = cmd.Run()
@@ -355,27 +486,32 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 		}
 	}
 	finishErr := s.With(context.Background(), selector, func(d *Document) error {
-		p, err := findSession(d, id)
+		r, err := findRun(d, id)
 		if err != nil {
 			return err
 		}
-		if p.State != "running" {
+		p, err := findSession(d, r.SessionID)
+		if err != nil {
+			return err
+		}
+		if p.CurrentRunID != r.ID || r.State != "running" {
 			return nil
 		}
 		now := time.Now().UTC()
-		p.FinishedAt = &now
-		p.ExitCode = &code
-		p.State = "exited"
+		r.FinishedAt = &now
+		r.ExitCode = &code
+		r.State = "exited"
 		if runErr != nil {
-			p.State = "failed"
-			p.Error = runErr.Error()
+			r.State = "failed"
+			r.Error = runErr.Error()
 		}
+		p.CurrentRunID = ""
 		if p.TaskID != "" {
 			task, err := findTask(d, p.TaskID)
 			if err != nil {
 				return err
 			}
-			if task.Attempt == p.TaskAttempt && task.SessionID == p.ID && task.State == "running" {
+			if task.Attempt == p.TaskAttempt && task.SessionID == p.ID && task.RunID == r.ID && task.State == "running" {
 				task.State = "blocked"
 				task.Reason = "session ended without a handoff"
 			}
@@ -403,44 +539,70 @@ func (s *Service) StopSession(ctx context.Context, selector, id string, keys ...
 	}
 	var out Session
 	err := s.With(ctx, selector, func(d *Document) error {
-		if s.Actor.SessionID != id {
-			if err := s.requireOrchestrator(d); err != nil {
-				return err
-			}
-		} else if _, err := s.actor(d); err != nil {
-			return err
-		}
 		p, err := findSession(d, id)
 		if err != nil {
+			return err
+		}
+		if err := s.requireSessionOwner(d, p.ID); err != nil {
 			return err
 		}
 		out = *p
 		if !p.Active() {
 			return nil
 		}
-		if p.PaneID == "" {
+		r, err := currentRun(d, p)
+		if err != nil {
+			return err
+		}
+		if r.PaneID == "" {
 			return fail("launch_uncertain", "no pane recorded; inspect tmux and run reconcile")
 		}
-		pane, err := s.Runtime.Inspect(ctx, p.PaneID)
+		pane, err := s.Runtime.Inspect(ctx, r.PaneID)
 		if err != nil {
 			var ce *Error
 			if !errors.As(err, &ce) || ce.Code != "pane_missing" {
 				return err
 			}
-		} else if pane.SessionID != id {
-			return fail("pane_mismatch", "pane is not owned by this session")
-		} else if err := s.Runtime.Stop(ctx, p.PaneID); err != nil {
+		} else if !paneOwns(pane, p.ID, r.ID) {
+			return fail("pane_mismatch", "pane is not owned by the current run")
+		} else if err := s.Runtime.Stop(ctx, r.PaneID); err != nil {
 			return err
 		}
 		now := time.Now().UTC()
-		p.State = "stopped"
-		p.FinishedAt = &now
-		blockInterruptedTask(d, p)
+		r.State = "stopped"
+		r.FinishedAt = &now
+		p.CurrentRunID = ""
+		blockInterruptedTask(d, p, r)
+		d.syncSession(p)
 		out = *p
 		return saveDocument(d)
 	})
 	return out, err
 }
+
+func (s *Service) CloseSession(ctx context.Context, selector, id, reason string, keys ...string) (Session, error) {
+	var out Session
+	err := mutate(s, ctx, selector, keys, []any{"session.close", id, reason}, &out, func(d *Document) error {
+		return s.requireSessionOwner(d, id)
+	}, func(d *Document) error {
+		p, err := findSession(d, id)
+		if err != nil {
+			return err
+		}
+		if p.Active() {
+			return fail("session_active", "stop the current run before closing the logical session")
+		}
+		if p.ClosedAt == nil {
+			now := nowUTC()
+			p.ClosedAt, p.CloseReason = &now, strings.TrimSpace(reason)
+		}
+		d.syncSession(p)
+		out = *p
+		return saveDocument(d)
+	})
+	return out, err
+}
+
 func (s *Service) ResumeAgent(ctx context.Context, selector, agent, key string) (Session, error) {
 	var opt SessionOptions
 	err := s.With(ctx, selector, func(d *Document) error {
@@ -449,14 +611,37 @@ func (s *Service) ResumeAgent(ctx context.Context, selector, agent, key string) 
 			return err
 		}
 		opt = SessionOptions{Agent: a.ID, OperationKey: key}
-		for _, session := range d.Registry.Sessions {
-			if session.AgentID == a.ID {
-				opt.Worktree = session.WorktreeID
-				opt.Parent = session.ParentAgentID
-				opt.Profile = session.Profile
-				opt.Task = session.TaskID
-				opt.ResumeSession = session.ID
-				opt.ReadOnly = session.ReadOnly
+		var latest *Session
+		for i := range d.Registry.Sessions {
+			session := &d.Registry.Sessions[i]
+			if session.AgentID == a.ID && (latest == nil || session.LastActiveAt.After(latest.LastActiveAt) || session.LastActiveAt.Equal(latest.LastActiveAt) && session.ID > latest.ID) {
+				latest = session
+			}
+		}
+		if latest != nil {
+			session := *latest
+			opt.Worktree = session.WorktreeID
+			opt.Parent = session.ParentAgentID
+			opt.Profile = session.Profile
+			opt.Task = session.TaskID
+			opt.ResumeSession = session.ID
+			opt.ReadOnly = session.ReadOnly
+			if session.ClosedAt != nil {
+				opt.ResumeSession = ""
+			}
+			if session.TaskID != "" {
+				t, taskErr := findTask(d, session.TaskID)
+				if taskErr != nil {
+					opt.ResumeSession = ""
+				} else {
+					currentInput, inputErr := taskInputDigest(d, t)
+					if inputErr != nil {
+						return inputErr
+					}
+					if t.Attempt != session.TaskAttempt || t.InputDigest != session.InputDigest || currentInput != session.InputDigest {
+						opt.ResumeSession = ""
+					}
+				}
 			}
 		}
 		return nil
@@ -507,12 +692,22 @@ func (s *Service) Reconcile(ctx context.Context, selector string, keys ...string
 				changed = true
 			}
 		}
-		for i := range d.Registry.Sessions {
-			p := &d.Registry.Sessions[i]
-			if !p.Active() {
+		for i := range d.Registry.Runs {
+			run := &d.Registry.Runs[i]
+			if !run.Active() {
 				continue
 			}
-			if p.PaneID == "" {
+			p, findErr := findSession(d, run.SessionID)
+			if findErr != nil {
+				return findErr
+			}
+			if p.CurrentRunID != run.ID {
+				run.State = "interrupted"
+				run.Error = "run superseded by current session owner"
+				changed = true
+				continue
+			}
+			if run.PaneID == "" {
 				if _, ok := s.Runtime.(interface {
 					Recover(context.Context, Launch) (Pane, error)
 				}); !ok {
@@ -521,14 +716,14 @@ func (s *Service) Reconcile(ctx context.Context, selector string, keys ...string
 			}
 			var pane Pane
 			var err error
-			if p.PaneID == "" {
-				pane, err = s.recoverPane(ctx, d, *p)
+			if run.PaneID == "" {
+				pane, err = s.recoverPane(ctx, d, *p, *run)
 				if err == nil {
-					p.PaneID, p.WindowID = pane.ID, pane.WindowID
+					run.PaneID, run.WindowID = pane.ID, pane.WindowID
 					changed = true
 				}
 			} else {
-				pane, err = s.Runtime.Inspect(ctx, p.PaneID)
+				pane, err = s.Runtime.Inspect(ctx, run.PaneID)
 			}
 			if err != nil {
 				var runtimeError *Error
@@ -536,12 +731,13 @@ func (s *Service) Reconcile(ctx context.Context, selector string, keys ...string
 					return err // An unavailable runtime is not proof that its client stopped.
 				}
 			}
-			if err != nil || pane.Dead || pane.SessionID != p.ID {
-				p.State = "interrupted"
-				p.Error = "pane absent, dead or no longer owned; inspect local work before retry"
+			if err != nil || pane.Dead || !paneOwns(pane, p.ID, run.ID) {
+				run.State = "interrupted"
+				run.Error = "pane absent, dead or no longer owned; inspect local work before retry"
 				now := time.Now().UTC()
-				p.FinishedAt = &now
-				blockInterruptedTask(d, p)
+				run.FinishedAt = &now
+				p.CurrentRunID = ""
+				blockInterruptedTask(d, p, run)
 				changed = true
 			}
 		}
@@ -581,8 +777,8 @@ func (s *Service) Reconcile(ctx context.Context, selector string, keys ...string
 			if r.State != "running" {
 				continue
 			}
-			p, err := findSession(d, r.SessionID)
-			if err == nil && !p.Active() {
+			run, err := findRun(d, r.RunID)
+			if err == nil && !run.Active() {
 				r.State = "interrupted"
 				r.ExitCode = -1
 				now := nowUTC()
@@ -601,21 +797,21 @@ func (s *Service) Reconcile(ctx context.Context, selector string, keys ...string
 	return out, err
 }
 
-func (s *Service) recoverPane(ctx context.Context, d *Document, p Session) (Pane, error) {
+func (s *Service) recoverPane(ctx context.Context, d *Document, p Session, run Run) (Pane, error) {
 	r, ok := s.Runtime.(interface {
 		Recover(context.Context, Launch) (Pane, error)
 	})
 	if !ok {
 		return Pane{}, fail("launch_uncertain", "runtime cannot recover an unrecorded pane")
 	}
-	return r.Recover(ctx, Launch{ProjectRoot: s.Root, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: p.ID, CWD: p.CWD, Executable: s.Executable, Orchestrator: p.AgentSnapshot.Role == "orchestrator"})
+	return r.Recover(ctx, Launch{ProjectRoot: s.Root, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: p.ID, RunID: run.ID, CWD: run.CWD, Executable: s.Executable, Orchestrator: p.AgentSnapshot.Role == "orchestrator"})
 }
-func blockInterruptedTask(d *Document, p *Session) {
+func blockInterruptedTask(d *Document, p *Session, run *Run) {
 	if p.TaskID == "" {
 		return
 	}
 	t, err := findTask(d, p.TaskID)
-	if err == nil && t.State == "running" && t.SessionID == p.ID && t.Attempt == p.TaskAttempt {
+	if err == nil && t.State == "running" && t.SessionID == p.ID && t.RunID == run.ID && t.Attempt == p.TaskAttempt {
 		t.State, t.Reason = "blocked", "session interrupted; inspect local work before retry"
 	}
 }

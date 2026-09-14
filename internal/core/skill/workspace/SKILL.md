@@ -6,7 +6,8 @@ description: Start or resume delegated plan-first work in a Git project using th
 # Workspace
 
 Use the installed `workspace` CLI from the project directory. An Agent is a persona
-definition; a Session is one execution. The workspace orchestrator delegates code
+definition; a Session is a durable logical conversation and a Run is one concrete
+client/tmux execution. The workspace orchestrator delegates code
 changes and keeps durable state in WORKSPACE.md; workers return handoffs and artifacts.
 
 For a new issue or work description:
@@ -33,11 +34,14 @@ For a new issue or work description:
 
 For existing work, inspect `workspace status --workspace <id> --json` and
 `workspace menu --workspace <id> --json`. Reuse the existing orchestrator Agent;
-`agent resume orchestrator` creates a new Session if the previous one has ended.
+`agent resume orchestrator` creates a new Run in the same compatible Session; a
+changed task attempt, worktree, agent, input lineage, or native thread starts a new Session.
 Do not start a second execution because a busy agent has not answered yet.
 
 Inside an orchestrator Session, read WORKFLOW.md and WORKSPACE.md and use the CLI's
-task, worktree, agent, session, inbox and handoff commands. Durable messages address
+task, worktree, agent, session, run, inbox and handoff commands. `session list` is
+logical and compact; use `session history <session>` or `run list` for execution history.
+Durable messages address
 Agent IDs; native thread IDs and tmux pane IDs are not workspace mailbox addresses.
 Use `--json --non-interactive` for machine-readable operations. On `decision_required`,
 present the actual choices to the user and record their answer. Preserve existing

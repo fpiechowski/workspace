@@ -38,7 +38,7 @@ func TestCapturedCheckProvenanceAndHandoff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.ExitCode != 0 || r.State != "completed" || !r.Clean || r.Head != r.EndHead {
+	if r.SessionID != p.ID || r.RunID != p.CurrentRunID || r.ExitCode != 0 || r.State != "completed" || !r.Clean || r.Head != r.EndHead {
 		t.Fatalf("invalid receipt %+v", r)
 	}
 	replay, err := s.RunCheck(ctx, id, opt)

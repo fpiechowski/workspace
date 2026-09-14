@@ -200,7 +200,7 @@ func (s *Service) PublishChangeRequest(ctx context.Context, selector, id string,
 		if cr.State == "outdated" || cr.State == "skipped" {
 			return fail("change_request_outdated", "prepare a current change request")
 		}
-		if !cr.PublicationAllowed && cfg.Forge.Publication != "allowed" && s.Actor.AgentID != "" && !userConfirmed {
+		if !cr.PublicationAllowed && cfg.Forge.Publication != "allowed" && (s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "") && !userConfirmed {
 			return decisionRequired("review change-requests/"+id+"/changes.diff and DESCRIPTION.md, then record user approval with --user-confirmed", "publish", "revise", "skip")
 		}
 		cr.PublicationAllowed = true
@@ -323,7 +323,7 @@ func (s *Service) ResolveChangeRequest(ctx context.Context, selector, id, action
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
-		if s.Actor.AgentID != "" && !userConfirmed {
+		if (s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "") && !userConfirmed {
 			return fail("user_decision_required", "record the user's explicit decision")
 		}
 		cr, err := findCR(d, id)

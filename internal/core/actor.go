@@ -2,17 +2,35 @@ package core
 
 // Actor is an explicit local role contract. An empty actor represents a user at
 // the terminal. It is not a sandbox or a cryptographic proof of human identity.
-type Actor struct{ AgentID, SessionID string }
+type Actor struct{ AgentID, SessionID, RunID string }
 
 func (s *Service) actor(d *Document) (*Session, error) {
-	if s.Actor.AgentID == "" && s.Actor.SessionID == "" {
+	if s.Actor.AgentID == "" && s.Actor.SessionID == "" && s.Actor.RunID == "" {
 		return nil, nil
 	}
-	p, err := findSession(d, s.Actor.SessionID)
+	var p *Session
+	var err error
+	if s.Actor.SessionID == "" && s.Actor.RunID != "" {
+		if r, runErr := findRun(d, s.Actor.RunID); runErr == nil {
+			p, err = findSession(d, r.SessionID)
+		} else {
+			err = runErr
+		}
+	} else {
+		p, err = findSession(d, s.Actor.SessionID)
+	}
 	if err != nil {
 		return nil, fail("stale_actor", "unknown actor session")
 	}
-	if p.AgentID != s.Actor.AgentID || !p.Active() {
+	runID := s.Actor.RunID
+	if runID == "" {
+		// A migrated legacy process exported its old concrete sess_* as
+		// WORKSPACE_SESSION_ID. That identifier is now a Run alias.
+		if r, runErr := findRun(d, s.Actor.SessionID); runErr == nil {
+			runID = r.ID
+		}
+	}
+	if p.AgentID != s.Actor.AgentID || !p.Active() || runID == "" || p.CurrentRunID != runID {
 		return nil, fail("stale_actor", "actor is not the active owner of this session")
 	}
 	return p, nil
@@ -28,7 +46,7 @@ func (s *Service) requireOrchestrator(d *Document) error {
 	return nil
 }
 func (s *Service) requireUser(d *Document) error {
-	if s.Actor.AgentID != "" || s.Actor.SessionID != "" {
+	if s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "" {
 		return fail("user_decision_required", "this operation records an explicit user decision; run it from the user terminal")
 	}
 	return nil

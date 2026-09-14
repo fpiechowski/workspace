@@ -22,6 +22,7 @@ type Task struct {
 	InputDigest     string `yaml:"input_digest" json:"input_digest"`
 	WorktreeID      string `yaml:"worktree_id,omitempty" json:"worktree_id,omitempty"`
 	SessionID       string `yaml:"session_id,omitempty" json:"session_id,omitempty"`
+	RunID           string `yaml:"run_id,omitempty" json:"run_id,omitempty"`
 	AcceptedHandoff string `yaml:"accepted_handoff,omitempty" json:"accepted_handoff,omitempty"`
 	Reason          string `yaml:"reason,omitempty" json:"reason,omitempty"`
 }
@@ -35,6 +36,7 @@ type Artifact struct {
 	SourceHandoff string    `yaml:"source_handoff" json:"source_handoff"`
 	AgentID       string    `yaml:"agent_id" json:"agent_id"`
 	SessionID     string    `yaml:"session_id" json:"session_id"`
+	RunID         string    `yaml:"run_id" json:"run_id"`
 	TaskID        string    `yaml:"task_id" json:"task_id"`
 	Model         string    `yaml:"model" json:"model"`
 	PromptDigest  string    `yaml:"prompt_digest" json:"prompt_digest"`
@@ -51,6 +53,7 @@ type Handoff struct {
 	ID          string    `yaml:"id" json:"id"`
 	FromAgent   string    `yaml:"from_agent" json:"from_agent"`
 	FromSession string    `yaml:"from_session" json:"from_session"`
+	FromRun     string    `yaml:"from_run" json:"from_run"`
 	ToAgent     string    `yaml:"to_agent" json:"to_agent"`
 	TaskID      string    `yaml:"task_id" json:"task_id"`
 	Attempt     int       `yaml:"attempt" json:"attempt"`
@@ -72,6 +75,7 @@ type Message struct {
 	ID                 string     `yaml:"id" json:"id"`
 	FromAgent          string     `yaml:"from_agent" json:"from_agent"`
 	FromSession        string     `yaml:"from_session,omitempty" json:"from_session,omitempty"`
+	FromRun            string     `yaml:"from_run,omitempty" json:"from_run,omitempty"`
 	ToAgent            string     `yaml:"to_agent" json:"to_agent"`
 	Kind               string     `yaml:"kind" json:"kind"`
 	Body               string     `yaml:"body" json:"body"`
@@ -81,7 +85,9 @@ type Message struct {
 	AcknowledgedAt     *time.Time `yaml:"acknowledged_at,omitempty" json:"acknowledged_at,omitempty"`
 	DeliveredAt        *time.Time `yaml:"delivered_at,omitempty" json:"delivered_at,omitempty"`
 	DeliveredSessionID string     `yaml:"delivered_session_id,omitempty" json:"delivered_session_id,omitempty"`
+	DeliveredRunID     string     `yaml:"delivered_run_id,omitempty" json:"delivered_run_id,omitempty"`
 	NotifiedSessionID  string     `yaml:"notified_session_id,omitempty" json:"notified_session_id,omitempty"`
+	NotifiedRunID      string     `yaml:"notified_run_id,omitempty" json:"notified_run_id,omitempty"`
 }
 type Decision struct {
 	Environment string     `yaml:"environment,omitempty" json:"environment,omitempty"`

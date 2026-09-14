@@ -20,11 +20,18 @@ sets the selected model and workspace cwd. It does not bypass client permissions
 
 For OpenCode, workspace invokes `opencode session list --format json` after launch and
 matches the newly created session by its working directory. The native ID is persisted
-automatically, so later `agent resume` can invoke `resume_argv` and `deliver_argv` can
+automatically as an optional logical Session binding, so later `agent resume` creates
+a new Run, invokes `resume_argv`, and `deliver_argv` can
 wake the same conversation. `session bind-thread` remains available for recovery when
 the client CLI cannot be inspected. Other clients still require an explicit binding if
 their native thread ID is not reported by an adapter. Without that association, a new
 conversation receives the persisted bootstrap.
+
+`client_thread_id` is not a workspace identity or mailbox address. The binding is
+unique across active logical Sessions for the same adapter. Manual binding, Codex
+thread initialization, OpenCode discovery, and resume all enforce that rule. Delivery
+and notification receipts are deduplicated per Run so a successor can take over an
+undelivered message without erasing the exact execution that received an earlier one.
 
 A generic wrapper configuration:
 

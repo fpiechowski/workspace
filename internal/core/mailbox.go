@@ -18,6 +18,10 @@ func findMessage(d *Document, id string) (*Message, error) {
 }
 func addMessage(d *Document, from, session, to, kind, body, handoff, reply string) Message {
 	m := Message{ID: ID("msg"), FromAgent: from, FromSession: session, ToAgent: to, Kind: kind, Body: body, HandoffID: handoff, ReplyTo: reply, CreatedAt: time.Now().UTC()}
+	if p, err := findSession(d, session); err == nil {
+		m.FromSession = p.ID
+		m.FromRun = p.CurrentRunID
+	}
 	d.Registry.Messages = append(d.Registry.Messages, m)
 	return m
 }

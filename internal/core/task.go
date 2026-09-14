@@ -244,6 +244,7 @@ func (s *Service) RetryTask(ctx context.Context, selector, id, reason, key strin
 			candidate.State = "pending"
 			candidate.AcceptedHandoff = ""
 			candidate.SessionID = ""
+			candidate.RunID = ""
 			candidate.Reason = reason
 		}
 		if d.State.Workflow != nil {
@@ -282,7 +283,8 @@ func (s *Service) RetryTask(ctx context.Context, selector, id, reason, key strin
 	return out, err
 }
 
-// bindTask validates a current attempt, then records its concrete Session.
+// bindTask validates a current attempt, then records its logical Session. The
+// caller records the concrete Run after reserving it.
 func bindTask(ctx context.Context, d *Document, p *Session, taskID string) error {
 	if taskID == "" {
 		return nil
@@ -316,7 +318,8 @@ func bindTask(ctx context.Context, d *Document, p *Session, taskID string) error
 			return err
 		}
 		if _, err := git(ctx, p.CWD, "merge-base", "--is-ancestor", h.HeadCommit, "HEAD"); err != nil {
-			return fail("base_mismatch", "worktree is missing accepted dependency %s", depID)
+			head, _ := git(ctx, p.CWD, "rev-parse", "HEAD")
+			return fail("base_mismatch", "worktree at %s is missing accepted dependency %s head %s", head, depID, h.HeadCommit)
 		}
 	}
 	input, err := taskInputDigest(d, t)

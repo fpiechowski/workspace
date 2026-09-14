@@ -309,7 +309,7 @@ func (s *Service) AnswerDecision(ctx context.Context, selector string, opt Decis
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
-		if s.Actor.AgentID != "" && !opt.UserConfirmed {
+		if (s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "") && !opt.UserConfirmed {
 			return fail("user_decision_required", "confirm that the user supplied this answer with --user-confirmed")
 		}
 		p := d.State.PendingDecision
@@ -381,7 +381,7 @@ func (s *Service) ConfirmRelease(ctx context.Context, selector, reference string
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
-		if s.Actor.AgentID != "" && !userConfirmed {
+		if (s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "") && !userConfirmed {
 			return fail("user_decision_required", "record the user's explicit confirmation with --user-confirmed")
 		}
 		if d.State.Release.UserConfirmed {

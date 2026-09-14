@@ -11,8 +11,8 @@ workspace handoff submit --task "$WORKSPACE_TASK_ID" \
 ```
 
 Commit code before running a check intended for acceptance. A captured check records
-the argv, producing Session and Task attempt, start/end HEAD, exit code and output
-digest. Handoff requires the same clean Git revision and Session. CLI command success
+the argv, producing logical Session, exact Run and Task attempt, start/end HEAD, exit
+code and output digest. Handoff requires the same clean Git revision and Run. CLI command success
 means the receipt was recorded: inspect its `exit_code` for the test result. Failed
 checks remain visible and cannot be accepted as successful verification.
 

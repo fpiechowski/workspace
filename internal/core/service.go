@@ -153,6 +153,7 @@ func (s *Service) ExecuteService(ctx context.Context, selector, id string, in io
 	// Auxiliary processes do not inherit agent authority from tmux's environment.
 	cmd.Env = replaceEnv(os.Environ(), "WORKSPACE_AGENT_ID", "")
 	cmd.Env = replaceEnv(cmd.Env, "WORKSPACE_SESSION_ID", "")
+	cmd.Env = replaceEnv(cmd.Env, "WORKSPACE_RUN_ID", "")
 	runErr := cmd.Run()
 	code := 0
 	if runErr != nil {

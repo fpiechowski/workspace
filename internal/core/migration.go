@@ -23,6 +23,7 @@ func invalidateRevision(d *Document, reason string) {
 		t.State = "pending"
 		t.AcceptedHandoff = ""
 		t.SessionID = ""
+		t.RunID = ""
 		t.InputDigest = ""
 		t.Reason = reason
 	}

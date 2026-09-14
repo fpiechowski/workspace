@@ -15,14 +15,15 @@ Zakres pierwszej wersji: lokalny projekt Git, jeden komputer, tmux, workflow `is
 | Worktree | Checkout Git przypisany do workspace. Może służyć planowaniu, implementacji, integracji lub testowaniu. |
 | Task | Jednostka delegowanej pracy: cel, zależności, kryteria akceptacji, wejścia i wyniki. |
 | Agent | Template/definicja persony agenta, np. orkiestratora, planisty lub wykonawcy, ze stabilną tożsamością w workspace. |
-| Session | Konkretne uruchomienie agenta z klientem, modelem, procesem i panelem tmux. |
+| Session | Trwały logiczny kontekst rozmowy w jednym agent/task/attempt/input/worktree lineage; może być idle bez panelu. |
+| Run | Jedno konkretne uruchomienie klienta i panelu tmux; token ownership, jednostka routingu i dokładnego provenance. |
 | Handoff | Trwałe przekazanie wyniku sesji do agenta będącego odbiorcą. |
 | Artifact | Niezmienna kopia produktu pracy, z pochodzeniem i sumą kontrolną. |
 | Change request | Zewnętrzny PR/MR lub lokalnie przygotowany materiał do jego utworzenia. |
 
-Project ma wiele workspaces; workspace ma wiele tasks, worktrees i agents; agent ma wiele kolejnych sessions. Task może wymagać kilku sesji, a jeden worktree może obsługiwać kilka zadań. Wyniki zawsze wskazują task, session i konkretną rewizję Git.
+Project ma wiele workspaces; workspace ma wiele tasks, worktrees i agents; Agent ma wiele logicznych Sessions, a Session wiele kolejnych Runs. Task może wymagać kilku sesji, a jeden worktree może obsługiwać kilka zadań. Wyniki zawsze wskazują task, Session, dokładny Run i konkretną rewizję Git.
 
-Agent definiuje personę: rolę, instrukcje, template promptu i domyślny profil modelu. Session utrwala wersję tej definicji używaną w konkretnym uruchomieniu oraz wybrany model i kontekst zadania. Zmiana definicji agenta nie zmienia już uruchomionych sesji. Wiadomości są adresowane do stabilnego ID agenta, a wyniki wskazują również ID sesji, która je wytworzyła.
+Agent definiuje personę: rolę, instrukcje, template promptu i domyślny profil modelu. Session utrwala wersję persony i kontekst semantyczny; Run utrwala trasę/model, argv, CWD, prompt, client state, pane/window i wynik procesu. Zmiana definicji agenta nie zmienia istniejących Sessions. Wiadomości są adresowane do stabilnego ID agenta, a pochodzenie wskazuje Session i Run.
 
 Identyfikatory są niezmienne. Nazwy i slugi służą prezentacji. Przykłady `ws_01…`, `agent_01…`, `sess_01…` są skrócone; implementacja używa pełnych ULID. Nazwa brancha zawiera identyfikator workspace i zadania.
 
@@ -71,7 +72,7 @@ project/
 │           ├── events/           # zatwierdzone zdarzenia i operacje do uzgodnienia
 │           ├── inbox/            # trwałe wiadomości, indeksowane per odbiorca
 │           ├── agents/             # definicje person agentów
-│           ├── sessions/           # konkretne uruchomienia agentów
+│           ├── sessions/           # logiczne sesje i historia ich Runów
 │           ├── handoffs/
 │           └── locks/
 └── …
@@ -151,8 +152,12 @@ workspace handoff reject handoff_01 --reason-file ./feedback.md
 workspace agent list
 workspace session list
 workspace session attach sess_01
+workspace session history sess_01
+workspace run list
+workspace run inspect run_01
 workspace agent resume agent_01
 workspace session stop sess_01
+workspace session close sess_01 --reason completed
 workspace pause
 workspace resume
 workspace reconcile
@@ -177,7 +182,7 @@ Komendy mutujące przyjmują `--operation-key`. Ponowienie tej samej operacji z 
 ```json
 {
   "ok": true,
-  "data": {"agent_id": "agent_01", "session_id": "sess_01", "state": "starting"},
+  "data": {"agent_id": "agent_01", "session_id": "sess_01", "run_id": "run_01", "state": "starting"},
   "operation_id": "op_01",
   "revision": 14
 }
@@ -258,7 +263,7 @@ Ręczna edycja jest możliwa w stanie paused, przez `workspace state edit`, z wa
 ```text
 tmux session: ws-project-fix-checkout-01
 ├── window 0: orchestrator       cwd: katalog workspace
-│   └── pane: sesja orkiestratora
+│   └── pane: bieżący Run orkiestratora
 ├── window 1: planning           cwd: worktrees/planning
 │   └── pane: planista
 ├── window 2: checkout-api       cwd: worktrees/checkout-api
@@ -271,7 +276,7 @@ tmux session: ws-project-fix-checkout-01
 
 Jedyny wyjątek od „okno = worktree” to okno orkiestratora, który pracuje w katalogu workspace. Panel usługi pomocniczej ma typ `service`, nie tożsamość agenta. Czytelnik w aktywnie zmienianym worktree widzi ruchomy stan; review wymagające stabilnej rewizji dostaje osobny checkout.
 
-Mapowanie zapisuje identyfikatory tmux sesji, okna i panelu oraz generację serwera; nazwy i indeksy okien mogą się zmieniać. Zniszczenie panelu kończy sesję, ale nie usuwa agenta ani wyników. Odłączenie użytkownika od tmux niczego nie zatrzymuje. Podział sesja → okna → panele wynika z modelu [tmux](https://man.openbsd.org/tmux).
+Mapowanie zapisuje identyfikatory logicznej Session i konkretnego Run na panelu oraz identyfikatory okna i panelu; nazwy i indeksy okien mogą się zmieniać. Zniszczenie panelu przerywa Run, ale nie usuwa Session, agenta ani wyników. Odłączenie użytkownika od tmux niczego nie zatrzymuje. Podział tmux session → windows → panes wynika z modelu [tmux](https://man.openbsd.org/tmux).
 
 Każda sesja otrzymuje środowisko:
 
@@ -281,6 +286,7 @@ WORKSPACE_ID=ws_01
 WORKSPACE_DIR=/project/.workspace/ws_01-fix-checkout
 WORKSPACE_AGENT_ID=agent_worker
 WORKSPACE_SESSION_ID=sess_01
+WORKSPACE_RUN_ID=run_01
 WORKSPACE_ORCHESTRATOR_ID=agent_orch
 WORKSPACE_PARENT_AGENT_ID=agent_orch
 WORKSPACE_TASK_ID=task_02
@@ -288,9 +294,29 @@ WORKSPACE_ROLE=implementer
 WORKSPACE_WORKTREE_ID=wt_02
 ```
 
-`agent_id` jest adresem komunikacji workspace. `client_thread_id` jest opcjonalnym identyfikatorem konwersacji konkretnego klienta, a `pane_id` jedynie lokalizacją terminala. Rodzic delegujący pracę i orkiestrator workspace są osobnymi polami, nawet jeśli na początku mają tę samą wartość.
+`agent_id` jest adresem komunikacji workspace. `session_id` identyfikuje logiczny kontekst, `run_id` właściciela bieżącego runtime, `client_thread_id` opcjonalny binding adaptera, a `pane_id` jedynie lokalizację terminala. Rodzic delegujący pracę i orkiestrator workspace są osobnymi polami, nawet jeśli na początku mają tę samą wartość.
 
-Agent orkiestratora po restarcie zachowuje `agent_id`; powstaje nowy `session_id`. Wznowienie natywnego wątku jest preferowane, ale gdy klient go nie obsługuje, nowa rozmowa otrzymuje bootstrap z bieżącym stanem, workflow, decyzjami i nieodebranymi wiadomościami.
+Agent orkiestratora po restarcie zachowuje `agent_id` i zgodny `session_id`; powstaje nowy `run_id`. Wznowienie natywnego wątku jest preferowane, ale gdy klient go nie obsługuje, nowy Run otrzymuje bootstrap z bieżącym stanem, workflow, decyzjami i nieodebranymi wiadomościami. Nowa Session powstaje przy zmianie agenta, task/attempt, input digest, worktree lub native thread lineage.
+
+| Stan Session | Znaczenie |
+|---|---|
+| `active` | istnieje dokładnie jeden `current_run_id` w stanie starting/running |
+| `idle` | brak procesu/panelu; zgodny kontekst można wznowić |
+| `closed` | kontekst logiczny zamknięty, bez dalszych Runs |
+
+| Stan Run | Znaczenie |
+|---|---|
+| `starting` / `running` | zarezerwowany launch / proces przejął ownership |
+| `exited` / `failed` | proces zakończył się normalnie / błędem |
+| `stopped` | jawnie zatrzymany, bez autorestartu |
+| `interrupted` | pane utracony lub Run zastąpiony; Session pozostaje resumable |
+
+Rejestr `.runtime/index.json` ma `schema_version: 2` i osobne `sessions` oraz `runs`.
+Migracja v1→v2 zachowuje stare `sess_*` jako Run IDs/aliasy i konserwatywnie grupuje
+tylko rekordy o tym samym Agent ID, niepustym native thread oraz zgodnym adapterze,
+task/attempt/input/worktree. Rekordy bez thread ID pozostają osobnymi Sessions.
+Aktualizacja przechodzi przez istniejący write-ahead/atomic recovery; ponowienie jest
+idempotentne. Aktywny legacy runner pozostaje rozpoznawalny przez zachowany Run alias.
 
 ## 7. Generyczne klienty i niezawodne dostarczenie
 
@@ -328,6 +354,7 @@ Wykonawca zapisuje produkty w swoim worktree, np. w lokalnie ignorowanym `work-p
 id: handoff_01
 from_agent: agent_worker
 from_session: sess_01
+from_run: run_07
 to_agent: agent_orch
 task_id: task_02
 attempt: 1
@@ -531,9 +558,9 @@ Proponuję live testing ścieżki płatności profilem live-testing.
 | Sytuacja | Zachowanie |
 |---|---|
 | Użytkownik odłącza tmux | Praca trwa, stan i inbox pozostają dostępne. |
-| Pada klient wykonawcy | Session oznaczona jako interrupted; task nie staje się accepted. Najpierw sprawdzenie commitów i handoffów. |
+| Pada klient wykonawcy | Run oznaczony jako interrupted; Session pozostaje idle/resumable, task nie staje się accepted. Najpierw sprawdzenie commitów i handoffów. |
 | Pada orkiestrator | Wyniki trafiają do jego trwałego inboxa; resume odtwarza kontekst pod tym samym ID. |
-| Pada tmux lub komputer | Reconcile odnajduje worktrees i wyniki, oznacza utracone sesje. Odtwarza layout i uruchamia nowe sessions zgodnie ze stanem. |
+| Pada tmux lub komputer | Reconcile odnajduje worktrees i wyniki, oznacza utracone Runs. Odtwarza layout i uruchamia nowe Runs w zgodnych Sessions. |
 | Timeout providera | Rejestracja błędu i cooldown; bez równoległego duplikowania niepewnej sesji. |
 | Worktree usunięty ręcznie | Błąd wymagający uwagi, zachowane artefakty dostępne; brak cichego odtworzenia pustego checkoutu. |
 | Brudny worktree przy retry | Zachowaj pliki, pokaż różnicę, deleguj odzyskanie pracy; nie stosuj reset --hard. |
@@ -551,7 +578,7 @@ Moduły: `project`, `state`, `workflow`, `task`, `git`, `runtime/tmux`, `client`
 Pierwszy pionowy zakres:
 
 1. `project init`, `create`, templates i walidowany stan workspace.
-2. Worktrees, tmux i jeden adapter klienta, ze stabilnymi agent/session IDs.
+2. Worktrees, tmux i jeden adapter klienta, ze stabilnymi Agent/Session IDs oraz osobnym Run fencing.
 3. Inbox, handoff, kopiowanie artefaktów i resume orkiestratora.
 4. `issue-resolution`: planista → wykonawca → integrator → oferta live testing → potwierdzenie release.
 5. Profile i routing providerów, następnie dodatkowe klienty i adapter forge.

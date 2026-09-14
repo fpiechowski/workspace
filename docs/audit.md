@@ -1,12 +1,13 @@
 # Audyt zgodności z planem
 
 Zakres odniesienia: `workspace-cli-design.md`, commit `59f7fb1`. Agent jest
-trwałą definicją persony, Session — konkretnym uruchomieniem. Poniższa macierz
+trwałą definicją persony, Session — logicznym kontekstem, a Run — konkretnym
+uruchomieniem. Poniższa macierz
 obejmuje wszystkie 14 części planu i pierwszy workflow `issue-resolution`.
 
 | Część planu | Implementacja i sprawdzone zachowanie | Dowody |
 |---|---|---|
-| 1. Model domenowy | Project, Workspace, Worktree, Task, Agent, Session, Handoff, Artifact i CR; stałe ULID, snapshot persony, jedna aktywna sesja persony i jeden writer worktree; oddzielna akceptacja wyniku | `model.go`, `session.go`, `core_test.go`, `readonly_test.go`, `handoff_test.go` |
+| 1. Model domenowy | Project, Workspace, Worktree, Task, Agent, logical Session, concrete Run, Handoff, Artifact i CR; stałe ULID, snapshot persony, jeden aktywny Run persony i jeden writer worktree; oddzielna akceptacja wyniku | `model.go`, `session.go`, `session_run_test.go`, `core_test.go`, `readonly_test.go`, `handoff_test.go` |
 | 2. Struktura projektu | Dokumenty i frontmatter, lokalne Git excludes, nadpisywalne templates, zamrożony workflow, jawne migracje i zewnętrzny katalog workspace; izolacja projektów we wspólnym katalogu | `project.go`, `migration.go`, `storage_test.go`, `migration_test.go`, test naprawy brakujących templates |
 | 3. Rozpoczęcie pracy | Instalowalny skill, doctor, discovery, ticket URL lub plik, snapshot treści i źródła, `needs_workflow` oraz jawny wybór | bundled `skill/workspace/SKILL.md`, `issue.go`, `issue_test.go`, `skill_test.go`, `check-install.py` |
 | 4. CLI | Komendy projektu, workflow, agentów, sesji, zadań, worktrees, wiadomości, handoffów, CR, testów i cyklu życia; CWD/env/global scope; JSON, non-interactive i operation keys | `internal/cli`, `mutation_test.go`, `cli_test.go`, `check-install.py`; zasady w `operations.md` |
@@ -37,10 +38,10 @@ pełna automatyzacja korzysta z adaptera native lub deliver.
 
 Dane operacyjne są indeksowane w `.runtime/index.json`, a intencja atomowego zapisu
 w `.runtime/pending.json`. Są to plikowe indeksy odpowiadające rejestrom z diagramu
-planu. WORKSPACE.md pozostaje stanem workflow. Tożsamość konkretnej Session i znaczniki
-własności panelu zabezpieczają przed operacjami poprzedniego wykonania i odziedziczeniem
-recyklingowanego pane ID. Kontrola ról i read-only są kontraktem współpracujących
-klientów działających na jednym koncie systemowym.
+planu. WORKSPACE.md pozostaje stanem workflow. Tożsamość logicznej Session, konkretnego
+Run i znaczniki własności panelu zabezpieczają przed operacjami poprzedniego wykonania
+i odziedziczeniem recyklingowanego pane ID. Kontrola ról i read-only są kontraktem
+współpracujących klientów działających na jednym koncie systemowym.
 
 ## Odtwarzalna weryfikacja
 

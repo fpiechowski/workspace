@@ -33,7 +33,7 @@ func TestSupervisorRecoversOnlyVerifiedLostOrchestrator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(v.Sessions) != 2 || v.Sessions[1].AgentID != p.AgentID || v.Sessions[0].State != "interrupted" {
+	if len(v.Sessions) != 1 || len(v.Runs) != 2 || v.Sessions[0].AgentID != p.AgentID || v.Runs[0].State != "interrupted" || v.Sessions[0].CurrentRunID != v.Runs[1].ID {
 		t.Fatalf("recovery: %+v", v.Sessions)
 	}
 	if err := s.Tick(ctx); err != nil {
@@ -42,7 +42,7 @@ func TestSupervisorRecoversOnlyVerifiedLostOrchestrator(t *testing.T) {
 	if rt.launches != 2 {
 		t.Fatal("recovery launched duplicate")
 	}
-	if _, err := s.StopSession(ctx, id, v.Sessions[1].ID); err != nil {
+	if _, err := s.StopSession(ctx, id, v.Sessions[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Tick(ctx); err != nil {

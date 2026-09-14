@@ -445,7 +445,7 @@ func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error)
 		return Status{}, err
 	}
 	defer os.RemoveAll(dir) // dir is an exclusively-created staging directory, never a worktree.
-	d := &Document{Dir: dir, State: Workspace{SchemaVersion: 1, ID: id, ProjectID: cfg.ProjectID, Title: opt.Title, Revision: 1, Status: "needs_workflow", Input: Input{opt.Source, "inputs/issue.md"}, Base: Base{baseRef, base}, CreatedAt: time.Now().UTC()}, Registry: Registry{Agents: []Agent{}, Worktrees: []Worktree{}, Sessions: []Session{}, Operations: map[string]Operation{}}}
+	d := &Document{Dir: dir, State: Workspace{SchemaVersion: 1, ID: id, ProjectID: cfg.ProjectID, Title: opt.Title, Revision: 1, Status: "needs_workflow", Input: Input{opt.Source, "inputs/issue.md"}, Base: Base{baseRef, base}, CreatedAt: time.Now().UTC()}, Registry: Registry{SchemaVersion: registrySchemaVersion, Agents: []Agent{}, Worktrees: []Worktree{}, Sessions: []Session{}, Runs: []Run{}, Operations: map[string]Operation{}}}
 	d.State.ProjectRoot = s.Root
 	orch := Agent{ID("agent"), "orchestrator", "orchestrator", cfg.Defaults.OrchestratorProfile, "orchestrator", "Coordinate the workflow; delegate all code changes to workers."}
 	d.State.OrchestratorAgentID = orch.ID

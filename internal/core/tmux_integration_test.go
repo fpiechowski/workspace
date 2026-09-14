@@ -83,14 +83,19 @@ func TestTmuxEndToEnd(t *testing.T) {
 	// Simulate an interrupted ledger write after tmux started the process.
 	if err := s.With(ctx, id, func(d *Document) error {
 		p, _ := findSession(d, session.ID)
-		p.State = "starting"
-		p.PaneID = ""
-		p.WindowID = ""
+		r, _ := findRun(d, session.CurrentRunID)
+		r.State = "starting"
+		r.PaneID = ""
+		r.WindowID = ""
+		p.CurrentRunID = r.ID
 		return saveDocument(d)
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := rt.call(ctx, "set-option", "-pu", "-t", session.PaneID, "@workspace_session_id"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.call(ctx, "set-option", "-pu", "-t", session.PaneID, "@workspace_run_id"); err != nil {
 		t.Fatal(err)
 	}
 	recovered, err := s.Reconcile(ctx, id)
@@ -108,7 +113,7 @@ func TestTmuxEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(data, &identity); err != nil {
 		t.Fatal(err)
 	}
-	if identity["agent"] != a.ID || identity["session"] != session.ID || identity["parent"] != session.ParentAgentID {
+	if identity["agent"] != a.ID || identity["session"] != session.ID || identity["run"] != session.CurrentRunID || identity["parent"] != session.ParentAgentID {
 		t.Fatalf("wrong identity: %v", identity)
 	}
 	replay, err := s.StartSession(ctx, id, SessionOptions{Agent: a.ID, Worktree: w.ID, OperationKey: "tmux-plan"})
@@ -123,7 +128,7 @@ func TestTmuxEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitExited(resumed.ID)
-	if resumed.ID == session.ID || resumed.WindowID != session.WindowID || resumed.AgentID != a.ID {
+	if resumed.ID != session.ID || resumed.CurrentRunID == session.CurrentRunID || resumed.WindowID != session.WindowID || resumed.AgentID != a.ID {
 		t.Fatal("resume did not preserve persona/worktree window")
 	}
 	orch, err := s.StartOrchestrator(ctx, id, "tmux-orchestrator")
