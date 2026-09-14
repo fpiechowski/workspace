@@ -126,6 +126,26 @@ func TestWorkspaceShortNamesAndSelector(t *testing.T) {
 	}
 }
 
+func TestSessionCompactOutputIncludesLogicalAndRunSummary(t *testing.T) {
+	value := shortOutput([]core.Session{{ID: "sess_1", AgentID: "agent_1", TaskID: "task_1", LifecycleState: "idle", LastRunID: "run_3", RunCount: 3, RunState: "interrupted", ClientThreadID: "thread_1"}})
+	b, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"id":"sess_1"`, `"lifecycle_state":"idle"`, `"last_run_id":"run_3"`, `"run_count":3`, `"run_state":"interrupted"`, `"client_thread_id":"thread_1"`} {
+		if !bytes.Contains(b, []byte(field)) {
+			t.Fatalf("compact session output omitted %s: %s", field, b)
+		}
+	}
+	root := newRoot(&options{})
+	for _, path := range []string{"session history", "run list", "run inspect"} {
+		parts := strings.Split(path, " ")
+		if cmd, _, err := root.Find(parts); err != nil || cmd == nil {
+			t.Fatalf("missing command %s: %v", path, err)
+		}
+	}
+}
+
 func TestShortIsAvailableForEveryCommand(t *testing.T) {
 	root := newRoot(&options{})
 	var visit func(*cobra.Command)

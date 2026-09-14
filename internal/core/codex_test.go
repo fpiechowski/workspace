@@ -63,7 +63,7 @@ func TestCodexNativeWakeupAndResume(t *testing.T) {
 			return false
 		}
 		for _, message := range messages {
-			if message.ID == m.ID && message.DeliveredSessionID == p.ID {
+			if message.ID == m.ID && message.DeliveredSessionID == p.ID && message.DeliveredRunID == p.CurrentRunID {
 				return true
 			}
 		}
@@ -91,7 +91,9 @@ func TestCodexNativeWakeupAndResume(t *testing.T) {
 	defer r2.Close()
 	defer w2.Close()
 	go func() { done <- s.ExecuteSession(ctx, ws, resumed.ID, r2, io.Discard, io.Discard) }()
-	waitFor(func(v Status) bool { return len(v.Sessions) == 2 && v.Sessions[1].ClientState == "idle" })
+	waitFor(func(v Status) bool {
+		return len(v.Sessions) == 1 && len(v.Runs) == 2 && v.Sessions[0].ClientState == "idle"
+	})
 	data, err := os.ReadFile(filepath.Join(p.CWD, "work-products", "thread-method.txt"))
 	if err != nil {
 		t.Fatal(err)

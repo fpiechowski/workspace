@@ -68,7 +68,18 @@ func (s *Service) BindThread(ctx context.Context, selector, id, thread string, k
 		if p.ClientThreadID != "" && p.ClientThreadID != thread {
 			return fail("thread_conflict", "session is already bound to a different client thread")
 		}
+		for i := range d.Registry.Sessions {
+			other := &d.Registry.Sessions[i]
+			if other.ID != p.ID && other.Active() && other.ClientSnapshot.Adapter == p.ClientSnapshot.Adapter && other.ClientThreadID == thread {
+				return fail("thread_conflict", "client thread is already bound to active session %s", other.ID)
+			}
+		}
 		p.ClientThreadID = thread
+		if p.CurrentRunID != "" {
+			if r, err := findRun(d, p.CurrentRunID); err == nil {
+				r.ClientThreadID = thread
+			}
+		}
 		out = *p
 		return saveDocument(d)
 	})
@@ -76,31 +87,46 @@ func (s *Service) BindThread(ctx context.Context, selector, id, thread string, k
 }
 func (s *Service) clientState(ctx context.Context, selector, id, thread, state string) error {
 	return s.With(ctx, selector, func(d *Document) error {
-		p, err := findSession(d, id)
+		r, err := findRun(d, id)
 		if err != nil {
 			return err
 		}
-		if !p.Active() {
-			return fail("stale_session", "session no longer owns the runtime")
+		p, err := findSession(d, r.SessionID)
+		if err != nil {
+			return err
+		}
+		if p.CurrentRunID != r.ID || !r.Active() {
+			return fail("stale_run", "run no longer owns the session runtime")
 		}
 		if thread != "" {
+			for i := range d.Registry.Sessions {
+				other := &d.Registry.Sessions[i]
+				if other.ID != p.ID && other.Active() && other.ClientSnapshot.Adapter == p.ClientSnapshot.Adapter && other.ClientThreadID == thread {
+					return fail("thread_conflict", "client thread is already bound to active session %s", other.ID)
+				}
+			}
 			p.ClientThreadID = thread
+			r.ClientThreadID = thread
 		}
-		if p.ClientState == state && thread == "" {
+		if r.ClientState == state && thread == "" {
 			return nil
 		}
-		p.ClientState = state
+		r.ClientState = state
 		return saveDocument(d)
 	})
 }
 func (s *Service) markDelivered(ctx context.Context, selector, session string, ids []string) error {
 	return s.With(ctx, selector, func(d *Document) error {
-		p, err := findSession(d, session)
+		r, err := findRun(d, session)
 		if err != nil {
 			return err
 		}
-		if !p.Active() {
-			return fail("stale_session", "session ended before delivery was recorded")
+		p, err := findSession(d, r.SessionID)
+		if err != nil {
+			return err
+		}
+		if p.CurrentRunID != r.ID || !r.Active() {
+			return fail("stale_run", "run ended before delivery was recorded")
 		}
 		changed := false
 		for _, id := range ids {
@@ -113,7 +139,8 @@ func (s *Service) markDelivered(ctx context.Context, selector, session string, i
 			}
 			now := nowUTC()
 			m.DeliveredAt = &now
-			m.DeliveredSessionID = session
+			m.DeliveredSessionID = p.ID
+			m.DeliveredRunID = r.ID
 			changed = true
 		}
 		if changed {

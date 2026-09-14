@@ -90,6 +90,8 @@ func compactRecord(record map[string]any, single bool) map[string]any {
 	keys := []string{
 		"id", "title", "name", "status", "state", "phase", "kind", "role",
 		"profile", "task_id", "agent_id", "from_agent", "to_agent", "session_id",
+		"run_id", "current_run_id", "last_run_id", "run_count", "generation", "lifecycle_state", "run_state",
+		"client_thread_id", "pane_id", "last_active_at",
 		"worktree_id", "attempt", "exit_code", "path", "branch", "url", "reference",
 		"available", "stopping", "revision",
 	}

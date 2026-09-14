@@ -5,7 +5,9 @@ Orkiestrator realizuje prosty workflow `plan-first`: planowanie w osobnym worktr
 i delegowanie implementacji do kolejnych worktree’ów.
 
 - **Agent**: persona z rolą, instrukcjami, szablonem promptu i profilem modelu.
-- **Session**: konkretne uruchomienie persony; model, prompt i native thread ID są utrwalone.
+- **Session**: trwały logiczny kontekst rozmowy w danym agent/task/worktree lineage.
+- **Run**: jedno konkretne uruchomienie klienta i panelu tmux; przechowuje model, argv,
+  prompt, wynik procesu i dokładne pochodzenie operacji.
 - **Workspace**: WORKSPACE.md, AGENTS.md, WORKFLOW.md, zadania, artefakty i worktrees.
 
 Projekt i zakres: [plan](workspace-cli-design.md). Zakres implementacji i wyniki weryfikacji:
@@ -155,7 +157,7 @@ naturalnej nazwy zachowują najważniejsze identyfikatory i stan. `list --map` p
 aliasem `list --short`. `open` pokazuje interaktywny selector z tytułem, stanem, fazą,
 ID i źródłem wejścia, po czym dołącza do sesji tmux.
 
-Sesja tmux odpowiada workspace, okno worktree, panel konkretnej Session. Orkiestrator
+Sesja tmux odpowiada workspace, okno worktree, panel konkretnego Run. Orkiestrator
 ma własne okno w katalogu workspace. Odłączenie użytkownika nie zatrzymuje procesów.
 
 ## Zadania i wyniki
@@ -183,8 +185,9 @@ workspace status
 workspace menu
 ```
 
-Klient otrzymuje IDs agenta, sesji, zadania, worktree, rodzica i orkiestratora w
-`WORKSPACE_*`. Wiadomości adresuje się do **Agent ID**. Wykonawcy zapisują lokalne
+Klient otrzymuje IDs agenta, logicznej sesji, runu, zadania, worktree, rodzica i
+orkiestratora w `WORKSPACE_*` (`WORKSPACE_SESSION_ID` i `WORKSPACE_RUN_ID` są różne).
+Wiadomości adresuje się do **Agent ID**. Wykonawcy zapisują lokalne
 produkty i przekazują je przez `handoff submit`; CLI kopiuje jawnie wskazane pliki do
 `artifacts/`. ACK wiadomości i akceptacja zadania są osobnymi decyzjami.
 
@@ -215,14 +218,22 @@ odpowiedzi, nie samodzielne udzielenie zgody przez model.
 
 ## Wznowienia i stan
 
-`agent resume NAME` zachowuje personę i tworzy nową Session, preferując dostępny native
-thread. `pause` wstrzymuje delegowanie, `pause --interrupt` zatrzymuje aktywne sesje,
+`agent resume NAME` zachowuje kompatybilną logiczną Session i tworzy nowy Run,
+preferując związany native thread. Zmiana agenta, task/attempt/input lineage, worktree
+lub native thread rozpoczyna nową Session. `session list` pokazuje po jednym rekordzie
+na rozmowę; `session history sess_ID` i `run list` pokazują wszystkie uruchomienia.
+`session close sess_ID --reason ...` zamyka idle context i blokuje dalsze resume.
+`pause` wstrzymuje delegowanie, `pause --interrupt` zatrzymuje aktywne runy,
 `resume` odblokowuje pracę. `reconcile` uzgadnia utracone panele i przerwane operacje.
 `archive` i `clean --dry-run` są osobne od potwierdzenia release’u.
 [Runtime, komunikacja i sprzątanie](docs/runtime.md).
 
 WORKSPACE.md jest kanonicznym stanem workflow; `.runtime/index.json` zawiera rejestry
-operacyjne. Aktualizuj opis przez `state update --expected-revision N`; `state edit`
+operacyjne w wersji `schema_version: 2`, z osobnymi tablicami `sessions` i `runs`.
+`status --json` publikuje ten sam jawny kontrakt wersji. Starszy indeks jest migrowany
+atomowo przy pierwszym otwarciu; dawne `sess_*` pozostają trwałymi aliasami Run, więc
+checks, handoffs, artifacts i messages zachowują pochodzenie. Aktualizuj opis przez
+`state update --expected-revision N`; `state edit`
 służy do kontrolowanej edycji w stanie paused. Zmiana inputu i migracja templates
 zachowują historię i unieważniają zależne wyniki: [rewizje](docs/revisions.md).
 

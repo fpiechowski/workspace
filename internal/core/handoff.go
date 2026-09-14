@@ -123,6 +123,10 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 		if p.TaskID == "" {
 			return fail("task_required", "handoff requires a task-bound session")
 		}
+		run, err := provenanceRun(d, p)
+		if err != nil {
+			return err
+		}
 		t, err := findTask(d, p.TaskID)
 		if err != nil {
 			return err
@@ -160,8 +164,8 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 		if err != nil {
 			return err
 		}
-		out = Handoff{ID: ID("handoff"), FromAgent: p.AgentID, FromSession: p.ID, ToAgent: a.ID, TaskID: t.ID, Attempt: p.TaskAttempt, InputDigest: p.InputDigest, Outcome: opt.Outcome, Summary: opt.Summary, State: "submitted", BaseCommit: w.BaseCommit, HeadCommit: head, Dirty: dirty != "", Checks: append([]Check(nil), opt.Checks...), Risks: opt.Risks, CreatedAt: time.Now().UTC()}
-		out.Stale = p.TaskAttempt != t.Attempt || p.InputDigest != t.InputDigest || t.State == "accepted"
+		out = Handoff{ID: ID("handoff"), FromAgent: p.AgentID, FromSession: p.ID, FromRun: run.ID, ToAgent: a.ID, TaskID: t.ID, Attempt: p.TaskAttempt, InputDigest: p.InputDigest, Outcome: opt.Outcome, Summary: opt.Summary, State: "submitted", BaseCommit: w.BaseCommit, HeadCommit: head, Dirty: dirty != "", Checks: append([]Check(nil), opt.Checks...), Risks: opt.Risks, CreatedAt: time.Now().UTC()}
+		out.Stale = p.TaskAttempt != t.Attempt || p.InputDigest != t.InputDigest || t.RunID != run.ID || t.State == "accepted"
 		artifacts := []Artifact{}
 		bytes := [][]byte{}
 		names := map[string]string{}
@@ -175,7 +179,7 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 			}
 			id := ID("art")
 			names[name] = id
-			artifact := Artifact{ID: id, Name: name, Kind: "report", Path: filepath.ToSlash(filepath.Join("artifacts", id, name)), Digest: digest(b), Size: int64(len(b)), SourceHandoff: out.ID, AgentID: p.AgentID, SessionID: p.ID, TaskID: t.ID, Model: p.Route.Model, PromptDigest: digest(prompt), BaseCommit: w.BaseCommit, HeadCommit: head, CreatedAt: out.CreatedAt}
+			artifact := Artifact{ID: id, Name: name, Kind: "report", Path: filepath.ToSlash(filepath.Join("artifacts", id, name)), Digest: digest(b), Size: int64(len(b)), SourceHandoff: out.ID, AgentID: p.AgentID, SessionID: p.ID, RunID: run.ID, TaskID: t.ID, Model: run.Route.Model, PromptDigest: digest(prompt), BaseCommit: w.BaseCommit, HeadCommit: head, CreatedAt: out.CreatedAt}
 			artifacts = append(artifacts, artifact)
 			bytes = append(bytes, b)
 			out.ArtifactIDs = append(out.ArtifactIDs, id)
@@ -191,7 +195,7 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 			if err != nil {
 				return err
 			}
-			if r.SessionID != p.ID || r.TaskID != t.ID || r.Attempt != p.TaskAttempt || r.State != "completed" || !r.Clean || r.Head != head || r.EndHead != head {
+			if r.SessionID != p.ID || r.RunID != run.ID || r.TaskID != t.ID || r.Attempt != p.TaskAttempt || r.State != "completed" || !r.Clean || r.Head != head || r.EndHead != head {
 				return fail("invalid_checks", "check %s does not verify this clean task revision", checkID)
 			}
 			b, _, err := readArtifact(d.Dir, filepath.Join(".runtime", "checks", r.ID+".log"))
@@ -203,7 +207,7 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 			}
 			id := ID("art")
 			name := r.ID + ".log"
-			artifact := Artifact{ID: id, Name: name, Kind: "check-output", Path: filepath.ToSlash(filepath.Join("artifacts", id, name)), Digest: r.Digest, Size: int64(len(b)), SourceHandoff: out.ID, AgentID: p.AgentID, SessionID: p.ID, TaskID: t.ID, Model: p.Route.Model, PromptDigest: digest(prompt), BaseCommit: w.BaseCommit, HeadCommit: head, CreatedAt: out.CreatedAt}
+			artifact := Artifact{ID: id, Name: name, Kind: "check-output", Path: filepath.ToSlash(filepath.Join("artifacts", id, name)), Digest: r.Digest, Size: int64(len(b)), SourceHandoff: out.ID, AgentID: p.AgentID, SessionID: p.ID, RunID: run.ID, TaskID: t.ID, Model: run.Route.Model, PromptDigest: digest(prompt), BaseCommit: w.BaseCommit, HeadCommit: head, CreatedAt: out.CreatedAt}
 			artifacts = append(artifacts, artifact)
 			bytes = append(bytes, b)
 			out.ArtifactIDs = append(out.ArtifactIDs, id)
@@ -237,8 +241,12 @@ func verifyArtifact(d *Document, a *Artifact) error {
 	return nil
 }
 func validateHandoff(d *Document, h *Handoff, t *Task) error {
-	if h.Stale || h.Attempt != t.Attempt || h.InputDigest != t.InputDigest {
+	if h.Stale || h.Attempt != t.Attempt || h.InputDigest != t.InputDigest || h.FromRun == "" || h.FromRun != t.RunID {
 		return fail("stale_handoff", "result belongs to an earlier attempt/input")
+	}
+	run, err := findRun(d, h.FromRun)
+	if err != nil || run.SessionID != h.FromSession {
+		return fail("stale_handoff", "result execution provenance is missing or inconsistent")
 	}
 	current, err := taskInputDigest(d, t)
 	if err != nil {
@@ -258,6 +266,9 @@ func validateHandoff(d *Document, h *Handoff, t *Task) error {
 		}
 		if err := verifyArtifact(d, a); err != nil {
 			return err
+		}
+		if a.SessionID != h.FromSession || a.RunID != h.FromRun {
+			return fail("artifact_changed", "artifact provenance does not match handoff execution")
 		}
 		names[a.Name] = true
 	}
@@ -359,7 +370,11 @@ func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept
 				m.AcknowledgedAt = &now
 			}
 		}
-		addMessage(d, d.State.OrchestratorAgentID, s.Actor.SessionID, h.FromAgent, "review", "Handoff "+h.ID+" "+h.State+". "+feedback, h.ID, "")
+		fromSession := s.Actor.SessionID
+		if actor, actorErr := s.actor(d); actorErr == nil && actor != nil {
+			fromSession = actor.ID
+		}
+		addMessage(d, d.State.OrchestratorAgentID, fromSession, h.FromAgent, "review", "Handoff "+h.ID+" "+h.State+". "+feedback, h.ID, "")
 		return saveDocument(d)
 	})
 	return out, err

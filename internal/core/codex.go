@@ -112,7 +112,7 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 	}
 	startTurn := func(text string, ids []string) error {
 		busy = true
-		if err := s.clientState(ctx, selector, session.ID, "", "busy"); err != nil {
+		if err := s.clientState(ctx, selector, session.CurrentRunID, "", "busy"); err != nil {
 			return err
 		}
 		return send("turn/start", map[string]any{"threadId": thread, "input": []any{map[string]any{"type": "text", "text": text}}}, "turn", ids)
@@ -142,7 +142,7 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 						return fail("client_error", "%s", message.Error.Message)
 					}
 					busy = false
-					_ = s.clientState(ctx, selector, session.ID, "", "idle")
+					_ = s.clientState(ctx, selector, session.CurrentRunID, "", "idle")
 					fmt.Fprintln(errOut, "Codex:", message.Error.Message)
 					continue
 				}
@@ -179,7 +179,7 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 					}
 					thread = response.Thread.ID
 					ready = true
-					if err := s.clientState(ctx, selector, session.ID, thread, "idle"); err != nil {
+					if err := s.clientState(ctx, selector, session.CurrentRunID, thread, "idle"); err != nil {
 						return err
 					}
 					if err := startTurn(string(bootstrap), nil); err != nil {
@@ -194,7 +194,7 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 					_ = json.Unmarshal(message.Result, &response)
 					turnID = response.Turn.ID
 					if len(request.Messages) > 0 {
-						if err := s.markDelivered(ctx, selector, session.ID, request.Messages); err != nil {
+						if err := s.markDelivered(ctx, selector, session.CurrentRunID, request.Messages); err != nil {
 							return err
 						}
 					}
@@ -205,7 +205,7 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 				key := string(message.ID)
 				requests[key] = message
 				showNativeRequest(out, key, message)
-				if err := s.clientState(ctx, selector, session.ID, "", "needs_input"); err != nil {
+				if err := s.clientState(ctx, selector, session.CurrentRunID, "", "needs_input"); err != nil {
 					return err
 				}
 				continue
@@ -246,7 +246,7 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 					fmt.Fprintf(errOut, "\nTurn failed: %v\n", p.Turn.Error)
 				}
 				fmt.Fprintln(out, "\n[ready]")
-				if err := s.clientState(ctx, selector, session.ID, "", "idle"); err != nil {
+				if err := s.clientState(ctx, selector, session.CurrentRunID, "", "idle"); err != nil {
 					return err
 				}
 			}
@@ -345,7 +345,7 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 					}
 				}
 				for _, m := range d.Registry.Messages {
-					if m.ToAgent == p.AgentID && m.AcknowledgedAt == nil && m.DeliveredSessionID != p.ID {
+					if m.ToAgent == p.AgentID && m.AcknowledgedAt == nil && m.DeliveredRunID != p.CurrentRunID {
 						messages = append(messages, m)
 					}
 				}

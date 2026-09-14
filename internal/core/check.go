@@ -15,6 +15,7 @@ import (
 type CheckReceipt struct {
 	ID         string     `json:"id" yaml:"id"`
 	SessionID  string     `json:"session_id" yaml:"session_id"`
+	RunID      string     `json:"run_id" yaml:"run_id"`
 	TaskID     string     `json:"task_id" yaml:"task_id"`
 	Attempt    int        `json:"attempt" yaml:"attempt"`
 	Argv       []string   `json:"argv" yaml:"argv"`
@@ -102,8 +103,12 @@ func (s *Service) RunCheck(ctx context.Context, selector string, opt CheckOption
 		if !p.Active() || p.TaskID == "" {
 			return fail("task_required", "check requires an active task-bound session")
 		}
+		run, err := currentRun(d, p)
+		if err != nil {
+			return err
+		}
 		for _, r := range d.Registry.Checks {
-			if r.SessionID == p.ID && r.State == "running" {
+			if r.RunID == run.ID && r.State == "running" {
 				return fail("check_busy", "check %s is still running or needs reconciliation", r.ID)
 			}
 		}
@@ -122,7 +127,7 @@ func (s *Service) RunCheck(ctx context.Context, selector string, opt CheckOption
 		if err != nil {
 			return err
 		}
-		out = CheckReceipt{ID: ID("check"), SessionID: p.ID, TaskID: p.TaskID, Attempt: p.TaskAttempt, Argv: append([]string(nil), opt.Argv...), Head: head, Clean: dirty == "", State: "running", ExitCode: -1, StartedAt: nowUTC()}
+		out = CheckReceipt{ID: ID("check"), SessionID: p.ID, RunID: run.ID, TaskID: p.TaskID, Attempt: p.TaskAttempt, Argv: append([]string(nil), opt.Argv...), Head: head, Clean: dirty == "", State: "running", ExitCode: -1, StartedAt: nowUTC()}
 		out.Output = filepath.ToSlash(filepath.Join("work-products", "checks", out.ID+".log"))
 		cwd = w.Path
 		workspaceDir = d.Dir

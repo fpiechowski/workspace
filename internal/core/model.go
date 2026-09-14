@@ -112,7 +112,8 @@ type Base struct {
 	Commit string `yaml:"commit" json:"commit"`
 }
 
-// Agent is a persona definition. A Session captures a copy at launch time.
+// Agent is a persona definition. A Session is a durable logical conversation;
+// each concrete client/tmux execution is recorded as a Run.
 type Agent struct {
 	ID             string `json:"id" yaml:"id"`
 	Name           string `json:"name" yaml:"name"`
@@ -131,34 +132,74 @@ type Worktree struct {
 	State      string `json:"state" yaml:"state"`
 }
 type Session struct {
-	ReadOnly        bool             `json:"read_only" yaml:"read_only"`
+	ID             string     `json:"id" yaml:"id"`
+	AgentID        string     `json:"agent_id" yaml:"agent_id"`
+	AgentSnapshot  Agent      `json:"agent_snapshot" yaml:"agent_snapshot"`
+	ParentAgentID  string     `json:"parent_agent_id,omitempty" yaml:"parent_agent_id,omitempty"`
+	WorktreeID     string     `json:"worktree_id,omitempty" yaml:"worktree_id,omitempty"`
+	TaskID         string     `json:"task_id,omitempty" yaml:"task_id,omitempty"`
+	TaskAttempt    int        `json:"task_attempt,omitempty" yaml:"task_attempt,omitempty"`
+	InputDigest    string     `json:"input_digest,omitempty" yaml:"input_digest,omitempty"`
+	ClientSnapshot Client     `json:"client_snapshot" yaml:"client_snapshot"`
+	ClientThreadID string     `json:"client_thread_id,omitempty" yaml:"client_thread_id,omitempty"`
+	ReadOnly       bool       `json:"read_only" yaml:"read_only"`
+	CreatedAt      time.Time  `json:"created_at" yaml:"created_at"`
+	ClosedAt       *time.Time `json:"closed_at,omitempty" yaml:"closed_at,omitempty"`
+	CloseReason    string     `json:"close_reason,omitempty" yaml:"close_reason,omitempty"`
+	LifecycleState string     `json:"lifecycle_state" yaml:"lifecycle_state"`
+	CurrentRunID   string     `json:"current_run_id,omitempty" yaml:"current_run_id,omitempty"`
+	LastRunID      string     `json:"last_run_id,omitempty" yaml:"last_run_id,omitempty"`
+	RunCount       int        `json:"run_count" yaml:"run_count"`
+	LastActiveAt   time.Time  `json:"last_active_at" yaml:"last_active_at"`
+
+	// The fields below are a compatibility/status projection of current_run (or
+	// last_run when idle). They are never the source of runtime ownership.
 	RoutingDecision *RoutingDecision `json:"routing_decision,omitempty" yaml:"routing_decision,omitempty"`
-	ID              string           `json:"id" yaml:"id"`
-	AgentID         string           `json:"agent_id" yaml:"agent_id"`
-	AgentSnapshot   Agent            `json:"agent_snapshot" yaml:"agent_snapshot"`
-	ParentAgentID   string           `json:"parent_agent_id,omitempty" yaml:"parent_agent_id,omitempty"`
-	WorktreeID      string           `json:"worktree_id,omitempty" yaml:"worktree_id,omitempty"`
 	Profile         string           `json:"profile" yaml:"profile"`
 	Route           Route            `json:"route" yaml:"route"`
+	Argv            []string         `json:"argv" yaml:"argv"`
+	CWD             string           `json:"cwd" yaml:"cwd"`
+	PromptFile      string           `json:"prompt_file" yaml:"prompt_file"`
+	RunState        string           `json:"run_state" yaml:"run_state"`
+	State           string           `json:"state" yaml:"state"`
+	PaneID          string           `json:"pane_id,omitempty" yaml:"pane_id,omitempty"`
+	WindowID        string           `json:"window_id,omitempty" yaml:"window_id,omitempty"`
+	FinishedAt      *time.Time       `json:"finished_at,omitempty" yaml:"finished_at,omitempty"`
+	ExitCode        *int             `json:"exit_code,omitempty" yaml:"exit_code,omitempty"`
+	Error           string           `json:"error,omitempty" yaml:"error,omitempty"`
+	ClientState     string           `json:"client_state,omitempty" yaml:"client_state,omitempty"`
+}
+
+func (s Session) Active() bool {
+	state := s.State
+	if state == "" {
+		state = s.RunState
+	}
+	return s.CurrentRunID != "" && (state == "starting" || state == "running")
+}
+
+type Run struct {
+	ID              string           `json:"id" yaml:"id"`
+	SessionID       string           `json:"session_id" yaml:"session_id"`
+	Generation      int              `json:"generation" yaml:"generation"`
+	Profile         string           `json:"profile" yaml:"profile"`
+	Route           Route            `json:"route" yaml:"route"`
+	RoutingDecision *RoutingDecision `json:"routing_decision,omitempty" yaml:"routing_decision,omitempty"`
 	Argv            []string         `json:"argv" yaml:"argv"`
 	CWD             string           `json:"cwd" yaml:"cwd"`
 	PromptFile      string           `json:"prompt_file" yaml:"prompt_file"`
 	State           string           `json:"state" yaml:"state"`
 	PaneID          string           `json:"pane_id,omitempty" yaml:"pane_id,omitempty"`
 	WindowID        string           `json:"window_id,omitempty" yaml:"window_id,omitempty"`
+	ClientState     string           `json:"client_state,omitempty" yaml:"client_state,omitempty"`
+	ClientThreadID  string           `json:"client_thread_id,omitempty" yaml:"client_thread_id,omitempty"`
 	CreatedAt       time.Time        `json:"created_at" yaml:"created_at"`
 	FinishedAt      *time.Time       `json:"finished_at,omitempty" yaml:"finished_at,omitempty"`
 	ExitCode        *int             `json:"exit_code,omitempty" yaml:"exit_code,omitempty"`
 	Error           string           `json:"error,omitempty" yaml:"error,omitempty"`
-	TaskID          string           `json:"task_id,omitempty" yaml:"task_id,omitempty"`
-	TaskAttempt     int              `json:"task_attempt,omitempty" yaml:"task_attempt,omitempty"`
-	InputDigest     string           `json:"input_digest,omitempty" yaml:"input_digest,omitempty"`
-	ClientSnapshot  Client           `json:"client_snapshot" yaml:"client_snapshot"`
-	ClientThreadID  string           `json:"client_thread_id,omitempty" yaml:"client_thread_id,omitempty"`
-	ClientState     string           `json:"client_state,omitempty" yaml:"client_state,omitempty"`
 }
 
-func (s Session) Active() bool { return s.State == "starting" || s.State == "running" }
+func (r Run) Active() bool { return r.State == "starting" || r.State == "running" }
 
 type Operation struct {
 	Result     json.RawMessage `json:"result,omitempty"`
@@ -168,6 +209,7 @@ type Operation struct {
 	ResourceID string          `json:"resource_id"`
 }
 type Registry struct {
+	SchemaVersion   int                        `json:"schema_version,omitempty"`
 	Mutations       map[string]MutationReceipt `json:"mutations,omitempty"`
 	Services        []BackgroundService        `json:"services"`
 	Checks          []CheckReceipt             `json:"checks"`
@@ -175,6 +217,7 @@ type Registry struct {
 	Agents          []Agent                    `json:"agents"`
 	Worktrees       []Worktree                 `json:"worktrees"`
 	Sessions        []Session                  `json:"sessions"`
+	Runs            []Run                      `json:"runs"`
 	Operations      map[string]Operation       `json:"operations"`
 	Messages        []Message                  `json:"messages"`
 	Handoffs        []Handoff                  `json:"handoffs"`
@@ -188,13 +231,16 @@ type Document struct {
 	Registry     Registry
 }
 type Status struct {
-	Directory string     `json:"directory" yaml:"directory"`
-	Workspace Workspace  `json:"workspace" yaml:"workspace"`
-	Agents    []Agent    `json:"agents" yaml:"agents"`
-	Worktrees []Worktree `json:"worktrees" yaml:"worktrees"`
-	Sessions  []Session  `json:"sessions" yaml:"sessions"`
+	SchemaVersion int        `json:"schema_version" yaml:"schema_version"`
+	Directory     string     `json:"directory" yaml:"directory"`
+	Workspace     Workspace  `json:"workspace" yaml:"workspace"`
+	Agents        []Agent    `json:"agents" yaml:"agents"`
+	Worktrees     []Worktree `json:"worktrees" yaml:"worktrees"`
+	Sessions      []Session  `json:"sessions" yaml:"sessions"`
+	Runs          []Run      `json:"runs" yaml:"runs"`
 }
 
 func (d *Document) Status() Status {
-	return Status{d.Dir, d.State, d.Registry.Agents, d.Registry.Worktrees, d.Registry.Sessions}
+	d.syncSessions()
+	return Status{SchemaVersion: 2, Directory: d.Dir, Workspace: d.State, Agents: d.Registry.Agents, Worktrees: d.Registry.Worktrees, Sessions: d.Registry.Sessions, Runs: d.Registry.Runs}
 }

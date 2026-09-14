@@ -57,19 +57,19 @@ func (s *Service) assessRoutes(cfg Config, profile string) (RoutingDecision, err
 		if err != nil {
 			return out, err
 		}
-		for _, session := range d.Registry.Sessions {
-			key := session.Route.Client + "/" + session.Route.Provider + "/" + session.Route.Model
-			if session.Active() {
+		for _, run := range d.Registry.Runs {
+			key := run.Route.Client + "/" + run.Route.Provider + "/" + run.Route.Model
+			if run.Active() {
 				active[key]++
 			}
-			if session.CreatedAt.After(now.Add(-24*time.Hour)) && (session.State != "failed" || session.ExitCode != nil) {
-				counts[session.Route.Provider]++
+			if run.CreatedAt.After(now.Add(-24*time.Hour)) && (run.State != "failed" || run.ExitCode != nil) {
+				counts[run.Route.Provider]++
 				routeCount[key]++
-			} else if session.Active() {
-				counts[session.Route.Provider]++
+			} else if run.Active() {
+				counts[run.Route.Provider]++
 			}
-			if session.State == "failed" && session.ExitCode == nil && session.CreatedAt.After(failures[key]) {
-				failures[key] = session.CreatedAt
+			if run.State == "failed" && run.ExitCode == nil && run.CreatedAt.After(failures[key]) {
+				failures[key] = run.CreatedAt
 			}
 		}
 	}

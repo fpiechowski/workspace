@@ -211,9 +211,16 @@ func loadDocument(dir string) (*Document, error) {
 	if d.Registry.Operations == nil {
 		d.Registry.Operations = map[string]Operation{}
 	}
+	if migrateRegistryV2(d) {
+		if err := saveDocument(d); err != nil {
+			return nil, err
+		}
+	}
 	return d, nil
 }
 func saveDocument(d *Document) error {
+	d.Registry.SchemaVersion = registrySchemaVersion
+	d.syncSessions()
 	d.State.Revision++
 	if d.deferSave {
 		return nil

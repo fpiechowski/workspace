@@ -24,7 +24,7 @@ type fakeRuntime struct {
 
 func (r *fakeRuntime) Launch(_ context.Context, l Launch) (Pane, error) {
 	r.launches++
-	p := Pane{ID: fmt.Sprintf("%%%d", r.launches), WindowID: "@1", SessionID: l.SessionID}
+	p := Pane{ID: fmt.Sprintf("%%%d", r.launches), WindowID: "@1", SessionID: l.SessionID, RunID: l.RunID}
 	r.panes[p.ID] = p
 	return p, nil
 }
@@ -241,7 +241,7 @@ func TestConcreteSessionCarriesIdentityAndPreservesPersona(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("%v: %s", err, stdout.String())
 	}
-	if result["agent"] != a.ID || result["session"] != first.ID || result["parent"] != first.ParentAgentID || result["worktree"] != w.ID {
+	if result["agent"] != a.ID || result["session"] != first.ID || result["run"] != first.CurrentRunID || result["parent"] != first.ParentAgentID || result["worktree"] != w.ID {
 		t.Fatalf("identity not delivered: %v", result)
 	}
 	if !strings.Contains(result["prompt"], "Investigate checkout retries") {
@@ -258,14 +258,14 @@ func TestConcreteSessionCarriesIdentityAndPreservesPersona(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.ID == first.ID || second.AgentID != first.AgentID {
-		t.Fatal("resume must create a new Session for the same Agent")
+	if second.ID != first.ID || second.CurrentRunID == first.CurrentRunID || second.AgentID != first.AgentID {
+		t.Fatal("resume must create a new Run in the same logical Session")
 	}
 	if second.AgentSnapshot != first.AgentSnapshot {
 		t.Fatal("persona changed")
 	}
-	err = s.ExecuteSession(ctx, id, first.ID, strings.NewReader(""), io.Discard, io.Discard)
-	expectCode(t, err, "session_claimed")
+	err = s.ExecuteSession(ctx, id, first.CurrentRunID, strings.NewReader(""), io.Discard, io.Discard)
+	expectCode(t, err, "stale_run")
 }
 
 // Executed in a child process by the command adapter, never in the normal suite.
@@ -279,7 +279,7 @@ func TestWorkerProcess(t *testing.T) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	result := map[string]string{"agent": os.Getenv("WORKSPACE_AGENT_ID"), "session": os.Getenv("WORKSPACE_SESSION_ID"), "parent": os.Getenv("WORKSPACE_PARENT_AGENT_ID"), "worktree": os.Getenv("WORKSPACE_WORKTREE_ID"), "prompt": string(b)}
+	result := map[string]string{"agent": os.Getenv("WORKSPACE_AGENT_ID"), "session": os.Getenv("WORKSPACE_SESSION_ID"), "run": os.Getenv("WORKSPACE_RUN_ID"), "parent": os.Getenv("WORKSPACE_PARENT_AGENT_ID"), "worktree": os.Getenv("WORKSPACE_WORKTREE_ID"), "prompt": string(b)}
 	data, _ := json.Marshal(result)
 	if err := atomicWrite(filepath.Join("work-products", "identity.json"), data); err != nil {
 		fmt.Fprintln(os.Stderr, err)

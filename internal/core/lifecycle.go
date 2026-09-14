@@ -28,15 +28,21 @@ func (s *Service) Pause(ctx context.Context, selector string, interrupt bool, ke
 			}
 		}
 		// Stop the caller last so delegated sessions cannot outlive this request.
+		callerID := ""
 		for _, p := range v.Sessions {
-			if p.Active() && p.ID != s.Actor.SessionID {
+			caller := p.ID != "" && (p.ID == s.Actor.SessionID || p.CurrentRunID == s.Actor.RunID && s.Actor.RunID != "" || p.CurrentRunID == s.Actor.SessionID && s.Actor.SessionID != "")
+			if caller {
+				callerID = p.ID
+				continue
+			}
+			if p.Active() {
 				if _, err := s.StopSession(ctx, selector, p.ID); err != nil {
 					return v, err
 				}
 			}
 		}
-		if s.Actor.SessionID != "" {
-			if _, err := s.StopSession(ctx, selector, s.Actor.SessionID); err != nil {
+		if callerID != "" {
+			if _, err := s.StopSession(ctx, selector, callerID); err != nil {
 				return v, err
 			}
 		}

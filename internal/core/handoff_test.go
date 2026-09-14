@@ -62,7 +62,7 @@ func TestHandoffPreservesArtifactBeforeInboxAndRequiresAcceptance(t *testing.T) 
 		t.Fatal("submission must not accept task")
 	}
 	artifact := status.Workspace.Artifacts[0]
-	if artifact.SessionID != p.ID || artifact.AgentID != p.AgentID || artifact.SourceHandoff != h.ID {
+	if artifact.SessionID != p.ID || artifact.RunID != p.CurrentRunID || h.FromRun != p.CurrentRunID || artifact.AgentID != p.AgentID || artifact.SourceHandoff != h.ID {
 		t.Fatal("missing provenance")
 	}
 	if err := os.Remove(filepath.Join(w.Path, "work-products", "PLAN.md")); err != nil {
@@ -74,6 +74,9 @@ func TestHandoffPreservesArtifactBeforeInboxAndRequiresAcceptance(t *testing.T) 
 	inbox, err := s.Inbox(ctx, ws, "", false)
 	if err != nil || len(inbox) != 1 {
 		t.Fatalf("inbox: %v %v", inbox, err)
+	}
+	if inbox[0].FromSession != p.ID || inbox[0].FromRun != p.CurrentRunID {
+		t.Fatal("message lost session/run provenance")
 	}
 	if _, err := s.ReadMessage(ctx, ws, inbox[0].ID, true); err != nil {
 		t.Fatal(err)
@@ -137,7 +140,7 @@ func TestWorkersCannotAcceptResultsOrReadOtherInboxes(t *testing.T) {
 	p, w := startTask(t, s, ws, task)
 	h := submitPlan(t, s, ws, p, w)
 	workerService := *s
-	workerService.Actor = Actor{p.AgentID, p.ID}
+	workerService.Actor = Actor{AgentID: p.AgentID, SessionID: p.ID, RunID: p.CurrentRunID}
 	_, err := workerService.ReviewHandoff(ctx, ws, h.ID, true, "")
 	expectCode(t, err, "forbidden")
 	_, err = workerService.Inbox(ctx, ws, "orchestrator", false)

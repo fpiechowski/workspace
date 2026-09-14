@@ -83,7 +83,116 @@ func findSession(d *Document, id string) (*Session, error) {
 			return &d.Registry.Sessions[i], nil
 		}
 	}
+	// Legacy runtimes and scripts may still address the old concrete session
+	// identifier. Migration preserves it as Run.ID, making it a durable alias.
+	if r, err := findRun(d, id); err == nil {
+		for i := range d.Registry.Sessions {
+			if d.Registry.Sessions[i].ID == r.SessionID {
+				return &d.Registry.Sessions[i], nil
+			}
+		}
+	}
 	return nil, fail("session_not_found", "unknown session %q", id)
+}
+
+func findRun(d *Document, id string) (*Run, error) {
+	for i := range d.Registry.Runs {
+		if d.Registry.Runs[i].ID == id {
+			return &d.Registry.Runs[i], nil
+		}
+	}
+	return nil, fail("run_not_found", "unknown run %q", id)
+}
+
+func currentRun(d *Document, p *Session) (*Run, error) {
+	if p.CurrentRunID == "" {
+		return nil, fail("session_idle", "session %s has no active run", p.ID)
+	}
+	r, err := findRun(d, p.CurrentRunID)
+	if err != nil || r.SessionID != p.ID || !r.Active() {
+		return nil, fail("stale_run", "session %s no longer owns run %s", p.ID, p.CurrentRunID)
+	}
+	return r, nil
+}
+
+func provenanceRun(d *Document, p *Session) (*Run, error) {
+	resolve := func(id string) (*Run, error) {
+		r, err := findRun(d, id)
+		if err != nil {
+			return nil, err
+		}
+		if r.SessionID != p.ID {
+			return nil, fail("stale_run", "run %s does not belong to session %s", id, p.ID)
+		}
+		return r, nil
+	}
+	if p.CurrentRunID != "" {
+		return resolve(p.CurrentRunID)
+	}
+	if p.LastRunID != "" {
+		return resolve(p.LastRunID)
+	}
+	return nil, fail("run_not_found", "session %s has no execution history", p.ID)
+}
+
+func (d *Document) syncSession(p *Session) {
+	p.RunCount = 0
+	var latest, current *Run
+	for i := range d.Registry.Runs {
+		r := &d.Registry.Runs[i]
+		if r.SessionID != p.ID {
+			continue
+		}
+		p.RunCount++
+		if latest == nil || r.CreatedAt.After(latest.CreatedAt) || r.CreatedAt.Equal(latest.CreatedAt) && r.ID > latest.ID {
+			latest = r
+		}
+		if r.ID == p.CurrentRunID {
+			current = r
+		}
+	}
+	if latest != nil {
+		p.LastRunID = latest.ID
+	} else {
+		p.LastRunID = ""
+	}
+	selected := latest
+	if current != nil && current.Active() {
+		selected = current
+	}
+	if selected == nil {
+		p.CurrentRunID = ""
+		p.LifecycleState = "idle"
+		return
+	}
+	if current == nil || !current.Active() {
+		p.CurrentRunID = ""
+	}
+	p.Profile, p.Route, p.RoutingDecision = selected.Profile, selected.Route, selected.RoutingDecision
+	p.Argv, p.CWD, p.PromptFile = append([]string(nil), selected.Argv...), selected.CWD, selected.PromptFile
+	p.RunState, p.State, p.PaneID, p.WindowID = selected.State, selected.State, selected.PaneID, selected.WindowID
+	p.FinishedAt, p.ExitCode, p.Error, p.ClientState = selected.FinishedAt, selected.ExitCode, selected.Error, selected.ClientState
+	if selected.ClientThreadID != "" {
+		p.ClientThreadID = selected.ClientThreadID
+	}
+	p.LastActiveAt = selected.CreatedAt
+	if selected.FinishedAt != nil {
+		p.LastActiveAt = *selected.FinishedAt
+	}
+	if p.ClosedAt != nil {
+		p.LifecycleState = "closed"
+	} else if current != nil && current.Active() {
+		p.LifecycleState = "active"
+	} else {
+		p.CurrentRunID = ""
+		p.LifecycleState = "idle"
+	}
+}
+
+func (d *Document) syncSessions() {
+	for i := range d.Registry.Sessions {
+		d.syncSession(&d.Registry.Sessions[i])
+	}
 }
 func findWorktree(d *Document, id string) (*Worktree, error) {
 	for i := range d.Registry.Worktrees {

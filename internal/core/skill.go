@@ -12,7 +12,7 @@ import (
 var bundledSkill embed.FS
 
 func (s *Service) InstallSkill(ctx context.Context, client string, keys ...string) (string, error) {
-	if s.Actor.AgentID != "" || s.Actor.SessionID != "" {
+	if s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "" {
 		return "", fail("forbidden", "install the project skill from a user terminal")
 	}
 	if key := mutationKey(keys); key != "" {

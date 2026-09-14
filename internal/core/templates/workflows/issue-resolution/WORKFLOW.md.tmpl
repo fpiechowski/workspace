@@ -6,8 +6,9 @@ Use workspace menu --json for available actions and pending decision IDs/revisio
 
 ## Re-entry and operation identity
 
-For every step, inspect tasks, sessions, handoffs and artifacts. If the current task
-has an accepted result, reuse it. If a Session is active, collect its messages. If an
+For every step, inspect tasks, logical sessions, run history, handoffs and artifacts.
+If the current task has an accepted result, reuse it. If a Session has an active Run,
+collect its messages. If an
 unreviewed handoff exists, review it before launching work. Otherwise create the
 missing resources and start the task. Use keys such as planning:create,
 planning:start:1, implement:task-id:attempt and result:task-id:attempt. A changed

@@ -117,7 +117,11 @@ func TestSupervisorAutomaticallyBindsExistingOpenCodeThread(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		p.State = "running"
+		r, err := currentRun(d, p)
+		if err != nil {
+			return err
+		}
+		r.State = "running"
 		return saveDocument(d)
 	}); err != nil {
 		t.Fatal(err)

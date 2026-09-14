@@ -110,7 +110,7 @@ func (o *options) service() (*core.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &core.Service{Root: root, Runtime: core.Tmux{Socket: o.socket}, Executable: exe, Actor: core.Actor{AgentID: os.Getenv("WORKSPACE_AGENT_ID"), SessionID: os.Getenv("WORKSPACE_SESSION_ID")}}, nil
+	return &core.Service{Root: root, Runtime: core.Tmux{Socket: o.socket}, Executable: exe, Actor: core.Actor{AgentID: os.Getenv("WORKSPACE_AGENT_ID"), SessionID: os.Getenv("WORKSPACE_SESSION_ID"), RunID: os.Getenv("WORKSPACE_RUN_ID")}}, nil
 }
 func (o *options) selector() (string, error) {
 	if o.workspace != "" {
@@ -368,7 +368,7 @@ func newRoot(o *options) *cobra.Command {
 	})
 	openCmd.Args = cobra.MaximumNArgs(1)
 	root.AddCommand(openCmd)
-	root.AddCommand(command("status", "Show durable state and session history", func(c *cobra.Command, _ []string) error {
+	root.AddCommand(command("status", "Show durable state with logical sessions and run history", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err
@@ -461,7 +461,7 @@ func newRoot(o *options) *cobra.Command {
 		}
 		root.AddCommand(group)
 	}
-	root.AddCommand(agentCommands(o), worktreeCommands(o), sessionCommands(o))
+	root.AddCommand(agentCommands(o), worktreeCommands(o), sessionCommands(o), runCommands(o))
 	root.AddCommand(taskCommands(o), messageCommands(o), inboxCommands(o), handoffCommands(o), artifactCommands(o))
 	root.AddCommand(integrationCommands(o), decisionCommands(o), stateCommands(o), releaseCommands(o))
 	root.AddCommand(changeRequestCommands(o))
@@ -515,7 +515,7 @@ func newRoot(o *options) *cobra.Command {
 			return o.emit(v)
 		})
 		if verb == "pause" {
-			lifecycle.Flags().BoolVar(&interrupt, "interrupt", false, "Stop active sessions while preserving local work")
+			lifecycle.Flags().BoolVar(&interrupt, "interrupt", false, "Stop active runs while preserving logical sessions and local work")
 		}
 		root.AddCommand(lifecycle)
 	}
@@ -584,7 +584,7 @@ func newRoot(o *options) *cobra.Command {
 }
 
 func agentCommands(o *options) *cobra.Command {
-	group := &cobra.Command{Use: "agent", Short: "Define personas; each can have multiple concrete sessions"}
+	group := &cobra.Command{Use: "agent", Short: "Define personas; each can have multiple logical sessions and runs"}
 	var opt core.AgentOptions
 	var instructionsFile string
 	create := command("create <name>", "Define a worker persona", func(c *cobra.Command, args []string) error {
@@ -625,7 +625,7 @@ func agentCommands(o *options) *cobra.Command {
 		}
 		return o.emit(v.Agents)
 	}))
-	resume := command("resume <agent>", "Start a new conversation for an agent using its last worktree/profile", func(c *cobra.Command, args []string) error {
+	resume := command("resume <agent>", "Start a new run, reusing a compatible logical session", func(c *cobra.Command, args []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err
@@ -677,7 +677,7 @@ func worktreeCommands(o *options) *cobra.Command {
 	return group
 }
 func sessionCommands(o *options) *cobra.Command {
-	group := &cobra.Command{Use: "session", Short: "Manage concrete agent executions"}
+	group := &cobra.Command{Use: "session", Short: "Manage durable logical agent conversations"}
 	var opt core.SessionOptions
 	start := command("start", "Launch a persona in a tmux pane", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
@@ -718,7 +718,7 @@ func sessionCommands(o *options) *cobra.Command {
 	bind.Args = cobra.ExactArgs(1)
 	bind.Flags().StringVar(&thread, "thread-id", "", "Native client thread/session ID")
 	group.AddCommand(bind)
-	group.AddCommand(command("list", "List session history", func(c *cobra.Command, _ []string) error {
+	group.AddCommand(command("list", "List logical sessions", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err
@@ -729,6 +729,63 @@ func sessionCommands(o *options) *cobra.Command {
 		}
 		return o.emit(v.Sessions)
 	}))
+	history := command("history <session>", "List every concrete run in a logical session", func(c *cobra.Command, args []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.Status(c.Context(), id)
+		if err != nil {
+			return err
+		}
+		sessionID := args[0]
+		for _, run := range v.Runs {
+			if run.ID == args[0] {
+				sessionID = run.SessionID
+				break
+			}
+		}
+		runs := make([]core.Run, 0)
+		for _, run := range v.Runs {
+			if run.SessionID == sessionID {
+				runs = append(runs, run)
+			}
+		}
+		if len(runs) == 0 {
+			return fmt.Errorf("session not found or has no runs")
+		}
+		return o.emit(runs)
+	})
+	history.Args = cobra.ExactArgs(1)
+	group.AddCommand(history)
+	resume := command("resume <session>", "Create a new run in a resumable logical session", func(c *cobra.Command, args []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.Status(c.Context(), id)
+		if err != nil {
+			return err
+		}
+		sessionID := args[0]
+		for _, run := range v.Runs {
+			if run.ID == args[0] {
+				sessionID = run.SessionID
+				break
+			}
+		}
+		for _, session := range v.Sessions {
+			if session.ID == sessionID {
+				if err := s.EnsureSupervisor(c.Context()); err != nil {
+					return err
+				}
+				return emitSessionResume(c, o, s, id, session)
+			}
+		}
+		return fmt.Errorf("session not found")
+	})
+	resume.Args = cobra.ExactArgs(1)
+	group.AddCommand(resume)
 	stop := command("stop <session>", "Stop an owned tmux pane", func(c *cobra.Command, args []string) error {
 		s, id, err := o.scope()
 		if err != nil {
@@ -742,6 +799,21 @@ func sessionCommands(o *options) *cobra.Command {
 	})
 	stop.Args = cobra.ExactArgs(1)
 	group.AddCommand(stop)
+	var closeReason string
+	closeCmd := command("close <session>", "Close an idle logical session", func(c *cobra.Command, args []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.CloseSession(c.Context(), id, args[0], closeReason, o.key)
+		if err != nil {
+			return err
+		}
+		return o.emit(v)
+	})
+	closeCmd.Args = cobra.ExactArgs(1)
+	closeCmd.Flags().StringVar(&closeReason, "reason", "", "Optional reason for closing the logical context")
+	group.AddCommand(closeCmd)
 	attach := command("attach <session>", "Focus the session's pane", func(c *cobra.Command, args []string) error {
 		s, id, err := o.scope()
 		if err != nil {
@@ -751,8 +823,15 @@ func sessionCommands(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
+		sessionID := args[0]
+		for _, run := range v.Runs {
+			if run.ID == args[0] {
+				sessionID = run.SessionID
+				break
+			}
+		}
 		for _, session := range v.Sessions {
-			if session.ID == args[0] {
+			if session.ID == sessionID {
 				if session.PaneID == "" {
 					return fmt.Errorf("session has no pane")
 				}
@@ -760,7 +839,7 @@ func sessionCommands(o *options) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if p.SessionID != session.ID {
+				if !((p.SessionID == session.ID && p.RunID == session.CurrentRunID) || (p.RunID == "" && p.SessionID == session.CurrentRunID)) {
 					return fmt.Errorf("pane no longer belongs to this session")
 				}
 				return s.Runtime.Attach(c.Context(), v.Workspace.ID, session.PaneID)
@@ -770,5 +849,47 @@ func sessionCommands(o *options) *cobra.Command {
 	})
 	attach.Args = cobra.ExactArgs(1)
 	group.AddCommand(attach)
+	return group
+}
+
+func emitSessionResume(c *cobra.Command, o *options, s *core.Service, workspaceID string, session core.Session) error {
+	v, err := s.StartSession(c.Context(), workspaceID, core.SessionOptions{Agent: session.AgentID, Worktree: session.WorktreeID, Parent: session.ParentAgentID, Profile: session.Profile, Task: session.TaskID, ResumeSession: session.ID, ReadOnly: session.ReadOnly, OperationKey: o.key})
+	if err != nil {
+		return err
+	}
+	return o.emit(v)
+}
+
+func runCommands(o *options) *cobra.Command {
+	group := &cobra.Command{Use: "run", Short: "Inspect concrete client and tmux executions"}
+	group.AddCommand(command("list", "List all runs", func(c *cobra.Command, _ []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.Status(c.Context(), id)
+		if err != nil {
+			return err
+		}
+		return o.emit(v.Runs)
+	}))
+	inspect := command("inspect <run>", "Inspect one concrete run", func(c *cobra.Command, args []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.Status(c.Context(), id)
+		if err != nil {
+			return err
+		}
+		for _, run := range v.Runs {
+			if run.ID == args[0] {
+				return o.emit(run)
+			}
+		}
+		return fmt.Errorf("run not found")
+	})
+	inspect.Args = cobra.ExactArgs(1)
+	group.AddCommand(inspect)
 	return group
 }

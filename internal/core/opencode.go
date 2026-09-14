@@ -58,7 +58,7 @@ func (s *Service) runOpenCode(ctx context.Context, selector string, session Sess
 			}
 			return
 		}
-		if err := s.clientState(discoveryCtx, selector, session.ID, thread, "idle"); err != nil {
+		if err := s.clientState(discoveryCtx, selector, session.CurrentRunID, thread, "idle"); err != nil {
 			if !isContextError(err) {
 				fmt.Fprintf(errOut, "workspace: cannot bind OpenCode session %s: %v\n", thread, err)
 			}

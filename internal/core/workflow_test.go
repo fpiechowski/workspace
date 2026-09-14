@@ -39,16 +39,20 @@ func TestSyncChangeRequestsFencesActors(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.With(ctx, ws, func(d *Document) error {
+		workerRun, orchRun := "run-worker-sync", "run-orch-sync"
 		d.Registry.Sessions = append(d.Registry.Sessions,
-			Session{ID: "worker-sync", AgentID: "worker", State: "running"},
-			Session{ID: "orch-sync", AgentID: d.State.OrchestratorAgentID, State: "running"})
+			Session{ID: "worker-sync", AgentID: "worker", CurrentRunID: workerRun},
+			Session{ID: "orch-sync", AgentID: d.State.OrchestratorAgentID, CurrentRunID: orchRun})
+		d.Registry.Runs = append(d.Registry.Runs,
+			Run{ID: workerRun, SessionID: "worker-sync", State: "running"},
+			Run{ID: orchRun, SessionID: "orch-sync", State: "running"})
 		return saveDocument(d)
 	}); err != nil {
 		t.Fatal(err)
 	}
 	lookups := 0
 	f.duringLookup = func() { lookups++ }
-	s.Actor = Actor{AgentID: "worker", SessionID: "worker-sync"}
+	s.Actor = Actor{AgentID: "worker", SessionID: "worker-sync", RunID: "run-worker-sync"}
 	_, err = s.SyncChangeRequests(ctx, ws)
 	expectCode(t, err, "forbidden")
 	_, err = s.Reconcile(ctx, ws)
@@ -56,7 +60,7 @@ func TestSyncChangeRequestsFencesActors(t *testing.T) {
 	if lookups != 0 {
 		t.Fatal("unauthorized sync reached forge")
 	}
-	s.Actor = Actor{AgentID: v.Workspace.OrchestratorAgentID, SessionID: "orch-sync"}
+	s.Actor = Actor{AgentID: v.Workspace.OrchestratorAgentID, SessionID: "orch-sync", RunID: "run-orch-sync"}
 	f.result.State = "merged"
 	f.duringLookup = func() {
 		if err := s.With(ctx, ws, func(d *Document) error {
@@ -64,7 +68,12 @@ func TestSyncChangeRequestsFencesActors(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			p.State = "exited"
+			r, err := currentRun(d, p)
+			if err != nil {
+				return err
+			}
+			r.State = "exited"
+			p.CurrentRunID = ""
 			return saveDocument(d)
 		}); err != nil {
 			t.Fatal(err)
@@ -140,19 +149,25 @@ func TestPublicationFromExpiredSessionCanBeRecoveredWithoutDuplicate(t *testing.
 	var agent string
 	if err := s.With(ctx, ws, func(d *Document) error {
 		agent = d.State.OrchestratorAgentID
-		d.Registry.Sessions = append(d.Registry.Sessions, Session{ID: "publisher", AgentID: agent, State: "running"})
+		d.Registry.Sessions = append(d.Registry.Sessions, Session{ID: "publisher", AgentID: agent, CurrentRunID: "run-publisher"})
+		d.Registry.Runs = append(d.Registry.Runs, Run{ID: "run-publisher", SessionID: "publisher", State: "running"})
 		return saveDocument(d)
 	}); err != nil {
 		t.Fatal(err)
 	}
-	s.Actor = Actor{AgentID: agent, SessionID: "publisher"}
+	s.Actor = Actor{AgentID: agent, SessionID: "publisher", RunID: "run-publisher"}
 	f := &fakeForge{duringPublish: func() {
 		if err := s.With(ctx, ws, func(d *Document) error {
 			p, err := findSession(d, "publisher")
 			if err != nil {
 				return err
 			}
-			p.State = "interrupted"
+			r, err := currentRun(d, p)
+			if err != nil {
+				return err
+			}
+			r.State = "interrupted"
+			p.CurrentRunID = ""
 			return saveDocument(d)
 		}); err != nil {
 			t.Fatal(err)

@@ -11,14 +11,15 @@ import (
 )
 
 type Launch struct {
-	Service                                                                          bool
-	ProjectRoot, WorkspaceID, WorkspaceDir, SessionID, WorktreeName, CWD, Executable string
-	Orchestrator                                                                     bool
+	Service                                                                                 bool
+	ProjectRoot, WorkspaceID, WorkspaceDir, SessionID, RunID, WorktreeName, CWD, Executable string
+	Orchestrator                                                                            bool
 }
 type Pane struct {
 	ID, WindowID string
 	Dead         bool
 	SessionID    string
+	RunID        string
 }
 type Runtime interface {
 	Launch(context.Context, Launch) (Pane, error)
@@ -57,7 +58,11 @@ func (t Tmux) runnerCommand(l Launch) string {
 	if l.Service {
 		verb = "_service-exec"
 	}
-	args := []string{l.Executable, "--project", l.ProjectRoot, "--workspace", l.WorkspaceID, "--tmux-socket", t.Socket, verb, l.SessionID}
+	executionID := l.RunID
+	if executionID == "" {
+		executionID = l.SessionID
+	}
+	args := []string{l.Executable, "--project", l.ProjectRoot, "--workspace", l.WorkspaceID, "--tmux-socket", t.Socket, verb, executionID}
 	quoted := make([]string, len(args))
 	for i, a := range args {
 		quoted[i] = shellQuote(a)
@@ -66,23 +71,24 @@ func (t Tmux) runnerCommand(l Launch) string {
 }
 
 // Recover closes the gap between creating a pane and recording its ID. The
-// exact runner command is unique to the concrete Session, including its ULID.
+// exact runner command is unique to the concrete Run, including its ULID.
 func (t Tmux) Recover(ctx context.Context, l Launch) (Pane, error) {
-	out, err := t.call(ctx, "list-panes", "-a", "-F", "#{pane_id}\t#{window_id}\t#{pane_dead}\t#{@workspace_session_id}\t#{pane_start_command}")
+	out, err := t.call(ctx, "list-panes", "-a", "-F", "#{pane_id}\t#{window_id}\t#{pane_dead}\t#{@workspace_session_id}\t#{@workspace_run_id}\t#{pane_start_command}")
 	if err != nil {
 		return Pane{}, err
 	}
 	for _, line := range strings.Split(out, "\n") {
-		p := strings.SplitN(line, "\t", 5)
-		if len(p) != 5 {
+		p := strings.SplitN(line, "\t", 6)
+		if len(p) != 6 {
 			continue
 		}
-		start := p[4]
+		start := p[5]
 		// tmux serializes the single shell-command argument with outer quotes.
 		if decoded, err := strconv.Unquote(start); err == nil {
 			start = decoded
 		}
-		if p[3] != l.SessionID && !(p[3] == "" && start == t.runnerCommand(l)) {
+		legacyMetadata := l.RunID != "" && p[3] == l.RunID && p[4] == ""
+		if (p[3] != l.SessionID || p[4] != l.RunID) && !legacyMetadata && start != t.runnerCommand(l) {
 			continue
 		}
 		if _, err := t.call(ctx, "set-option", "-w", "-t", p[1], "remain-on-exit", "on"); err != nil {
@@ -91,7 +97,12 @@ func (t Tmux) Recover(ctx context.Context, l Launch) (Pane, error) {
 		if _, err := t.call(ctx, "set-option", "-p", "-t", p[0], "@workspace_session_id", l.SessionID); err != nil {
 			return Pane{}, err
 		}
-		return Pane{ID: p[0], WindowID: p[1], Dead: p[2] == "1", SessionID: l.SessionID}, nil
+		if l.RunID != "" {
+			if _, err := t.call(ctx, "set-option", "-p", "-t", p[0], "@workspace_run_id", l.RunID); err != nil {
+				return Pane{}, err
+			}
+		}
+		return Pane{ID: p[0], WindowID: p[1], Dead: p[2] == "1", SessionID: l.SessionID, RunID: l.RunID}, nil
 	}
 	return Pane{}, fail("pane_missing", "no pane for session %s", l.SessionID)
 }
@@ -147,20 +158,29 @@ func (t Tmux) Launch(ctx context.Context, l Launch) (Pane, error) {
 	if _, err = t.call(ctx, "set-option", "-p", "-t", parts[0], "@workspace_session_id", l.SessionID); err != nil {
 		return Pane{}, fail("launch_uncertain", "%s", err)
 	}
-	return Pane{ID: parts[0], WindowID: parts[1], SessionID: l.SessionID}, nil
+	if l.RunID != "" {
+		if _, err = t.call(ctx, "set-option", "-p", "-t", parts[0], "@workspace_run_id", l.RunID); err != nil {
+			return Pane{}, fail("launch_uncertain", "%s", err)
+		}
+	}
+	return Pane{ID: parts[0], WindowID: parts[1], SessionID: l.SessionID, RunID: l.RunID}, nil
 }
 func (t Tmux) Inspect(ctx context.Context, pane string) (Pane, error) {
-	out, err := t.call(ctx, "list-panes", "-a", "-F", "#{pane_id}\t#{window_id}\t#{pane_dead}\t#{@workspace_session_id}")
+	out, err := t.call(ctx, "list-panes", "-a", "-F", "#{pane_id}\t#{window_id}\t#{pane_dead}\t#{@workspace_session_id}\t#{@workspace_run_id}")
 	if err != nil {
 		return Pane{}, err
 	}
 	for _, line := range strings.Split(out, "\n") {
 		p := strings.Split(line, "\t")
-		if len(p) == 4 && p[0] == pane {
-			return Pane{p[0], p[1], p[2] == "1", p[3]}, nil
+		if len(p) == 5 && p[0] == pane {
+			return Pane{ID: p[0], WindowID: p[1], Dead: p[2] == "1", SessionID: p[3], RunID: p[4]}, nil
 		}
 	}
 	return Pane{}, fail("pane_missing", "%s", pane)
+}
+
+func paneOwns(p Pane, sessionID, runID string) bool {
+	return (p.SessionID == sessionID && p.RunID == runID) || (p.RunID == "" && p.SessionID == runID)
 }
 func (t Tmux) Stop(ctx context.Context, pane string) error {
 	_, err := t.call(ctx, "kill-pane", "-t", pane)

@@ -123,7 +123,7 @@ func TestRoutingCapabilityAndCooldownDiagnostics(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.With(ctx, id, func(d *Document) error {
-		d.Registry.Sessions = append(d.Registry.Sessions, Session{ID: ID("sess"), State: "failed", Route: p.Routes[0], CreatedAt: nowUTC()})
+		d.Registry.Runs = append(d.Registry.Runs, Run{ID: ID("run"), SessionID: ID("sess"), State: "failed", Route: p.Routes[0], CreatedAt: nowUTC()})
 		return saveDocument(d)
 	}); err != nil {
 		t.Fatal(err)
