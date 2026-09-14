@@ -161,7 +161,7 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace client list",
 	),
 	"workspace agent": h(
-		"Manage durable persona definitions. A persona can be resumed into multiple concrete sessions.",
+		"Manage durable persona definitions. A persona can be resumed into multiple logical Sessions and concrete Runs.",
 		"workspace agent list",
 	),
 	"workspace agent create": h(
@@ -174,7 +174,7 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace agent list",
 	),
 	"workspace agent resume": h(
-		"Start a new concrete session for a persona, reusing its last worktree and profile when possible.",
+		"Start a new concrete Run for a persona, reusing a compatible logical Session, worktree and profile when possible.",
 		"workspace agent resume planner",
 		requiredArgument("agent", "Agent ID or persona name to resume."),
 	),
@@ -192,11 +192,11 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace worktree list",
 	),
 	"workspace session": h(
-		"Manage concrete executions of agent personas. Each session maps to a durable record and, when running, a tmux pane.",
+		"Manage durable logical Sessions and their concrete client/tmux Runs.",
 		"workspace session list",
 	),
 	"workspace session start": h(
-		"Launch a persona in a tmux pane. The session records the selected agent, task, worktree, profile and prompt snapshot.",
+		"Launch a persona in a tmux pane. The logical Session records lineage; its Run records the selected route, client, prompt and pane.",
 		"workspace session start --agent planner --task task_01 --worktree planning",
 	),
 	"workspace session bind-thread": h(
@@ -205,18 +205,46 @@ var commandHelpSpecs = map[string]commandHelp{
 		requiredArgument("session", "Workspace session ID to update."),
 	),
 	"workspace session list": h(
-		"List recorded sessions, their states, panes, native threads and attempts.",
+		"List logical Sessions with lifecycle state, current/last Run, pane, native thread and lineage summaries.",
 		"workspace session list",
 	),
+	"workspace session history": h(
+		"List every concrete Run belonging to one logical Session, including terminated executions and their provenance.",
+		"workspace session history sess_01",
+		requiredArgument("session", "Logical Session ID, or a Run ID alias whose history should be shown."),
+	),
+	"workspace session resume": h(
+		"Create a new concrete Run in a compatible logical Session after verifying its task, worktree, input and client lineage.",
+		"workspace session resume sess_01",
+		requiredArgument("session", "Logical Session ID, or a Run ID alias to resume."),
+	),
 	"workspace session stop": h(
-		"Stop an owned running session and its tmux pane while preserving the durable session record.",
+		"Stop the current owned Run and its tmux pane while preserving the logical Session and run history.",
 		"workspace session stop sess_01",
 		requiredArgument("session", "Workspace session ID to stop."),
 	),
+	"workspace session close": h(
+		"Close an idle logical Session so it cannot be resumed again. Existing Runs and provenance remain available.",
+		"workspace session close sess_01 --reason completed",
+		requiredArgument("session", "Logical Session ID to close."),
+	),
 	"workspace session attach": h(
-		"Attach to the tmux pane belonging to one recorded session after verifying pane ownership.",
+		"Attach to the current Run's tmux pane after verifying logical Session and Run ownership.",
 		"workspace session attach sess_01",
 		requiredArgument("session", "Workspace session ID whose pane should receive focus."),
+	),
+	"workspace run": h(
+		"Inspect concrete client and tmux executions independently from their durable logical Sessions.",
+		"workspace run list",
+	),
+	"workspace run list": h(
+		"List all concrete Runs across logical Sessions, including state, generation, route and pane ownership.",
+		"workspace run list",
+	),
+	"workspace run inspect": h(
+		"Inspect one concrete Run and its exact client, prompt, pane and lifecycle metadata.",
+		"workspace run inspect run_01",
+		requiredArgument("run", "Concrete Run ID to inspect."),
 	),
 	"workspace task": h(
 		"Manage delegated tasks, dependencies, attempts and their acceptance state.",
@@ -547,7 +575,7 @@ var flagHelpSpecs = map[string]map[string]string{
 	"workspace change-request retry":   {"reason": "User's reason or evidence (required).", "url": "Existing change-request URL.", "user-confirmed": "Attest the explicit user decision (required in agent sessions)."},
 	"workspace check run":              {"session": "Producing session; inferred for agents and must be task-bound."},
 	"workspace service start":          {"worktree": "Assigned worktree for the service (required)."},
-	"workspace pause":                  {"interrupt": "Stop active sessions while preserving local work."},
+	"workspace pause":                  {"interrupt": "Stop active Runs while preserving logical Sessions and local work."},
 	"workspace clean":                  {"dry-run": "Show the removal plan without changes.", "backup": "Preserve unpublished commits in verified Git bundles before removal."},
 }
 
