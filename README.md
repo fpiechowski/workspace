@@ -22,6 +22,21 @@ export PATH="$PWD/bin:$PATH"
 workspace --help
 ```
 
+Pomoc jest dostępna na każdym poziomie komend. Możesz przejść ścieżkę od głównego
+polecenia albo poprosić o pomoc bezpośrednio po komendzie:
+
+```sh
+workspace help
+workspace help session start
+workspace session help
+workspace session start --help
+workspace session start help
+```
+
+Końcowe słowo `help` ma pierwszeństwo przed zwykłym argumentem. Jeśli argument
+dosłownie ma wartość `help`, przekaż go po separatorze `--` (np. `workspace create
+-- help`); wartość flagi zapisz w formie `--option=help`.
+
 Binarium musi pozostać dostępne pod tą ścieżką, ponieważ tmux uruchamia je także później.
 Do uruchamiania sesji nie używaj `go run`.
 

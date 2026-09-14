@@ -32,7 +32,7 @@ var errWorkspaceSelectionCancelled = errors.New("workspace selection cancelled")
 func Execute(args []string, in io.Reader, out, errOut io.Writer) int {
 	o := &options{in: in, out: out, errOut: errOut}
 	root := newRoot(o)
-	root.SetArgs(args)
+	root.SetArgs(normalizeHelpArgs(args))
 	root.SetIn(in)
 	root.SetOut(out)
 	root.SetErr(errOut)
@@ -578,6 +578,8 @@ func newRoot(o *options) *cobra.Command {
 	execCmd.Args = cobra.ExactArgs(1)
 	execCmd.Hidden = true
 	root.AddCommand(execCmd)
+	root.InitDefaultHelpCmd()
+	configureHelp(root)
 	return root
 }
 

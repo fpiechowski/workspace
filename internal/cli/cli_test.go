@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"workspace/internal/core"
 )
@@ -82,6 +83,23 @@ func TestCreateAcceptsIntentArgument(t *testing.T) {
 	if string(input) != intent {
 		t.Fatalf("saved intent %q, want %q", input, intent)
 	}
+
+	out.Reset()
+	errOut.Reset()
+	code = Execute([]string{"--json", "--project", project, "create", "--", "help"}, nil, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("literal help argument failed: %d %s", code, errOut.String())
+	}
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	literalInput, err := os.ReadFile(filepath.Join(response.Data.Directory, "inputs", "issue.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(literalInput) != "help" {
+		t.Fatalf("saved literal help %q, want help", literalInput)
+	}
 }
 
 func TestWorkspaceShortNamesAndSelector(t *testing.T) {
@@ -137,5 +155,171 @@ func TestShortOutputCompactsStatusesAndNamedResources(t *testing.T) {
 	want := map[string]string{"Planner": "agent_one", "Builder": "agent_two"}
 	if got := shortOutput(agents); !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected compact agents: %#v", got)
+	}
+}
+
+func TestHelpIsAvailableAtEveryCommandLevel(t *testing.T) {
+	root := newRoot(&options{})
+	if missing := missingHelpDocumentation(root); len(missing) != 0 {
+		t.Fatalf("missing help documentation for: %s", strings.Join(missing, ", "))
+	}
+	for path := range commandHelpSpecs {
+		if commandAtPath(root, path) == nil {
+			t.Errorf("help documentation refers to unknown command %s", path)
+		}
+	}
+
+	var walk func(*cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		if cmd.IsAvailableCommand() || cmd == root {
+			if strings.TrimSpace(cmd.Long) == "" {
+				t.Errorf("%s has no long help description", cmd.CommandPath())
+			}
+			if useHasPositionalArguments(cmd.Use) {
+				if cmd.Annotations == nil || strings.TrimSpace(cmd.Annotations["workspace.arguments"]) == "" {
+					t.Errorf("%s has positional arguments without documentation", cmd.CommandPath())
+				}
+			}
+			cmd.NonInheritedFlags().VisitAll(func(flag *pflag.Flag) {
+				if strings.TrimSpace(flag.Usage) == "" {
+					t.Errorf("%s --%s has an empty flag usage", cmd.CommandPath(), flag.Name)
+				}
+			})
+		}
+		for _, child := range cmd.Commands() {
+			if child.IsAvailableCommand() {
+				walk(child)
+			}
+		}
+	}
+	walk(root)
+}
+
+func TestHelpFlagSpecsReferToRegisteredFlags(t *testing.T) {
+	root := newRoot(&options{})
+	for path, flags := range flagHelpSpecs {
+		cmd := commandAtPath(root, path)
+		if cmd == nil {
+			t.Errorf("flag help refers to unknown command %s", path)
+			continue
+		}
+		for name := range flags {
+			if cmd.Flags().Lookup(name) == nil && cmd.PersistentFlags().Lookup(name) == nil {
+				t.Errorf("flag help refers to unknown flag %s on %s", name, path)
+			}
+		}
+	}
+}
+
+func useHasPositionalArguments(use string) bool {
+	for _, token := range strings.Fields(use)[1:] {
+		if token == "[flags]" {
+			continue
+		}
+		if strings.HasPrefix(token, "<") || strings.HasPrefix(token, "[") {
+			return true
+		}
+	}
+	return false
+}
+
+func TestHelpFormsAreEquivalentAndDoNotRunCommands(t *testing.T) {
+	forms := [][]string{
+		{"session", "start", "help"},
+		{"session", "start", "--help"},
+		{"help", "session", "start"},
+	}
+	outputs := make([]string, len(forms))
+	for i, args := range forms {
+		var out, errOut bytes.Buffer
+		code := Execute(args, nil, &out, &errOut)
+		if code != 0 {
+			t.Fatalf("%v returned %d: %s", args, code, errOut.String())
+		}
+		if errOut.Len() != 0 {
+			t.Fatalf("%v wrote an error: %s", args, errOut.String())
+		}
+		outputs[i] = out.String()
+	}
+	if outputs[0] != outputs[1] || outputs[1] != outputs[2] {
+		t.Fatalf("help forms differ:\n suffix:\n%s\n flag:\n%s\n prefix:\n%s", outputs[0], outputs[1], outputs[2])
+	}
+	for _, section := range []string{"Usage:", "Examples:", "Options:", "Global options:"} {
+		if !strings.Contains(outputs[0], section) {
+			t.Errorf("session start help lacks %q", section)
+		}
+	}
+	var jsonOut, jsonErr bytes.Buffer
+	if code := Execute([]string{"--json", "session", "start", "help"}, nil, &jsonOut, &jsonErr); code != 0 || jsonErr.Len() != 0 {
+		t.Fatalf("JSON help returned %d: %s", code, jsonErr.String())
+	}
+	if strings.HasPrefix(strings.TrimSpace(jsonOut.String()), "{") {
+		t.Fatal("help unexpectedly used the command JSON envelope")
+	}
+
+	var groupOutputs [2]string
+	for i, args := range [][]string{{"session", "help"}, {"help", "session"}} {
+		var out, errOut bytes.Buffer
+		if code := Execute(args, nil, &out, &errOut); code != 0 || errOut.Len() != 0 {
+			t.Fatalf("%v returned %d: %s", args, code, errOut.String())
+		}
+		groupOutputs[i] = out.String()
+	}
+	if groupOutputs[0] != groupOutputs[1] {
+		t.Fatal("group help forms differ")
+	}
+}
+
+func TestHelpIncludesPositionalArgumentDocumentation(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"create", "--help"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("create help returned %d: %s", code, errOut.String())
+	}
+	for _, want := range []string{
+		"Arguments:",
+		"[intent]  Issue or task description supplied inline",
+		"--input-file string",
+		"Global options:",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("create help lacks %q:\n%s", want, out.String())
+		}
+	}
+	var rootOut, rootErr bytes.Buffer
+	if code := Execute([]string{"--help"}, nil, &rootOut, &rootErr); code != 0 || rootErr.Len() != 0 {
+		t.Fatalf("root help returned %d: %s", code, rootErr.String())
+	}
+	if strings.Contains(rootOut.String(), "_session-exec") || strings.Contains(rootOut.String(), "_service-exec") {
+		t.Fatal("internal runner leaked into user help")
+	}
+}
+
+func TestHelpRendersForEveryVisibleCommand(t *testing.T) {
+	root := newRoot(&options{})
+	for _, path := range visibleCommandPaths(root) {
+		parts := strings.Fields(path)
+		args := append(append([]string(nil), parts[1:]...), "--help")
+		var out, errOut bytes.Buffer
+		if code := Execute(args, nil, &out, &errOut); code != 0 || errOut.Len() != 0 {
+			t.Errorf("%s help returned %d: %s", path, code, errOut.String())
+		}
+		if strings.TrimSpace(out.String()) == "" {
+			t.Errorf("%s help was empty", path)
+		}
+	}
+}
+
+func TestHelpSuffixPrecedenceAndLiteralEscape(t *testing.T) {
+	if got := normalizeHelpArgs([]string{"create", "help"}); !reflect.DeepEqual(got, []string{"create", "--help"}) {
+		t.Fatalf("suffix help not normalized: %#v", got)
+	}
+	if got := normalizeHelpArgs([]string{"create", "--", "help"}); !reflect.DeepEqual(got, []string{"create", "--", "help"}) {
+		t.Fatalf("literal help was not preserved after --: %#v", got)
+	}
+	if got := normalizeHelpArgs([]string{"session", "start", "--profile=help"}); !reflect.DeepEqual(got, []string{"session", "start", "--profile=help"}) {
+		t.Fatalf("equals-form flag value was changed: %#v", got)
+	}
+	if got := normalizeHelpArgs([]string{"_session-exec", "help"}); !reflect.DeepEqual(got, []string{"_session-exec", "help"}) {
+		t.Fatalf("internal runner arguments were changed: %#v", got)
 	}
 }
