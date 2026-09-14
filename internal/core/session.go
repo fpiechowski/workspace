@@ -341,6 +341,8 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 	var runErr error
 	if session.ClientSnapshot.Adapter == "codex" {
 		runErr = s.runCodex(ctx, selector, session, cmd, in, out, errOut)
+	} else if session.ClientSnapshot.Adapter == "opencode" && session.ClientThreadID == "" {
+		runErr = s.runOpenCode(ctx, selector, session, cmd, out, errOut)
 	} else {
 		runErr = cmd.Run()
 	}

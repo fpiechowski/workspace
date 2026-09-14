@@ -22,7 +22,7 @@ import (
 type options struct {
 	commandPath                     string
 	project, workspace, socket, key string
-	json, nonInteractive            bool
+	json, short, nonInteractive     bool
 	in                              io.Reader
 	out, errOut                     io.Writer
 }
@@ -79,6 +79,9 @@ func (o *options) emit(v any) error {
 			}
 		}
 		return json.NewEncoder(o.out).Encode(response)
+	}
+	if o.short {
+		v = shortOutput(v)
 	}
 	b, err := yaml.Marshal(v)
 	if err != nil {
@@ -236,6 +239,7 @@ func newRoot(o *options) *cobra.Command {
 	f.StringVar(&o.socket, "tmux-socket", os.Getenv("WORKSPACE_TMUX_SOCKET"), "Optional isolated tmux server name")
 	f.StringVar(&o.key, "operation-key", "", "Idempotency key for a mutation; changed payload with the same key is rejected")
 	f.BoolVar(&o.json, "json", false, "Print structured JSON")
+	f.BoolVar(&o.short, "short", false, "Print a compact human-readable summary")
 	f.BoolVar(&o.nonInteractive, "non-interactive", false, "Never ask terminal questions")
 	project := &cobra.Command{Use: "project", Short: "Configure a Git project"}
 	project.AddCommand(command("init", "Install project config and workflow templates", func(c *cobra.Command, _ []string) error {
@@ -325,7 +329,6 @@ func newRoot(o *options) *cobra.Command {
 	createCmd.Flags().StringVar(&create.Workflow, "workflow", "", "Workflow name; omit to ask the orchestrator")
 	createCmd.Flags().StringVar(&create.Base, "base", "HEAD", "Base Git revision")
 	root.AddCommand(createCmd)
-	var shortList bool
 	listCmd := command("list", "List workspaces", func(c *cobra.Command, _ []string) error {
 		s, err := o.service()
 		if err != nil {
@@ -335,13 +338,9 @@ func newRoot(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if shortList {
-			return o.emit(workspaceNameIDs(v))
-		}
 		return o.emit(v)
 	})
-	listCmd.Flags().BoolVar(&shortList, "short", false, "Print a compact title: ID map")
-	listCmd.Flags().BoolVar(&shortList, "map", false, "Alias for --short")
+	listCmd.Flags().BoolVar(&o.short, "map", false, "Alias for --short")
 	root.AddCommand(listCmd)
 	openCmd := command("open [workspace]", "Select a workspace and attach to its tmux session", func(c *cobra.Command, args []string) error {
 		s, err := o.service()

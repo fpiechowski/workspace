@@ -6,7 +6,7 @@ The installed clients' `--help` output was checked on 2026-09-11. Launch flags:
 |---|---|---|---|
 | codex | `codex app-server --stdio` | `thread/resume` | Native app-server bridge between turns |
 | claude | `claude --model MODEL PROMPT` | `--resume THREAD` | Only with configured delivery wrapper |
-| opencode | `opencode --model PROVIDER/MODEL --prompt PROMPT` | `--session THREAD` | Only with configured delivery wrapper |
+| opencode | `opencode --model PROVIDER/MODEL --prompt PROMPT` | `--session THREAD` | Configured delivery wrapper; native session ID discovered automatically |
 | command | Configured argv | Optional resume_argv | Optional deliver_argv |
 
 Codex runs through a terminal bridge that displays assistant output and tool activity.
@@ -18,9 +18,13 @@ text are displayed without requiring a JSON response.
 Project-specific native thread parameters can be supplied with `clients.NAME.thread_params`; the bridge always
 sets the selected model and workspace cwd. It does not bypass client permissions.
 
-For other clients, use the client's native TUI. `session bind-thread` associates its
-conversation with the workspace Session; later `agent resume` can invoke resume_argv.
-Without that association, a new conversation receives the persisted bootstrap.
+For OpenCode, workspace invokes `opencode session list --format json` after launch and
+matches the newly created session by its working directory. The native ID is persisted
+automatically, so later `agent resume` can invoke `resume_argv` and `deliver_argv` can
+wake the same conversation. `session bind-thread` remains available for recovery when
+the client CLI cannot be inspected. Other clients still require an explicit binding if
+their native thread ID is not reported by an adapter. Without that association, a new
+conversation receives the persisted bootstrap.
 
 A generic wrapper configuration:
 

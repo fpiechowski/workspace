@@ -253,6 +253,9 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 	}); err != nil {
 		return err
 	}
+	if err := s.autoBindOpenCodeThreads(ctx, status.Workspace.ID, latest); err != nil {
+		return err
+	}
 	// A verified lost pane can be replaced; silence or a transient tmux
 	// error never triggers another execution. Stopped/failed clients require
 	// an explicit retry, preventing unbounded restart loops.
@@ -338,6 +341,43 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func (s *Service) autoBindOpenCodeThreads(ctx context.Context, selector string, latest map[string]Session) error {
+	byExecutable := make(map[string][]openCodeSession)
+	failedExecutables := make(map[string]struct{})
+	for agentID, session := range latest {
+		if session.State != "running" || session.ClientSnapshot.Adapter != "opencode" || session.ClientThreadID != "" {
+			continue
+		}
+		if len(session.Argv) == 0 || session.Argv[0] == "" {
+			continue
+		}
+		executable := session.Argv[0]
+		if _, failed := failedExecutables[executable]; failed {
+			continue
+		}
+		items, cached := byExecutable[executable]
+		if !cached {
+			var err error
+			items, err = s.listOpenCodeSessions(ctx, session, os.Environ())
+			if err != nil {
+				failedExecutables[executable] = struct{}{}
+				continue
+			}
+			byExecutable[executable] = items
+		}
+		thread := chooseOpenCodeThread(items, session.CWD, nil, session.CreatedAt, false)
+		if thread == "" {
+			continue
+		}
+		if err := s.clientState(ctx, selector, session.ID, thread, "idle"); err != nil {
+			return err
+		}
+		session.ClientThreadID = thread
+		latest[agentID] = session
 	}
 	return nil
 }

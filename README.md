@@ -88,9 +88,10 @@ W trybie `per-task` przygotuj requesty w kolejności zależności zadań. Pole `
 i opis CR wskazują poprzedniki; przygotowanie zależnego CR wymaga ich aktualnych requestów.
 
 Codex używa app-server i obsługuje wybudzanie między turami oraz native resume.
-Claude/OpenCode uruchamiają interaktywny klient; ich native thread można zarejestrować
-przez `session bind-thread SESSION --thread-id ID`. Bez `deliver_argv` komunikacja
-wymaga odczytu inboxa przez agenta. [Adaptery i ich możliwości](docs/clients.md).
+Claude/OpenCode uruchamiają interaktywny klient. OpenCode z `deliver_argv` automatycznie
+wykrywa i zapisuje swój native thread, aby supervisor mógł dostarczać wiadomości między
+agentami. `session bind-thread` pozostaje narzędziem awaryjnym. Bez `deliver_argv`
+komunikacja wymaga odczytu inboxa przez agenta. [Adaptery i ich możliwości](docs/clients.md).
 
 Routing liczy uruchomienia i aktywne rezerwacje w projekcie przez ostatnie 24 h,
 uwzględnia wagi providerów, równoległość, capabilities i cooldown po błędzie startu.
@@ -133,8 +134,11 @@ workspace open "specification"
 workspace open ws_ID
 ```
 
-`list --short` wypisuje mapę `tytuł: workspace_ID`, a `open` pokazuje interaktywny
-selector z tytułem, stanem, fazą, ID i źródłem wejścia, po czym dołącza do sesji tmux.
+Globalne `--short` wypisuje zwięzłe podsumowanie dla każdej komendy. Dla nazwanych
+zasobów (workspace, agentów, zadań i worktree) jest to mapa `nazwa: ID`; rekordy bez
+naturalnej nazwy zachowują najważniejsze identyfikatory i stan. `list --map` pozostaje
+aliasem `list --short`. `open` pokazuje interaktywny selector z tytułem, stanem, fazą,
+ID i źródłem wejścia, po czym dołącza do sesji tmux.
 
 Sesja tmux odpowiada workspace, okno worktree, panel konkretnej Session. Orkiestrator
 ma własne okno w katalogu workspace. Odłączenie użytkownika nie zatrzymuje procesów.
@@ -207,7 +211,8 @@ operacyjne. Aktualizuj opis przez `state update --expected-revision N`; `state e
 służy do kontrolowanej edycji w stanie paused. Zmiana inputu i migracja templates
 zachowują historię i unieważniają zależne wyniki: [rewizje](docs/revisions.md).
 
-`--json` zwraca `{ok,data}` lub `{ok:false,error:{code,message}}`. Mutacje z kluczem
+`--json` zwraca pełne `{ok,data}` lub `{ok:false,error:{code,message}}` i ma pierwszeństwo
+przed `--short`. Mutacje z kluczem
 zawierają także `operation_id` i rewizję workspace. `--non-interactive` zwraca
 brakujące decyzje do rozstrzygnięcia przez użytkownika. `--operation-key` zachowuje
 wynik logicznej operacji; ponowienie z innym payloadem zwraca konflikt.

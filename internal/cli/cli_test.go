@@ -7,8 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 
 	"workspace/internal/core"
 )
@@ -102,5 +105,37 @@ func TestWorkspaceShortNamesAndSelector(t *testing.T) {
 	selected, err = chooseWorkspace(o, workspaces, "First")
 	if err != nil || selected.Workspace.ID != "ws_one" {
 		t.Fatalf("title lookup: %v %#v", err, selected)
+	}
+}
+
+func TestShortIsAvailableForEveryCommand(t *testing.T) {
+	root := newRoot(&options{})
+	var visit func(*cobra.Command)
+	visit = func(cmd *cobra.Command) {
+		if cmd.HasSubCommands() {
+			for _, child := range cmd.Commands() {
+				visit(child)
+			}
+		}
+		if cmd.Runnable() && cmd.Flag("short") == nil {
+			t.Errorf("%s does not inherit --short", cmd.CommandPath())
+		}
+	}
+	visit(root)
+}
+
+func TestShortOutputCompactsStatusesAndNamedResources(t *testing.T) {
+	status := core.Status{Workspace: core.Workspace{ID: "ws_one", Title: "First", Status: "active"}}
+	if got := shortOutput(status); !reflect.DeepEqual(got, map[string]string{"First": "ws_one"}) {
+		t.Fatalf("unexpected compact status: %#v", got)
+	}
+
+	agents := []core.Agent{
+		{ID: "agent_one", Name: "Planner", Role: "planner"},
+		{ID: "agent_two", Name: "Builder", Role: "implementer"},
+	}
+	want := map[string]string{"Planner": "agent_one", "Builder": "agent_two"}
+	if got := shortOutput(agents); !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected compact agents: %#v", got)
 	}
 }

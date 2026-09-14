@@ -35,8 +35,10 @@ not sandbox the process. Readers write reports under their own session subdirect
 in work-products. An active writer can change files during analysis, so review of a
 stable revision should use another worktree. Resume preserves reader status.
 
-Native Codex delivery is handled through its app-server bridge between turns. A
-generic client's optional `deliver_argv` receives `{thread_id}`, `{message_file}` and
+Native Codex delivery is handled through its app-server bridge between turns. OpenCode
+sessions are matched automatically after launch using `opencode session list`; the
+resulting native ID is persisted on the Session. A generic client's optional
+`deliver_argv` receives `{thread_id}`, `{message_file}` and
 `{message_id}` and must return `{"accepted":true}`. It must deduplicate message IDs;
 transport delivery is at least once. Without a delivery adapter, the supervisor shows
 a tmux notification and the agent reads `inbox` explicitly. No terminal keystroke

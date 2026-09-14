@@ -24,12 +24,13 @@ import (
 var templates embed.FS
 
 type Service struct {
-	IssueFetcher IssueFetcher
-	Root         string
-	Runtime      Runtime
-	Executable   string
-	Actor        Actor
-	Forge        Forge
+	IssueFetcher          IssueFetcher
+	Root                  string
+	Runtime               Runtime
+	Executable            string
+	Actor                 Actor
+	Forge                 Forge
+	openCodeSessionLister openCodeSessionLister
 }
 
 func git(ctx context.Context, dir string, args ...string) (string, error) {
