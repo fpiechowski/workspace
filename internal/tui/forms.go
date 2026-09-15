@@ -1,0 +1,414 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
+	"workspace/internal/core"
+)
+
+func (m *Model) openActionMenu() tea.Cmd {
+	snapshotCurrent := !m.snapshot.ObservedAt.IsZero()
+	if m.route.Page == "project" || m.workspaceID == "" {
+		snapshotCurrent = !m.project.ObservedAt.IsZero()
+	}
+	if m.actionPending || m.backend == nil || !snapshotCurrent {
+		m.notice = "Actions need a current workspace snapshot. Press r to refresh."
+		return nil
+	}
+	options, targetID := m.availableActions()
+	if len(options) == 0 {
+		m.notice = "No actions are available for this selection."
+		return nil
+	}
+	m.formChoice = ""
+	m.formTargetID = targetID
+	m.formMode = "select"
+	m.form = huh.NewForm(huh.NewGroup(
+		huh.NewSelect[string]().Key("action").Title("Choose an action").Options(options...).Value(&m.formChoice),
+	)).WithWidth(max(20, m.width-8)).WithHeight(max(4, m.height-8)).WithTheme(huhTheme(m.palette))
+	return m.form.Init()
+}
+
+func (m *Model) availableActions() ([]huh.Option[string], string) {
+	var actions []huh.Option[string]
+	targetID, kind := m.route.EntityID, m.route.Page
+	if targetID == "" && m.isCollectionPage() {
+		item, _, items := m.selectedItem()
+		if len(items) > 0 {
+			targetID, kind = item.ID, item.Kind
+		}
+	}
+	add := func(label, action string) { actions = append(actions, huh.NewOption(sanitizeLine(label), action)) }
+	switch kind {
+	case "task":
+		if task, ok := m.task(targetID); ok && task.State != "accepted" {
+			add("Retry task · increment attempt and invalidate dependent results", "retry_task")
+		}
+	case "session":
+		if session, ok := findSession(m.snapshot.Status.Sessions, targetID); ok {
+			if session.CurrentRunID != "" && session.Active() {
+				add("Stop current run · "+shortID(session.CurrentRunID), "stop_run")
+			} else if session.ClosedAt == nil {
+				add("Resume this session", "resume_session")
+				add("Close idle session", "close_session")
+			}
+		}
+	case "service":
+		if service, ok := findService(m.snapshot.Services, targetID); ok && service.Active() {
+			add("Stop service · "+service.Name, "stop_service")
+		}
+	case "workspace":
+		if item, _, items := m.selectedItem(); len(items) > 0 && item.ID == targetID && item.State != "error" {
+			add("Jump to the workspace tmux session", "jump")
+		}
+	case "dashboard", "orchestrator", "runtime":
+		workspaceState := m.snapshot.Status.Workspace.Status
+		if workspaceState != "archived" && workspaceState != "completed" {
+			add("Start / resume orchestrator", "start_orchestrator")
+		}
+		if workspaceState == "paused" {
+			add("Resume workspace", "resume_workspace")
+		} else if workspaceState != "archived" && workspaceState != "completed" {
+			add("Pause workspace (leave runs untouched)", "pause")
+			add("Pause and interrupt active Runs and services", "pause_interrupt")
+		}
+		if workspaceState == "needs_workflow" {
+			add("Select workflow", "select_workflow")
+		}
+		if workspaceState != "archived" {
+			add("Reconcile runtime", "reconcile")
+		}
+		if kind == "runtime" {
+			if m.uiStatus.Desired {
+				add("Hide managed interface", "hide_managed_tui")
+			} else {
+				add("Show managed interface", "show_managed_tui")
+			}
+		}
+	default:
+		if targetID == "" && m.workspaceID != "" {
+			add("Start / resume orchestrator", "start_orchestrator")
+			if m.snapshot.Status.Workspace.Status == "paused" {
+				add("Resume workspace", "resume_workspace")
+			} else if m.snapshot.Status.Workspace.Status != "archived" {
+				add("Pause workspace (leave runs untouched)", "pause")
+				add("Pause and interrupt active Runs and services", "pause_interrupt")
+			}
+		}
+	}
+	return actions, targetID
+}
+
+func (m *Model) beginAction(action, targetID string) tea.Cmd {
+	if action == "jump" {
+		return m.jump(core.EntityRef{Kind: "workspace", ID: targetID})
+	}
+	call := ActionCall{
+		Action: action, TargetID: targetID, WorkspaceID: m.workspaceID, Key: core.ID("tui"),
+		ExpectedRevision: m.snapshot.Status.Workspace.Revision,
+	}
+	m.formAction = call
+	m.formReason = ""
+	m.formConfirm = false
+	switch action {
+	case "retry_task":
+		if task, ok := m.task(targetID); ok {
+			call.ExpectedAttempt = task.Attempt
+			call.TargetName = firstNonempty(task.Title, task.ID)
+			call.TargetDetails = m.retryImpact(task)
+		}
+	case "stop_run":
+		if session, ok := findSession(m.snapshot.Status.Sessions, targetID); ok {
+			call.ExpectedRunID = session.CurrentRunID
+			call.TargetName = firstNonempty(session.AgentSnapshot.Name, session.ID)
+			call.TargetDetails = fmt.Sprintf("Session %s · task %s · attempt %d · worktree %s", session.ID, firstNonempty(session.TaskID, "none"), session.TaskAttempt, firstNonempty(session.WorktreeID, "none"))
+		}
+	case "resume_session", "close_session":
+		if session, ok := findSession(m.snapshot.Status.Sessions, targetID); ok {
+			call.TargetName = firstNonempty(session.AgentSnapshot.Name, session.ID)
+			call.TargetDetails = fmt.Sprintf("Session %s · task %s · attempt %d · worktree %s · model %s", session.ID, firstNonempty(session.TaskID, "none"), session.TaskAttempt, firstNonempty(session.WorktreeID, "none"), firstNonempty(session.Route.Model, "unspecified"))
+		}
+	case "stop_service":
+		if service, ok := findService(m.snapshot.Services, targetID); ok {
+			call.TargetName = firstNonempty(service.Name, service.ID)
+			call.TargetDetails = "Worktree " + firstNonempty(service.WorktreeID, "none")
+		}
+	case "pause_interrupt":
+		call.ExpectedRunIDs = make([]string, 0)
+		for _, session := range m.snapshot.Status.Sessions {
+			if !session.Active() || session.CurrentRunID == "" {
+				continue
+			}
+			if run, ok := m.run(session.CurrentRunID); ok && run.Active() {
+				call.ExpectedRunIDs = append(call.ExpectedRunIDs, run.ID)
+			}
+		}
+		sort.Strings(call.ExpectedRunIDs)
+		call.ExpectedServiceIDs = make([]string, 0)
+		for _, service := range m.snapshot.Services {
+			if service.Active() {
+				call.ExpectedServiceIDs = append(call.ExpectedServiceIDs, service.ID)
+			}
+		}
+		sort.Strings(call.ExpectedServiceIDs)
+	}
+	m.formAction = call
+	if action == "select_workflow" {
+		backend, ok := m.backend.(WorkflowBackend)
+		if !ok {
+			m.loadError = "this backend does not support workflow selection"
+			m.rebuildViewport()
+			return nil
+		}
+		m.actionPending = true
+		m.notice = "Loading available workflows…"
+		m.loadError = ""
+		backend, workspace, gen := backend, m.workspaceID, m.generation
+		return func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			names, err := backend.WorkflowNames(ctx, workspace)
+			return workflowNamesMsg{generation: gen, names: names, err: err}
+		}
+	}
+	if action == "retry_task" || action == "close_session" {
+		m.formMode = "reason"
+		label := "Reason for this action"
+		if action == "retry_task" {
+			label = "Why should this task be retried?"
+		}
+		m.form = huh.NewForm(huh.NewGroup(
+			huh.NewInput().Key("reason").Title(label).Placeholder("Enter a short reason").Value(&m.formReason).Validate(func(value string) error {
+				if strings.TrimSpace(value) == "" {
+					return fmt.Errorf("a reason is required")
+				}
+				return nil
+			}),
+		)).WithWidth(max(20, m.width-8)).WithHeight(max(4, m.height-8)).WithTheme(huhTheme(m.palette))
+		return m.form.Init()
+	}
+	return m.openConfirm(action)
+}
+
+func (m *Model) openConfirm(action string) tea.Cmd {
+	m.formConfirm = false
+	caption := sanitizeLine(actionCaption(m.formAction))
+	m.formMode = "confirm"
+	m.form = huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().Key("confirm").Title(caption).Description(actionDescription(action, m.formAction)).Affirmative("Confirm").Negative("Cancel").Value(&m.formConfirm),
+	)).WithWidth(max(20, m.width-8)).WithHeight(max(4, m.height-8)).WithTheme(huhTheme(m.palette))
+	return m.form.Init()
+}
+
+func (m *Model) updateForm(message tea.Msg) (tea.Model, tea.Cmd) {
+	updated, cmd := m.form.Update(message)
+	form, ok := updated.(*huh.Form)
+	if ok {
+		m.form = form
+	}
+	if !ok || m.form.State == huh.StateAborted {
+		m.form = nil
+		m.formMode = ""
+		m.formConfirm = false
+		m.rebuildViewport()
+		return m, cmd
+	}
+	if m.form.State != huh.StateCompleted {
+		return m, cmd
+	}
+	mode := m.formMode
+	if mode == "select" {
+		action := m.form.GetString("action")
+		target := m.formTargetID
+		m.form = nil
+		m.formMode = ""
+		return m, tea.Batch(cmd, m.beginAction(action, target))
+	}
+	if mode == "reason" {
+		m.formAction.Reason = strings.TrimSpace(m.form.GetString("reason"))
+		if m.formAction.Action == "retry_task" {
+			if task, ok := m.task(m.formAction.TargetID); ok {
+				m.formAction.TargetDetails = m.retryImpact(task)
+			}
+		}
+		m.form = nil
+		m.formMode = ""
+		return m, tea.Batch(cmd, m.openConfirm(m.formAction.Action))
+	}
+	if mode == "workflow" {
+		selected := m.form.GetString("workflow")
+		m.form = nil
+		m.formMode = ""
+		return m, tea.Batch(cmd, m.confirmWorkflowSelection(selected))
+	}
+	confirmed := m.form.GetBool("confirm")
+	m.form = nil
+	m.formMode = ""
+	if !confirmed {
+		m.notice = "Action cancelled."
+		m.rebuildViewport()
+		return m, cmd
+	}
+	return m, tea.Batch(cmd, m.runAction(m.formAction))
+}
+
+func (m *Model) confirmWorkflowSelection(name string) tea.Cmd {
+	m.formAction.TargetID = name
+	return m.openConfirm(m.formAction.Action)
+}
+
+func (m *Model) runAction(call ActionCall) tea.Cmd {
+	backend, ok := m.backend.(ActionBackend)
+	if !ok {
+		m.loadError = "this backend does not support mutations"
+		return nil
+	}
+	m.actionPending, m.mutationPending = true, true
+	m.actionFailure = false
+	m.lastAction = &call
+	m.notice = "Working… " + actionCaption(call)
+	backend, workspace, gen := backend, m.workspaceID, m.generation
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		return actionResultMsg{generation: gen, call: call, err: backend.PerformAction(ctx, workspace, call)}
+	}
+}
+
+func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
+	if message.generation != m.generation {
+		return nil
+	}
+	m.actionPending, m.mutationPending = false, false
+	if message.err != nil {
+		m.actionFailure = true
+		m.lastAction = &message.call
+		m.loadError = sanitizeLine(message.err.Error())
+		m.notice = "Operation failed with key " + message.call.Key + ". Press y to retry the same operation; a starts a new intent."
+		m.rebuildViewport()
+		return nil
+	}
+	m.actionFailure = false
+	m.lastAction = nil
+	m.loadError = ""
+	m.notice = "Action completed. Refreshing workspace…"
+	m.generation++
+	m.projectPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false
+	return m.beginRefresh()
+}
+
+func actionCaption(call ActionCall) string {
+	targetID := call.TargetID
+	targetName := firstNonempty(call.TargetName, targetID)
+	switch call.Action {
+	case "start_orchestrator":
+		return "Start or resume the orchestrator in workspace " + call.WorkspaceID
+	case "pause":
+		return "Pause the workspace and leave current Runs untouched"
+	case "resume_workspace":
+		return "Mark the workspace active; this does not restart stopped Runs"
+	case "reconcile":
+		return "Reconcile recorded sessions against the selected tmux runtime"
+	case "pause_interrupt":
+		return "Pause workspace and stop only the confirmed active Runs and services"
+	case "select_workflow":
+		return "Select workflow " + targetID + " for workspace " + call.WorkspaceID
+	case "show_managed_tui":
+		return "Show or restore the managed TUI panel"
+	case "hide_managed_tui":
+		return "Hide the managed TUI panel"
+	case "resume_session":
+		return "Resume session " + targetName + " · " + targetID
+	case "stop_run":
+		return "Stop only current Run " + call.ExpectedRunID + " from session " + targetID
+	case "close_session":
+		return "Close idle session " + targetName + " · " + targetID
+	case "retry_task":
+		return "Retry task " + targetName + " · " + targetID + " and reset affected downstream tasks"
+	case "stop_service":
+		return "Stop service " + targetName + " · " + targetID
+	default:
+		return "Apply " + call.Action
+	}
+}
+
+func actionDescription(action string, call ActionCall) string {
+	if action == "pause_interrupt" {
+		runs := strings.Join(call.ExpectedRunIDs, ", ")
+		services := strings.Join(call.ExpectedServiceIDs, ", ")
+		if runs == "" {
+			runs = "none"
+		}
+		if services == "" {
+			services = "none"
+		}
+		return fmt.Sprintf("This pauses the workspace, then stops these exact targets:\nRuns: %s\nServices: %s\nThe core rejects the action if either list changed.", runs, services)
+	}
+	if action == "select_workflow" {
+		return "Select “" + sanitizeLine(call.TargetID) + "” for this workspace. The core checks that the workspace revision is still current."
+	}
+	if action == "show_managed_tui" || action == "hide_managed_tui" {
+		return "The workspace supervisor will reconcile the managed TUI panel to this desired state."
+	}
+	if call.TargetDetails != "" {
+		return sanitizeLine(call.TargetDetails)
+	}
+	if action == "retry_task" {
+		return "Reason: " + sanitizeLine(call.Reason)
+	}
+	return "The core will validate the current workspace and actor before it applies this action."
+}
+
+func (m *Model) retryImpact(task core.Task) string {
+	affected := map[string]bool{task.ID: true}
+	for changed := true; changed; {
+		changed = false
+		for _, candidate := range m.snapshot.Status.Workspace.Tasks {
+			if affected[candidate.ID] {
+				continue
+			}
+			for _, dependency := range candidate.DependsOn {
+				if affected[dependency] {
+					affected[candidate.ID] = true
+					changed = true
+					break
+				}
+			}
+		}
+	}
+	var names []string
+	for _, candidate := range m.snapshot.Status.Workspace.Tasks {
+		if affected[candidate.ID] {
+			names = append(names, firstNonempty(candidate.Title, candidate.ID)+" ("+candidate.ID+")")
+		}
+	}
+	return fmt.Sprintf("Attempt %d → %d. This resets affected tasks and their accepted results: %s. Reason: %s", task.Attempt, task.Attempt+1, strings.Join(names, ", "), sanitizeLine(m.formReason))
+}
+
+func huhTheme(p palette) *huh.Theme {
+	theme := huh.ThemeBase()
+	if p.noColor {
+		theme.Focused.FocusedButton = lipgloss.NewStyle().SetString("[ Confirm ]")
+		theme.Focused.BlurredButton = lipgloss.NewStyle().SetString("[ Cancel ]")
+		theme.Blurred.FocusedButton = theme.Focused.BlurredButton
+		theme.Blurred.BlurredButton = lipgloss.NewStyle().SetString("[ Cancel ]")
+		return theme
+	}
+	theme.Focused.SelectSelector = lipgloss.NewStyle().Foreground(p.focus).Bold(true).SetString("> ")
+	theme.Focused.Title = lipgloss.NewStyle().Foreground(p.text).Bold(true)
+	theme.Focused.ErrorIndicator = lipgloss.NewStyle().Foreground(p.danger).SetString(" !")
+	theme.Focused.ErrorMessage = lipgloss.NewStyle().Foreground(p.danger)
+	theme.Focused.FocusedButton = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(p.success).Padding(0, 2)
+	theme.Focused.BlurredButton = lipgloss.NewStyle().Foreground(p.text).Padding(0, 2)
+	theme.Focused.TextInput.Prompt = lipgloss.NewStyle().Foreground(p.focus)
+	theme.Focused.TextInput.Placeholder = lipgloss.NewStyle().Foreground(p.muted)
+	theme.Focused.TextInput.Text = lipgloss.NewStyle().Foreground(p.text)
+	return theme
+}

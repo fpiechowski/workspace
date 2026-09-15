@@ -189,8 +189,24 @@ func taskReady(d *Document, t *Task) error {
 	return nil
 }
 func (s *Service) RetryTask(ctx context.Context, selector, id, reason, key string) (Task, error) {
+	return s.retryTask(ctx, selector, id, reason, key, MutationGuard{})
+}
+
+// RetryTaskGuarded includes the visible revision and attempt in the operation
+// digest and validates them under the same project lock as the retry.
+func (s *Service) RetryTaskGuarded(ctx context.Context, selector, id, reason, key string, guard MutationGuard) (Task, error) {
+	return s.retryTask(ctx, selector, id, reason, key, guard)
+}
+
+func (s *Service) retryTask(ctx context.Context, selector, id, reason, key string, guard MutationGuard) (Task, error) {
 	var out Task
-	request := struct{ Task, Reason string }{id, reason}
+	var request any = struct{ Task, Reason string }{id, reason}
+	if !guard.empty() {
+		request = struct {
+			Task, Reason string
+			Guard        MutationGuard
+		}{id, reason, guard}
+	}
 	err := s.With(ctx, selector, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
@@ -210,9 +226,15 @@ func (s *Service) RetryTask(ctx context.Context, selector, id, reason, key strin
 			out = *t
 			return nil
 		}
+		if guard.ExpectedRevision != 0 && d.State.Revision != guard.ExpectedRevision {
+			return fail("revision_conflict", "workspace changed while the action was being confirmed")
+		}
 		t, err := findTask(d, id)
 		if err != nil {
 			return err
+		}
+		if guard.ExpectedAttempt != 0 && t.Attempt != guard.ExpectedAttempt {
+			return fail("target_changed", "task %s moved from attempt %d to %d", id, guard.ExpectedAttempt, t.Attempt)
 		}
 		if d.State.Release.UserConfirmed {
 			return fail("workspace_closed", "released work cannot be silently reopened")

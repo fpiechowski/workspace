@@ -369,7 +369,11 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		if err := saveDocument(d); err != nil {
 			return err
 		}
-		pane, launchErr := s.Runtime.Launch(ctx, Launch{ProjectRoot: s.Root, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: id, RunID: runID, WorktreeName: wtName, CWD: cwd, Executable: s.Executable, Orchestrator: a.Role == "orchestrator"})
+		launch := Launch{ProjectRoot: s.Root, ProjectID: d.State.ProjectID, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: id, RunID: runID, WorktreeID: wtID, WorktreeName: wtName, CWD: cwd, Executable: s.Executable, Orchestrator: a.Role == "orchestrator"}
+		if launch.Orchestrator {
+			launch.PreferredOrchestratorWindowID, launch.ReplacePaneID, launch.ReplaceSessionID, launch.ReplaceRunID = priorOrchestratorPane(d, runID)
+		}
+		pane, launchErr := s.Runtime.Launch(ctx, launch)
 		if launchErr != nil {
 			run.State = "failed"
 			var ce *Error
@@ -395,8 +399,37 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		}
 		return launchErr
 	})
+	if err == nil && out.AgentSnapshot.Role == "orchestrator" {
+		if _, managed := s.Runtime.(ManagedUIRuntime); managed {
+			// The orchestrator is already durable and running. A UI startup error
+			// is recorded by ReconcileInterface and must not undo that operation.
+			_ = s.ReconcileInterface(ctx, selector)
+		}
+	}
 	return out, err
 }
+func priorOrchestratorPane(d *Document, newRunID string) (windowID, paneID, sessionID, runID string) {
+	var latest *Run
+	for i := range d.Registry.Runs {
+		run := &d.Registry.Runs[i]
+		if run.ID == newRunID || run.Active() || run.WindowID == "" || run.PaneID == "" {
+			continue
+		}
+		session, err := findSession(d, run.SessionID)
+		if err != nil || session.AgentSnapshot.Role != "orchestrator" {
+			continue
+		}
+		if latest == nil || run.CreatedAt.After(latest.CreatedAt) || run.CreatedAt.Equal(latest.CreatedAt) && run.ID > latest.ID {
+			latest = run
+			sessionID = session.ID
+		}
+	}
+	if latest == nil {
+		return "", "", "", ""
+	}
+	return latest.WindowID, latest.PaneID, sessionID, latest.ID
+}
+
 func (s *Service) StartOrchestrator(ctx context.Context, selector, key string) (Session, error) {
 	return s.StartSession(ctx, selector, SessionOptions{Agent: "orchestrator", OperationKey: key})
 }
@@ -534,8 +567,26 @@ func replaceEnv(env []string, key, value string) []string {
 	return append(out, prefix+value)
 }
 func (s *Service) StopSession(ctx context.Context, selector, id string, keys ...string) (Session, error) {
+	return s.stopSession(ctx, selector, id, "", keys...)
+}
+
+// StopRun stops only the concrete Run the user confirmed. The workspace lock
+// rechecks ownership immediately before the stop, so a newly current Run is
+// never affected by a stale confirmation form.
+func (s *Service) StopRun(ctx context.Context, selector, sessionID, expectedRunID, key string) (Session, error) {
+	if expectedRunID == "" {
+		return Session{}, fail("target_changed", "a current Run ID is required")
+	}
+	return s.stopSession(ctx, selector, sessionID, expectedRunID, key)
+}
+
+func (s *Service) stopSession(ctx context.Context, selector, id, expectedRunID string, keys ...string) (Session, error) {
 	if key := mutationKey(keys); key != "" {
-		return effect(s, ctx, selector, key, []any{"session.stop", id}, func(d *Document) error { return s.requireSessionOwner(d, id) }, func() (Session, error) { return s.StopSession(ctx, selector, id) })
+		request := []any{"session.stop", id}
+		if expectedRunID != "" {
+			request = []any{"session.stop", id, "expected_run", expectedRunID}
+		}
+		return effect(s, ctx, selector, key, request, func(d *Document) error { return s.requireSessionOwner(d, id) }, func() (Session, error) { return s.stopSession(ctx, selector, id, expectedRunID) })
 	}
 	var out Session
 	err := s.With(ctx, selector, func(d *Document) error {
@@ -545,6 +596,14 @@ func (s *Service) StopSession(ctx context.Context, selector, id string, keys ...
 		}
 		if err := s.requireSessionOwner(d, p.ID); err != nil {
 			return err
+		}
+		if expectedRunID != "" && p.CurrentRunID != expectedRunID {
+			prior, priorErr := findRun(d, expectedRunID)
+			if priorErr == nil && !prior.Active() {
+				out = *p
+				return nil
+			}
+			return fail("target_changed", "session %s no longer owns run %s", p.ID, expectedRunID)
 		}
 		out = *p
 		if !p.Active() {
@@ -673,7 +732,11 @@ func (s *Service) Reconcile(ctx context.Context, selector string, keys ...string
 			} else if rt, ok := s.Runtime.(interface {
 				Recover(context.Context, Launch) (Pane, error)
 			}); ok {
-				pane, err = rt.Recover(ctx, Launch{Service: true, ProjectRoot: s.Root, WorkspaceID: d.State.ID, SessionID: p.ID, Executable: s.Executable})
+				worktree, findErr := findWorktree(d, p.WorktreeID)
+				if findErr != nil {
+					return findErr
+				}
+				pane, err = rt.Recover(ctx, Launch{Service: true, ProjectRoot: s.Root, ProjectID: d.State.ProjectID, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: p.ID, WorktreeID: worktree.ID, WorktreeName: worktree.Name, CWD: worktree.Path, Executable: s.Executable})
 				if err == nil {
 					p.PaneID = pane.ID
 					changed = true
@@ -804,7 +867,11 @@ func (s *Service) recoverPane(ctx context.Context, d *Document, p Session, run R
 	if !ok {
 		return Pane{}, fail("launch_uncertain", "runtime cannot recover an unrecorded pane")
 	}
-	return r.Recover(ctx, Launch{ProjectRoot: s.Root, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: p.ID, RunID: run.ID, CWD: run.CWD, Executable: s.Executable, Orchestrator: p.AgentSnapshot.Role == "orchestrator"})
+	launch := Launch{ProjectRoot: s.Root, ProjectID: d.State.ProjectID, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: p.ID, RunID: run.ID, WorktreeID: p.WorktreeID, CWD: run.CWD, Executable: s.Executable, Orchestrator: p.AgentSnapshot.Role == "orchestrator"}
+	if launch.Orchestrator {
+		launch.PreferredOrchestratorWindowID, launch.ReplacePaneID, launch.ReplaceSessionID, launch.ReplaceRunID = priorOrchestratorPane(d, run.ID)
+	}
+	return r.Recover(ctx, launch)
 }
 func blockInterruptedTask(d *Document, p *Session, run *Run) {
 	if p.TaskID == "" {

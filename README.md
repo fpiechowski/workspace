@@ -160,6 +160,49 @@ ID i źródłem wejścia, po czym dołącza do sesji tmux.
 Sesja tmux odpowiada workspace, okno worktree, panel konkretnego Run. Orkiestrator
 ma własne okno w katalogu workspace. Odłączenie użytkownika nie zatrzymuje procesów.
 
+## Interfejs terminalowy (TUI)
+
+Uruchom `workspace tui`, aby przeglądać workspace'y projektu i ich zadania, worktrees,
+sesje, uruchomienia, wyniki oraz stan runtime. Scope wybiera się tak samo jak w CLI;
+możesz przekazać `--project` i `--workspace`, a bez workspace'u TUI otworzy picker.
+Odczyt działa także na Windows, lecz tmux, jump i zarządzany panel wymagają binarium
+uruchomionego w Linux/macOS albo WSL. Interfejs oczekuje terminala na stdin/stdout i
+co najmniej 40 kolumn × 12 wierszy.
+
+```sh
+workspace tui
+workspace tui --project ./repo --theme dark
+workspace tui --workspace ws_ID --no-color
+
+# Zarządzany panel w istniejącym oknie orkiestratora:
+workspace tui show --workspace ws_ID
+workspace tui status --workspace ws_ID
+workspace tui hide --workspace ws_ID
+```
+
+`1`–`5` otwierają Overview, Tasks, Worktrees, Results i More; na Dashboardzie
+`Tab`/`Shift+Tab` przełącza fokus panelu, a w Results typ wyniku. `Up`/`Down` lub
+`j`/`k` zmienia zaznaczenie, `Enter` otwiera element, `Esc` wraca, `/` filtruje
+kolekcję, a `f` przełącza widok statusu lub historii. `a`
+otwiera tylko operacje dostępne dla zaznaczenia, a `g` przechodzi do zweryfikowanego
+okna/panelu tmux. `r` odświeża odczyt bez reconcile, `?` pokazuje pomoc. `--theme`
+przyjmuje `auto`, `dark` lub `light`; `--no-color` wymusza tekstowe badge.
+
+W ręcznie uruchomionym TUI `q` kończy program. W zarządzanym panelu `q`, a poza
+formularzem także `Ctrl+C`, najpierw zapisuje trwałe żądanie hide, przywraca terminal
+i dopiero kończy proces; jeśli zapis się nie powiedzie, panel pozostaje otwarty i można
+ponowić tę samą operację. `Ctrl+C` w formularzu anuluje formularz. `tui show` przywraca
+panel, `tui hide` wyłącza i sprząta wyłącznie zweryfikowany panel, a `tui status` pokazuje
+jego generację, ownership i backoff. Supervisor uzgadnia panel razem z orkiestratorem;
+show nie uruchamia samodzielnie nowego workspace ani supervisora.
+
+TUI używa tych samych zapytań i mutacji core co CLI. Potwierdzenia są chronione rewizją,
+próbą zadania albo dokładnym RunID; „Pause and interrupt” pokazuje Runy i usługi,
+które zostaną zatrzymane. Interfejs nie akceptuje automatycznie handoffów ani decyzji.
+Przed downgrade binarium ukryj zarządzany panel przez `workspace tui hide`: starszy
+launcher nie rozpoznaje jeszcze własności nowego panelu.
+Szczegóły ekranów i skrótów: [docs/tui.md](docs/tui.md).
+
 ## Zadania i wyniki
 
 Orkiestrator definiuje zadania z celem, rolą, kryteriami akceptacji i zależnościami:

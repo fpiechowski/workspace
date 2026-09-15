@@ -16,7 +16,9 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"workspace/internal/bootstrap"
 	"workspace/internal/core"
+	"workspace/internal/terminal"
 )
 
 type options struct {
@@ -91,47 +93,44 @@ func (o *options) emit(v any) error {
 	return err
 }
 func (o *options) service() (*core.Service, error) {
-	root := o.project
-	if root == "" {
-		root = os.Getenv("WORKSPACE_PROJECT_DIR")
-	}
-	if root == "" {
-		var err error
-		root, err = os.Getwd()
-		if err != nil {
-			return nil, err
-		}
-	}
-	root, err := core.DiscoverProject(root)
+	scope, err := o.bootstrapScope(true)
 	if err != nil {
 		return nil, err
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return nil, err
+	if !scope.ProjectFound {
+		return nil, scope.ProjectError
 	}
-	return &core.Service{Root: root, Runtime: core.Tmux{Socket: o.socket}, Executable: exe, Actor: core.Actor{AgentID: os.Getenv("WORKSPACE_AGENT_ID"), SessionID: os.Getenv("WORKSPACE_SESSION_ID"), RunID: os.Getenv("WORKSPACE_RUN_ID")}}, nil
+	return scope.Service, nil
 }
 func (o *options) selector() (string, error) {
-	if o.workspace != "" {
-		return o.workspace, nil
-	}
-	if id := os.Getenv("WORKSPACE_ID"); id != "" {
-		return id, nil
-	}
-	dir, err := os.Getwd()
+	scope, err := o.bootstrapScope(false)
 	if err != nil {
 		return "", err
 	}
-	return core.InferWorkspace(dir)
+	if !scope.ProjectFound {
+		return "", scope.ProjectError
+	}
+	if scope.WorkspaceID != "" {
+		return scope.WorkspaceID, nil
+	}
+	return "", &core.Error{Code: "workspace_required", Message: "use --workspace <id> or run from a workspace directory"}
 }
 func (o *options) scope() (*core.Service, string, error) {
-	s, err := o.service()
+	scope, err := o.bootstrapScope(false)
 	if err != nil {
 		return nil, "", err
 	}
-	id, err := o.selector()
-	return s, id, err
+	if !scope.ProjectFound {
+		return nil, "", scope.ProjectError
+	}
+	if scope.WorkspaceID == "" {
+		return nil, "", &core.Error{Code: "workspace_required", Message: "use --workspace <id> or run from a workspace directory"}
+	}
+	return scope.Service, scope.WorkspaceID, nil
+}
+
+func (o *options) bootstrapScope(projectOnly bool) (*bootstrap.Scope, error) {
+	return bootstrap.Resolve(bootstrap.Request{Project: o.project, Workspace: o.workspace, Socket: o.socket, ProjectOnly: projectOnly})
 }
 func command(use, short string, fn func(*cobra.Command, []string) error) *cobra.Command {
 	return &cobra.Command{Use: use, Short: short, Args: cobra.NoArgs, RunE: fn}
@@ -364,7 +363,7 @@ func newRoot(o *options) *cobra.Command {
 		if !o.json {
 			fmt.Fprintf(o.out, "Opening %s (%s)\n", workspaceTitle(selected), selected.Workspace.ID)
 		}
-		return s.Runtime.Attach(c.Context(), selected.Workspace.ID, "")
+		return attachNavigation(c.Context(), s, selected.Workspace.ID, core.EntityRef{Kind: "workspace", ID: selected.Workspace.ID})
 	})
 	openCmd.Args = cobra.MaximumNArgs(1)
 	root.AddCommand(openCmd)
@@ -475,10 +474,7 @@ func newRoot(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := s.EnsureSupervisor(c.Context()); err != nil {
-			return err
-		}
-		v, err := s.StartOrchestrator(c.Context(), id, o.key)
+		v, err := s.StartSupervisedOrchestrator(c.Context(), id, o.key)
 		if err != nil {
 			return err
 		}
@@ -489,11 +485,7 @@ func newRoot(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		v, err := s.Status(c.Context(), id)
-		if err != nil {
-			return err
-		}
-		return s.Runtime.Attach(c.Context(), v.Workspace.ID, "")
+		return attachNavigation(c.Context(), s, id, core.EntityRef{Kind: "workspace", ID: id})
 	}))
 	for _, verb := range []string{"pause", "resume"} {
 		verb := verb
@@ -550,7 +542,7 @@ func newRoot(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		v, err := s.Reconcile(c.Context(), id, o.key)
+		v, err := s.ReconcileWorkspace(c.Context(), id, o.key)
 		if err != nil {
 			return err
 		}
@@ -578,6 +570,8 @@ func newRoot(o *options) *cobra.Command {
 	execCmd.Args = cobra.ExactArgs(1)
 	execCmd.Hidden = true
 	root.AddCommand(execCmd)
+	root.AddCommand(tuiCommand(o))
+	root.AddCommand(tuiRunnerCommand(o))
 	root.InitDefaultHelpCmd()
 	configureHelp(root)
 	return root
@@ -630,10 +624,7 @@ func agentCommands(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := s.EnsureSupervisor(c.Context()); err != nil {
-			return err
-		}
-		v, err := s.ResumeAgent(c.Context(), id, args[0], o.key)
+		v, err := s.ResumeSupervisedAgent(c.Context(), id, args[0], o.key)
 		if err != nil {
 			return err
 		}
@@ -685,10 +676,7 @@ func sessionCommands(o *options) *cobra.Command {
 			return err
 		}
 		opt.OperationKey = o.key
-		if err := s.EnsureSupervisor(c.Context()); err != nil {
-			return err
-		}
-		v, err := s.StartSession(c.Context(), id, opt)
+		v, err := s.StartSupervisedSession(c.Context(), id, opt)
 		if err != nil {
 			return err
 		}
@@ -763,26 +751,11 @@ func sessionCommands(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		v, err := s.Status(c.Context(), id)
+		v, err := s.ResumeSession(c.Context(), id, args[0], o.key)
 		if err != nil {
 			return err
 		}
-		sessionID := args[0]
-		for _, run := range v.Runs {
-			if run.ID == args[0] {
-				sessionID = run.SessionID
-				break
-			}
-		}
-		for _, session := range v.Sessions {
-			if session.ID == sessionID {
-				if err := s.EnsureSupervisor(c.Context()); err != nil {
-					return err
-				}
-				return emitSessionResume(c, o, s, id, session)
-			}
-		}
-		return fmt.Errorf("session not found")
+		return o.emit(v)
 	})
 	resume.Args = cobra.ExactArgs(1)
 	group.AddCommand(resume)
@@ -832,17 +805,7 @@ func sessionCommands(o *options) *cobra.Command {
 		}
 		for _, session := range v.Sessions {
 			if session.ID == sessionID {
-				if session.PaneID == "" {
-					return fmt.Errorf("session has no pane")
-				}
-				p, err := s.Runtime.Inspect(c.Context(), session.PaneID)
-				if err != nil {
-					return err
-				}
-				if !((p.SessionID == session.ID && p.RunID == session.CurrentRunID) || (p.RunID == "" && p.SessionID == session.CurrentRunID)) {
-					return fmt.Errorf("pane no longer belongs to this session")
-				}
-				return s.Runtime.Attach(c.Context(), v.Workspace.ID, session.PaneID)
+				return attachNavigation(c.Context(), s, v.Workspace.ID, core.EntityRef{Kind: "session", ID: session.ID})
 			}
 		}
 		return fmt.Errorf("session not found")
@@ -852,12 +815,12 @@ func sessionCommands(o *options) *cobra.Command {
 	return group
 }
 
-func emitSessionResume(c *cobra.Command, o *options, s *core.Service, workspaceID string, session core.Session) error {
-	v, err := s.StartSession(c.Context(), workspaceID, core.SessionOptions{Agent: session.AgentID, Worktree: session.WorktreeID, Parent: session.ParentAgentID, Profile: session.Profile, Task: session.TaskID, ResumeSession: session.ID, ReadOnly: session.ReadOnly, OperationKey: o.key})
+func attachNavigation(ctx context.Context, s *core.Service, selector string, ref core.EntityRef) error {
+	target, err := s.ResolveNavigationTarget(ctx, selector, ref)
 	if err != nil {
 		return err
 	}
-	return o.emit(v)
+	return terminal.NewTmuxNavigator(target.Socket).Attach(ctx, target)
 }
 
 func runCommands(o *options) *cobra.Command {

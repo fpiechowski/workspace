@@ -4,7 +4,7 @@ Lista planowanych usprawnień. Pozycje są ułożone według priorytetu.
 
 ## Planowane
 
-- [ ] **TUI dla użytkownika** — dodać terminalowy interfejs oparty na Bubble Tea i Bubbles.
+- [x] **TUI dla użytkownika** — dodać terminalowy interfejs oparty na Bubble Tea i Bubbles.
   - **Cel:** ułatwić człowiekowi przeglądanie stanu i obsługę projektu. Obecne CLI udostępnia YAML/JSON, co dobrze sprawdza się w pracy agentów i skryptów, ale jest mniej wygodne do codziennego użycia przez człowieka.
   - **Pierwszy zakres:** czytelny przegląd workspace’ów i ich zadań/sesji, widok szczegółów wybranego elementu oraz możliwość uruchamiania najczęstszych istniejących operacji z klawiatury.
   - **Kryteria ukończenia:** TUI obsługuje nawigację klawiaturą i zmianę rozmiaru terminala, pokazuje stany oraz błędy w zrozumiały sposób, a logikę operacji współdzieli z istniejącym CLI. Dotychczasowe polecenia i wyjście YAML/JSON pozostają dostępne dla agentów i automatyzacji.

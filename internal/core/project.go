@@ -598,10 +598,25 @@ func InferWorkspace(cwd string) (string, error) {
 	return "", fail("workspace_required", "use --workspace <id> or run from a workspace directory")
 }
 func (s *Service) SelectWorkflow(ctx context.Context, selector, name string, keys ...string) (Status, error) {
+	return s.selectWorkflow(ctx, selector, name, 0, keys...)
+}
+
+func (s *Service) SelectWorkflowGuarded(ctx context.Context, selector, name, key string, expectedRevision int) (Status, error) {
+	return s.selectWorkflow(ctx, selector, name, expectedRevision, key)
+}
+
+func (s *Service) selectWorkflow(ctx context.Context, selector, name string, expectedRevision int, keys ...string) (Status, error) {
 	var out Status
-	err := mutate(s, ctx, selector, keys, []any{"workflow.select", name}, &out, s.requireOrchestrator, func(d *Document) error {
+	var request any = []any{"workflow.select", name}
+	if expectedRevision != 0 {
+		request = []any{"workflow.select", name, expectedRevision}
+	}
+	err := mutate(s, ctx, selector, keys, request, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
+		}
+		if expectedRevision != 0 && d.State.Revision != expectedRevision {
+			return fail("revision_conflict", "workspace changed while the action was being confirmed")
 		}
 		cfg, err := s.Config()
 		if err != nil {
@@ -630,10 +645,31 @@ func (s *Service) SelectWorkflow(ctx context.Context, selector, name string, key
 	return out, err
 }
 func (s *Service) SetPaused(ctx context.Context, selector string, paused bool, keys ...string) (Status, error) {
+	return s.setPaused(ctx, selector, paused, MutationGuard{}, keys...)
+}
+
+// SetPausedGuarded protects a pause/resume confirmation with the revision the
+// user saw. The guard is checked after an idempotent receipt replay and under
+// the same lock as the state change.
+func (s *Service) SetPausedGuarded(ctx context.Context, selector string, paused bool, key string, guard MutationGuard) (Status, error) {
+	return s.setPaused(ctx, selector, paused, guard, key)
+}
+
+func (s *Service) setPaused(ctx context.Context, selector string, paused bool, guard MutationGuard, keys ...string) (Status, error) {
 	var out Status
-	err := mutate(s, ctx, selector, keys, []any{"set-paused", paused}, &out, s.requireOrchestrator, func(d *Document) error {
+	var request any = []any{"set-paused", paused}
+	if !guard.empty() {
+		request = struct {
+			Paused bool
+			Guard  MutationGuard
+		}{paused, guard}
+	}
+	err := mutate(s, ctx, selector, keys, request, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
+		}
+		if guard.ExpectedRevision != 0 && d.State.Revision != guard.ExpectedRevision {
+			return fail("revision_conflict", "workspace changed while the action was being confirmed")
 		}
 		if d.State.Status == "completed" || d.State.Status == "archived" {
 			return fail("workspace_closed", "closed workspace cannot be resumed or paused")

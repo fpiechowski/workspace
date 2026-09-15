@@ -1,0 +1,299 @@
+package tui
+
+import (
+	"time"
+
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
+	"workspace/internal/core"
+)
+
+type route struct {
+	Page         string
+	EntityID     string
+	ParentID     string
+	Tab          string
+	Query        string
+	SelectedID   string
+	StatusFilter string
+}
+
+type routeKey struct {
+	WorkspaceID string
+	Page        string
+	EntityID    string
+	ParentID    string
+	Tab         string
+}
+
+type routeMemory struct {
+	Query, SelectedID, StatusFilter string
+	ViewportOffset                  int
+	FocusedPanel                    int
+}
+
+type collectionItem struct {
+	ID, Kind, Title, Subtitle, State string
+}
+
+type Model struct {
+	backend   Backend
+	navigator Navigator
+
+	projectRoot  string
+	projectID    string
+	cwd          string
+	workspaceID  string
+	projectFound bool
+	initialError string
+
+	palette         palette
+	width, height   int
+	viewport        viewport.Model
+	filterInput     textinput.Model
+	filtering       bool
+	filterOriginal  string
+	filterSelection string
+	showHelp        bool
+	form            *huh.Form
+	formMode        string
+	formChoice      string
+	formWorkflow    string
+	formConfirm     bool
+	formReason      string
+	formAction      ActionCall
+	formTargetID    string
+	actionPending   bool
+	actionFailure   bool
+	lastAction      *ActionCall
+	notice          string
+	quit            bool
+
+	route        route
+	stack        []route
+	routeMemory  map[routeKey]routeMemory
+	focusedPanel int
+
+	project            core.ProjectOverview
+	snapshot           core.WorkspaceSnapshot
+	runtime            core.RuntimeObservation
+	uiStatus           core.UIStatus
+	worktreeInspection map[string]core.WorktreeObservation
+	preview            core.Preview
+	loadError          string
+	runtimeError       string
+	uiError            string
+	lastSuccess        time.Time
+	lastFailure        time.Time
+	generation         uint64
+	managed            bool
+	hidePending        bool
+	hideKey            string
+	projectPending     bool
+	snapshotPending    bool
+	runtimePending     bool
+	uiPending          bool
+	previewPending     bool
+	navigationPending  bool
+	worktreePending    bool
+	mutationPending    bool
+	closed             bool
+}
+
+type projectMsg struct {
+	generation uint64
+	value      core.ProjectOverview
+	err        error
+}
+type snapshotMsg struct {
+	generation uint64
+	value      core.WorkspaceSnapshot
+	err        error
+}
+type runtimeMsg struct {
+	generation uint64
+	value      core.RuntimeObservation
+	err        error
+}
+type uiStatusMsg struct {
+	generation uint64
+	value      core.UIStatus
+	err        error
+}
+type workflowNamesMsg struct {
+	generation uint64
+	names      []string
+	err        error
+}
+type worktreeMsg struct {
+	generation uint64
+	id         string
+	value      core.WorktreeObservation
+	err        error
+}
+type previewMsg struct {
+	generation uint64
+	value      core.Preview
+	err        error
+}
+type refreshTimerMsg struct{}
+type navigationTargetMsg struct {
+	generation uint64
+	target     core.NavigationTarget
+	err        error
+}
+type navigationResultMsg struct {
+	generation uint64
+	err        error
+}
+type actionResultMsg struct {
+	generation uint64
+	call       ActionCall
+	err        error
+}
+type hideResultMsg struct {
+	generation uint64
+	err        error
+}
+
+func New(config Config) *Model {
+	input := textinput.New()
+	input.Prompt = "/ "
+	input.Placeholder = "filter by name or ID"
+	input.CharLimit = 0
+	input.Width = 32
+	m := &Model{
+		backend:      config.Backend,
+		navigator:    config.Navigator,
+		projectRoot:  config.ProjectRoot,
+		projectID:    config.ProjectID,
+		cwd:          config.CWD,
+		workspaceID:  config.WorkspaceID,
+		projectFound: config.ProjectFound,
+		initialError: sanitizeLine(config.InitialError),
+		managed:      config.Managed,
+		hideKey:      core.ID("tuihide"),
+		palette:      makePalette(config.Theme, config.NoColor),
+		width:        80, height: 24,
+		filterInput:        input,
+		worktreeInspection: make(map[string]core.WorktreeObservation),
+		routeMemory:        make(map[routeKey]routeMemory),
+	}
+	m.viewport = viewport.New(76, 16)
+	if m.workspaceID == "" {
+		m.route = route{Page: "project"}
+	} else {
+		m.route = route{Page: "dashboard"}
+	}
+	if m.initialError != "" {
+		m.route = route{Page: "error"}
+	}
+	return m
+}
+
+func (m *Model) Init() tea.Cmd {
+	if !m.projectFound || m.initialError != "" || m.backend == nil {
+		return nil
+	}
+	return m.beginRefresh()
+}
+
+func (m *Model) activeWorkspace() string { return m.workspaceID }
+
+func (m *Model) push(next route) {
+	m.rememberRoute()
+	m.stack = append(m.stack, m.route)
+	m.activateRoute(next)
+}
+
+func (m *Model) navigate(next route) {
+	m.rememberRoute()
+	m.activateRoute(next)
+}
+
+func (m *Model) activateRoute(next route) {
+	if memory, ok := m.routeMemory[m.routeKey(next)]; ok {
+		next.Query = memory.Query
+		next.SelectedID = memory.SelectedID
+		next.StatusFilter = memory.StatusFilter
+		m.focusedPanel = memory.FocusedPanel
+	} else {
+		m.focusedPanel = 0
+	}
+	m.route = next
+	m.resetView()
+	if memory, ok := m.routeMemory[m.routeKey(next)]; ok {
+		m.viewport.SetYOffset(memory.ViewportOffset)
+	}
+}
+
+func (m *Model) routeKey(route route) routeKey {
+	return routeKey{
+		WorkspaceID: m.workspaceID,
+		Page:        route.Page,
+		EntityID:    route.EntityID,
+		ParentID:    route.ParentID,
+		Tab:         route.Tab,
+	}
+}
+
+func (m *Model) rememberRoute() {
+	if m.routeMemory == nil {
+		m.routeMemory = make(map[routeKey]routeMemory)
+	}
+	m.routeMemory[m.routeKey(m.route)] = routeMemory{
+		Query:          m.route.Query,
+		SelectedID:     m.route.SelectedID,
+		StatusFilter:   m.route.StatusFilter,
+		ViewportOffset: m.viewport.YOffset,
+		FocusedPanel:   m.focusedPanel,
+	}
+}
+
+func (m *Model) pop() {
+	m.rememberRoute()
+	if len(m.stack) == 0 {
+		if m.workspaceID != "" {
+			m.workspaceID = ""
+			m.generation++
+			m.activateRoute(route{Page: "project"})
+			return
+		}
+		m.quit = true
+		return
+	}
+	next := m.stack[len(m.stack)-1]
+	m.stack = m.stack[:len(m.stack)-1]
+	m.activateRoute(next)
+}
+
+func (m *Model) resetView() {
+	m.viewport.GotoTop()
+	m.rebuildViewport()
+}
+
+func (m *Model) setWorkspace(id string) tea.Cmd {
+	m.rememberRoute()
+	m.workspaceID = id
+	m.generation++
+	m.stack = nil
+	m.snapshot = core.WorkspaceSnapshot{}
+	m.runtime = core.RuntimeObservation{}
+	m.uiStatus = core.UIStatus{}
+	m.preview = core.Preview{}
+	m.worktreeInspection = make(map[string]core.WorktreeObservation)
+	m.lastSuccess = time.Time{}
+	m.loadError = ""
+	m.runtimeError = ""
+	m.uiError = ""
+	m.snapshotPending = false
+	m.runtimePending = false
+	m.uiPending = false
+	m.previewPending = false
+	m.worktreePending = false
+	m.projectPending = false
+	m.activateRoute(route{Page: "dashboard"})
+	return m.beginRefresh()
+}

@@ -13,8 +13,11 @@ użytkownik / agent
         │
         ▼
    CLI (`cmd/workspace`, `internal/cli`)
-        │
-        ▼
+        ├── bootstrap (flag/env/CWD → scope)
+        ├── TUI (`internal/tui`)
+        └── terminal (attach/switch/jump)
+                  │
+                  ▼
    domena i przypadki użycia (`internal/core`)
         │
         ├── pliki stanu, blokady i write-ahead record
@@ -31,6 +34,12 @@ implementacje rozdzielone według platform.
 
 - `cmd/workspace/` — punkt wejścia binarium.
 - `internal/cli/` — drzewo komend Cobra, flagi, pomoc oraz serializacja odpowiedzi.
+- `internal/bootstrap/` — wspólne rozpoznanie projektu/workspace'u, Service i aktora
+  z flag, środowiska oraz CWD.
+- `internal/tui/` — Bubble Tea model, trasy, widoki, formularze Huh i theme; bez
+  bezpośrednich zapisów do plików domenowych.
+- `internal/terminal/` — zweryfikowane przełączanie klienta tmux albo attach z
+  przekazaniem stdio; nie przyjmuje surowych target-stringów z interfejsu.
 - `internal/core/` — model domenowy, przypadki użycia, trwałość i adaptery procesowe.
 - `internal/core/templates/` — wbudowane szablony instalowane przez `project init`.
 - `.workspace/templates/` — projektowa, edytowalna kopia szablonów i workflow.
@@ -95,6 +104,7 @@ ws_ID/
 ├── worktrees/            # checkouty Git, jeśli storage jest wewnętrzny
 └── .runtime/
     ├── index.json        # rejestry operacyjne, Session i Run
+    ├── ui.json           # oddzielny desired state, receipts i generation TUI
     ├── pending.json      # intencja przerwanego zapisu
     └── ...               # inbox, prompty, receipts i stan supervisora
 ```
@@ -102,7 +112,9 @@ ws_ID/
 `WORKSPACE.md` ma walidowany frontmatter i opisową treść dla kolejnego orkiestratora.
 Jest źródłem prawdy dla fazy workflow, zadań, decyzji i zaakceptowanych wyników.
 `.runtime/index.json` jest indeksem operacyjnym, a nie konkurencyjną wersją workflow.
-Publiczny `status --json` ma własny jawny numer schematu.
+Publiczny `status --json` ma własny jawny numer schematu. TUI korzysta z prywatnego
+`WorkspaceSnapshot`; nie dodaje encji do `index.json`, nie zmienia schematu publicznego
+Status i nie zapisuje Session/Run dla własnego procesu.
 
 Szablony są kopiowane do workspace przy jego tworzeniu. Późniejsza zmiana szablonu
 projektowego nie zmienia trwającej pracy. Jawna migracja zachowuje wcześniejsze pliki,
@@ -142,6 +154,14 @@ Supervisor porównuje aktywne rezerwacje z rzeczywistymi panelami, dostarcza wia
 i wykrywa utracone procesy. Może wznowić utraconego orkiestratora w kompatybilnej
 Session, ale nie restartuje w ciemno jawnie zatrzymanych lub zakończonych błędem
 wykonawców. Szczegółowe stany i procedury opisuje [docs/runtime.md](docs/runtime.md).
+
+Zarządzany TUI jest odrębnym typem runtime ownership zapisanym w workspace
+`.runtime/ui.json`. Po wykryciu historii orkiestratora supervisor uruchamia najwyżej
+jeden panel obok orkiestratora bez zmiany focusu. Launch token i generation są
+claimowane przez dokładny pane; reconcile usuwa tylko panele, których tożsamość
+potwierdzają metadata albo konkretna komenda runnera. Błąd UI i błąd agentów są
+uzgadniane niezależnie. UI nie liczy się jako writer, service ani aktywny Run i nie
+blokuje cleanup. Pełny kontrakt opisuje [docs/runtime.md](docs/runtime.md).
 
 ## Adaptery klientów i routing
 
@@ -230,6 +250,7 @@ Dokumenty w `docs/` są celowo węższe od tej architektury:
 
 - [clients.md](docs/clients.md) — możliwości adapterów i wrapperów klientów;
 - [runtime.md](docs/runtime.md) — stany Session/Run, supervisor, usługi i cleanup;
+- [tui.md](docs/tui.md) — ekrany, nawigacja i akcje interfejsu terminalowego;
 - [operations.md](docs/operations.md) — idempotencja, receipts i niepewne efekty;
 - [revisions.md](docs/revisions.md) — zmiana inputu i migracja workflow;
 - [checks.md](docs/checks.md) — przechwytywanie i import dowodów testów;

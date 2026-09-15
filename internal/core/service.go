@@ -98,7 +98,7 @@ func (s *Service) StartService(ctx context.Context, selector string, opt Service
 		if err := saveDocument(d); err != nil {
 			return err
 		}
-		pane, launchErr := s.Runtime.Launch(ctx, Launch{Service: true, ProjectRoot: s.Root, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: out.ID, WorktreeName: w.Name, CWD: w.Path, Executable: s.Executable})
+		pane, launchErr := s.Runtime.Launch(ctx, Launch{Service: true, ProjectRoot: s.Root, ProjectID: d.State.ProjectID, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: out.ID, WorktreeID: w.ID, WorktreeName: w.Name, CWD: w.Path, Executable: s.Executable})
 		if launchErr == nil {
 			out.PaneID = pane.ID
 		} else {
@@ -129,7 +129,11 @@ func (s *Service) ExecuteService(ctx context.Context, selector, id string, in io
 			if rt, ok := s.Runtime.(interface {
 				Recover(context.Context, Launch) (Pane, error)
 			}); ok {
-				pane, err := rt.Recover(ctx, Launch{Service: true, ProjectRoot: s.Root, WorkspaceID: d.State.ID, SessionID: r.ID, Executable: s.Executable})
+				w, err := findWorktree(d, r.WorktreeID)
+				if err != nil {
+					return err
+				}
+				pane, err := rt.Recover(ctx, Launch{Service: true, ProjectRoot: s.Root, ProjectID: d.State.ProjectID, WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, SessionID: r.ID, WorktreeID: w.ID, WorktreeName: w.Name, CWD: w.Path, Executable: s.Executable})
 				if err != nil {
 					return err
 				}

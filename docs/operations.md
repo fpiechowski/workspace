@@ -36,3 +36,19 @@ reconcile w celu odczytania aktualnego stanu runtime.
 
 Dane z wczesnej wersji rejestru, bez zapisanego snapshotu odpowiedzi, zachowują
 odwołanie do utworzonego zasobu. Ich replay może pokazać jego aktualny stan.
+
+## Operacje TUI
+
+Mutacje uruchamiane z TUI korzystają z tych samych przypadków użycia core co CLI.
+Potwierdzenie zachowuje rewizję workspace, attempt taska albo dokładny bieżący Run jako
+guard; „Pause and interrupt” zapisuje i porównuje dokładny zbiór aktywnych Runów oraz
+usług przed zatrzymaniem któregokolwiek procesu. Zmiana targetu po otwarciu formularza
+kończy się konfliktem zamiast wykonania akcji na nowym stanie. Retry taska pokazuje
+zależne zadania i wymaga powodu.
+
+Każda potwierdzona operacja otrzymuje klucz `tui_<ULID>`. Powtórzenie po niepewnej
+odpowiedzi używa tego samego klucza i payloadu; podwójne zatwierdzenie nie wykonuje
+mutacji ponownie. `tui show` i `tui hide` zapisują osobne receipts w `.runtime/ui.json`,
+nie w rejestrze Session/Run. `q` w zarządzanym panelu zapisuje ten sam trwały zamiar hide
+przed przywróceniem terminala i zakończeniem procesu; usunięcie panelu wykonuje później
+supervisor po zweryfikowaniu jego tożsamości.

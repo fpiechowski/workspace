@@ -71,3 +71,37 @@ After user-confirmed release, stop remaining sessions and `archive` the workspac
 and unpublished commits prevent removal. `clean --backup` can preserve unpublished
 commits in a verified Git bundle; source branches remain. Only Git removes worktrees.
 Documents, artifacts and decisions remain available after cleanup.
+
+## Managed terminal interface
+
+The optional managed TUI is a separate runtime owner, not a Session, Run, service or
+repository writer. Its desired state, generation, pane identity, retry status and
+idempotency receipts live in `.runtime/ui.json`; this does not change the public
+workspace status schema or add UI records to agent lists.
+
+After orchestrator history exists, the supervisor can start one TUI pane in the same
+orchestrator window. The split is detached and does not take focus. A manual
+`workspace tui` read or refresh never starts the supervisor. `workspace tui show`
+records desired state and reconciles immediately when runtime is available;
+`hide` disables the panel and removes only a pane whose UI ownership is verified;
+`status` reports desired state, generation, ownership, errors and backoff. The
+supervisor reconciles UI independently from agent recovery and message delivery, so a
+failure in one does not skip the others.
+
+If the managed process still runs but its pane metadata is missing or damaged, the
+reconciler can verify the exact runner command and restore the metadata in place. It
+does not remove adjacent panes without a verified UI identity. Losing the entire
+orchestrator window recovers the orchestrator first and then creates one managed pane
+in the replacement window; unrelated worker runs are not restarted.
+
+In a managed pane, `q` or `Ctrl+C` outside a form records a durable hide request, restores
+the terminal, and exits; the next supervisor pass removes the pane. `Ctrl+C` inside a
+form cancels that form. An external pane kill leaves desired state enabled and can be
+recovered after backoff. A hide request is durable and prevents restart. Paused and
+completed workspaces may keep the interface available for inspection. Archive disables
+and cleans up the verified pane; UI ownership is not counted as an active domain
+process and does not block `clean`. Before downgrading the binary, run `workspace tui
+hide`, since an older launcher cannot identify the new pane type.
+
+The full screen, navigation, action and terminal behavior is documented in
+[`tui.md`](tui.md).

@@ -101,6 +101,22 @@ var commandHelpSpecs = map[string]commandHelp{
 		"List workspaces known to this project. Use --short (or --map) for a compact name-to-ID map.",
 		"workspace list --short",
 	),
+	"workspace tui": h(
+		"Open the interactive project and workspace browser. Requires a terminal on both stdin and stdout. The managed companion panel is controlled by workspace tui show, hide and status.",
+		"workspace tui --project ./repo --theme dark",
+	),
+	"workspace tui show": h(
+		"Enable the managed companion panel and reconcile it into an existing orchestrator window. --operation-key makes retries idempotent.",
+		"workspace tui show --workspace ws_01 --operation-key tui-show:ws_01",
+	),
+	"workspace tui hide": h(
+		"Disable and remove only the verified managed companion panel. --operation-key makes retries idempotent.",
+		"workspace tui hide --workspace ws_01 --operation-key tui-hide:ws_01",
+	),
+	"workspace tui status": h(
+		"Show desired state, generation, pane/window ownership and recovery status for the managed companion panel.",
+		"workspace tui status --workspace ws_01 --json",
+	),
 	"workspace open": h(
 		"Choose a workspace interactively when no selector is supplied, then attach to its tmux session. A selector can be an ID or title.",
 		"workspace open\nworkspace open specification",

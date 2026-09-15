@@ -94,6 +94,8 @@ Aktualny zakres obejmuje:
 - integrację zmian oraz przygotowanie/publikację change requests;
 - kontrolowane wznowienie, uzgadnianie awarii, archiwizację i sprzątanie;
 - workflow `plan-first` oraz rozbudowany, zgodny wstecznie `issue-resolution`.
+- interaktywny TUI do przeglądania tego samego stanu, nawigacji po taskach i
+  uruchamiania jawnie dozwolonych operacji core.
 
 Poza aktualnym zakresem pozostają zdalne workery, koordynacja wielu komputerów,
 kryptograficzne potwierdzanie tożsamości człowieka, rozliczanie tokenów lub kosztów
@@ -102,14 +104,19 @@ systemowymi.
 
 ## Doświadczenie użytkownika
 
-CLI i formaty maszynowe są obecnie podstawowym interfejsem. Najczęstsza ścieżka to
-inicjalizacja projektu, instalacja skilla, utworzenie workspace i dołączenie do sesji
-tmux. Komendy odczytu mają zwięzły wariant `--short`, a automatyzacje korzystają z
-`--json`, `--non-interactive` i `--operation-key`.
+CLI i formaty maszynowe pozostają podstawowym interfejsem agentów i automatyzacji.
+Programista może użyć TUI do przeglądania workspace'ów, tasków, wykonania, worktrees,
+wyników i runtime, a następnie skoczyć do zweryfikowanego panelu tmux. TUI korzysta
+z tych samych zapytań i operacji core co CLI; każda mutacja ma potwierdzenie oraz
+guardy bieżącej rewizji, próby lub RunID. Nie dodaje akcji wysyłania wiadomości,
+ACK-owania inboxa ani automatycznej akceptacji wyników.
 
-Interfejs powinien stopniowo zmniejszać koszt poznawczy bez osłabiania jawnych
-kontraktów. Planowane TUI ma być wygodną prezentacją tego samego stanu i tych samych
-operacji, a nie drugim niezależnym systemem sterowania.
+TUI może działać ręcznie jako przeglądarka albo jako zarządzany panel obok orkiestratora.
+Supervisor odtwarza wyłącznie panel o zapisanej, zweryfikowanej tożsamości; q w tym
+panelu zapisuje hide przed wyjściem. Podczas pause i completed panel może pozostać
+dostępny do przeglądu, a archive go sprząta. Brak tmux ogranicza nawigację runtime,
+ale pozostawia dostępny zapisany stan workspace'u. Kontrakt ekranów i skrótów opisuje
+[docs/tui.md](docs/tui.md).
 
 Instrukcje instalacji i użycia znajdują się w [README.md](README.md). Szczegóły
 techniczne opisuje [ARCHITECTURE.md](ARCHITECTURE.md), a planowane zmiany są utrzymywane

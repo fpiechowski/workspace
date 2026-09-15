@@ -236,6 +236,21 @@ func (s *Service) Tick(ctx context.Context) error {
 	return errors.Join(failures...)
 }
 func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
+	var failures []error
+	if status.Workspace.Status != "archived" {
+		if err := s.tickWorkspaceAgents(ctx, status); err != nil {
+			failures = append(failures, fmt.Errorf("agent runtime: %w", err))
+		}
+	}
+	if _, managed := s.Runtime.(ManagedUIRuntime); managed {
+		if err := s.ReconcileInterface(ctx, status.Workspace.ID); err != nil {
+			failures = append(failures, fmt.Errorf("managed interface: %w", err))
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func (s *Service) tickWorkspaceAgents(ctx context.Context, status Status) error {
 	if status.Workspace.Status == "archived" {
 		return nil
 	}
