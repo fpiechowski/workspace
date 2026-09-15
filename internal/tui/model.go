@@ -18,6 +18,7 @@ type route struct {
 	Query        string
 	SelectedID   string
 	StatusFilter string
+	Sort         string
 }
 
 type routeKey struct {
@@ -29,13 +30,14 @@ type routeKey struct {
 }
 
 type routeMemory struct {
-	Query, SelectedID, StatusFilter string
-	ViewportOffset                  int
-	FocusedPanel                    int
+	Query, SelectedID, StatusFilter, Sort string
+	ViewportOffset                        int
+	FocusedPanel                          int
 }
 
 type collectionItem struct {
 	ID, Kind, Title, Subtitle, State string
+	At                               time.Time
 }
 
 type Model struct {
@@ -100,6 +102,7 @@ type Model struct {
 	worktreePending    bool
 	mutationPending    bool
 	closed             bool
+	animationFrame     int
 }
 
 type projectMsg struct {
@@ -139,6 +142,7 @@ type previewMsg struct {
 	err        error
 }
 type refreshTimerMsg struct{}
+type animationMsg struct{}
 type navigationTargetMsg struct {
 	generation uint64
 	target     core.NavigationTarget
@@ -197,7 +201,7 @@ func (m *Model) Init() tea.Cmd {
 	if !m.projectFound || m.initialError != "" || m.backend == nil {
 		return nil
 	}
-	return m.beginRefresh()
+	return tea.Batch(m.beginRefresh(), animationTick())
 }
 
 func (m *Model) activeWorkspace() string { return m.workspaceID }
@@ -218,6 +222,7 @@ func (m *Model) activateRoute(next route) {
 		next.Query = memory.Query
 		next.SelectedID = memory.SelectedID
 		next.StatusFilter = memory.StatusFilter
+		next.Sort = memory.Sort
 		m.focusedPanel = memory.FocusedPanel
 	} else {
 		m.focusedPanel = 0
@@ -247,6 +252,7 @@ func (m *Model) rememberRoute() {
 		Query:          m.route.Query,
 		SelectedID:     m.route.SelectedID,
 		StatusFilter:   m.route.StatusFilter,
+		Sort:           m.route.Sort,
 		ViewportOffset: m.viewport.YOffset,
 		FocusedPanel:   m.focusedPanel,
 	}

@@ -6,22 +6,24 @@ func statusBadge(state string) string {
 	state = strings.ToLower(strings.TrimSpace(state))
 	switch state {
 	case "running", "starting", "active":
-		return "[>] " + state
+		return "● " + state
 	case "failed", "error":
-		return "[x] " + state
+		return "× " + state
 	case "blocked", "needs_changes":
-		return "[!] " + state
+		return "! " + state
 	case "accepted", "completed", "ready":
-		return "[+] " + state
+		return "✓ " + state
+	case "submitted", "awaiting_review", "pending_review":
+		return "◈ " + state
 	case "idle", "pending", "paused":
-		return "[-] " + state
+		return "○ " + state
 	case "stopped", "archived", "closed", "removed":
-		return "[#] " + state
+		return "■ " + state
 	case "interrupted", "exited":
-		return "[~] " + state
+		return "◇ " + state
 	case "":
-		return "[-] unknown"
+		return "○ unknown"
 	default:
-		return "[?] " + state
+		return "· " + state
 	}
 }

@@ -7,9 +7,20 @@ orkiestratora ani supervisora przez sam odczyt lub odświeżenie.
 ## Ekrany i nawigacja
 
 Picker projektu pokazuje tytuł, status, fazę, aktywne Runy, problemy, pełny ID, ścieżkę,
-źródło wejścia i datę utworzenia. Wybór workspace'u otwiera dashboard z licznikami,
-orkiestratorem, maksymalnie pięcioma uwagami i pięcioma ostatnimi zapisanymi
-zdarzeniami. Pełne listy są pod Tasks, Worktrees, Results i More.
+źródło wejścia i datę utworzenia. Wybór workspace'u otwiera Work: postęp zaakceptowanych zadań,
+liczbę zadań w toku, oczekujących na review i zablokowanych oraz liczbę aktywnych
+agentów. Podsumowanie pozostaje widoczne przy przełączaniu list Current work, Tasks,
+Needs attention i Recent recorded activity. Current work pokazuje orkiestratora,
+aktywne wykonania oraz niezamknięte sesje bieżących prób niezaakceptowanych zadań.
+Każdy wiersz łączy agenta z zadaniem, stanem i modelem. Tasks pokazuje stan zadania
+oraz liczbę aktywnych wykonań, sesji i runów jego bieżącej próby. Zakończenie runu
+nie oznacza akceptacji zadania; procent postępu liczy wyłącznie zadania accepted.
+
+Stan ma symbol i podpis; running/starting mają animowany wskaźnik, także bez koloru.
+`s` zmienia sortowanie (priorytet pracy, nazwa, ostatnie wykonanie); zaznaczenie
+pozostaje przypięte do ID. Widok szeroki dodaje szczegóły zaznaczenia obok listy,
+a wąski zachowuje postęp i dwuwierszowe wpisy. Przy małej wysokości wpis zajmuje
+jeden wiersz. Pasek skrótów ma zawsze zarezerwowany ostatni wiersz.
 
 More zawiera Sessions, Agents, Services, Decisions, Change requests, Runtime, Needs
 attention, Recent recorded activity i Documents. Task prowadzi do bieżących sesji,
@@ -20,21 +31,24 @@ i read-only readerów oraz osobną, oznaczoną czasem obserwację Git.
 
 `Enter` otwiera zaznaczenie, a `Esc` wraca lub czyści filtr. Na kolekcjach `/` edytuje
 filtr substring po nazwie, ID i podtytule; porównanie nie rozróżnia wielkości liter.
-`Esc` podczas edycji przywraca poprzednią wartość. `f` przełącza aktywny/archiwalny
+`Esc` podczas edycji przywraca poprzednią wartość i zaznaczenie. Poza edycją czyści najpierw filtr tekstowy, następnie statusowy, zanim wróci do poprzedniej strony. `f` przełącza aktywny/archiwalny
 widok workspace'ów i statusowe lub historyczne filtry odpowiednich kolekcji. Na Dashboard
-`Tab`/`Shift+Tab` zmienia fokus między Overview, Orchestrator, Needs attention i Recent
+`Tab`/`Shift+Tab` zmienia fokus między Current work, Tasks, Needs attention i Recent
 recorded activity. Na Results zmienia typ wyniku: artifacts, handoffs lub checks. Użyj
 `1`–`5`, aby przejść do głównych stron.
 
 | Klawisz | Działanie |
 |---|---|
-| `1`–`5` | Overview, Tasks, Worktrees, Results, More |
+| `1`–`5` | Work, Tasks, Worktrees, Results, More |
 | `Up`/`Down`, `j`/`k` | Zmiana zaznaczenia lub przewijanie szczegółów |
 | `Enter` | Otwórz zaznaczenie; nie uruchamia mutacji |
 | `Esc` | Anuluj formularz, wyjdź z edycji filtra, wyczyść filtr albo wróć |
 | `/` | Edytuj filtr kolekcji |
 | `f` | Przełącz status albo historię na wspieranych listach |
 | `Tab` / `Shift+Tab` | Zmień fokus panelu Dashboard albo typ wyników |
+| `s` | Sortuj według priorytetu, nazwy lub ostatniego wykonania |
+| `l` | Wróć do Current work |
+| `t` | Otwórz terminal agenta albo potwierdź start/wznowienie |
 | `a` | Otwórz dostępne akcje zaznaczenia lub workspace'u |
 | `g` | Skocz do zweryfikowanego celu tmux |
 | `w` / `o` | Picker workspace'u / strona orkiestratora |
@@ -42,9 +56,16 @@ recorded activity. Na Results zmienia typ wyniku: artifacts, handoffs lub checks
 | `?` | Pomoc kontekstowa |
 | `q` / `Ctrl+C` | Zakończ ręczną instancję; ukryj zarządzany panel |
 
-W formularzu Huh klawisze należą do formularza. `Ctrl+C` anuluje otwarty formularz;
+`Esc` i `Ctrl+C` anulują otwarty formularz, także jego filtr i potwierdzenie; pozostałe klawisze należą do formularza. `Ctrl+C`
 w zarządzanym panelu poza formularzem zapisuje hide. Podczas edycji tekstu filtr przejmuje
 klawisze, więc `q`, `g` i cyfry nie uruchomią skrótów aplikacji.
+
+`t` na aktywnej sesji otwiera jej dokładny bieżący Run po weryfikacji ownership.
+Na nieaktywnej sesji prosi o potwierdzenie wznowienia, tworzy nowy Run przez core
+i po sukcesie otwiera jego terminal. `o`, a następnie `t`, otwiera orkiestratora
+lub potwierdzenie jego uruchomienia. Zadanie z wieloma sesjami otwiera ich listę do
+jawnego wyboru; zadanie bez sesji wskazuje potrzebę delegacji przez orkiestratora.
+Historyczny Run pozostaje dokładnym celem i nie jest automatycznie wznawiany.
 
 ## Akcje i synchronizacja
 

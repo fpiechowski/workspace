@@ -45,6 +45,9 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 			targetID, kind = item.ID, item.Kind
 		}
 	}
+	if kind == "orchestrator" {
+		targetID = ""
+	}
 	add := func(label, action string) { actions = append(actions, huh.NewOption(sanitizeLine(label), action)) }
 	switch kind {
 	case "task":
@@ -58,6 +61,13 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 			} else if session.ClosedAt == nil {
 				add("Resume this session", "resume_session")
 				add("Close idle session", "close_session")
+			}
+		}
+	case "run":
+		if run, ok := m.run(targetID); ok {
+			if session, ok := findSession(m.snapshot.Status.Sessions, run.SessionID); ok && session.CurrentRunID == run.ID && run.Active() {
+				targetID = session.ID
+				add("Stop current run", "stop_run")
 			}
 		}
 	case "service":
@@ -301,6 +311,13 @@ func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
 	m.notice = "Action completed. Refreshing workspace…"
 	m.generation++
 	m.projectPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false
+	if message.call.OpenTerminal {
+		ref := core.EntityRef{Kind: "session", ID: message.call.TargetID}
+		if message.call.Action == "start_orchestrator" {
+			ref = core.EntityRef{Kind: "orchestrator"}
+		}
+		return tea.Batch(m.beginRefresh(), m.jump(ref))
+	}
 	return m.beginRefresh()
 }
 

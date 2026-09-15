@@ -22,6 +22,7 @@ type Navigator interface {
 }
 
 type ActionCall struct {
+	OpenTerminal       bool
 	Action             string
 	TargetID           string
 	WorkspaceID        string

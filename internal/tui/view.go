@@ -30,7 +30,12 @@ func (m *Model) View() string {
 		lines = append(lines, body...)
 	}
 	lines = append(lines, m.footer())
-	return fitFrame(strings.Join(lines, "\n"), m.width, m.height)
+	// Reserve the last row for controls even when a form or body overflows.
+	body := strings.Join(lines[:len(lines)-1], "\n")
+	if m.notice != "" {
+		return fitFrame(body, m.width, max(1, m.height-2)) + "\n" + rowText(m.notice, m.width) + "\n" + ansi.TruncateWc(m.footer(), m.width, "")
+	}
+	return fitFrame(body, m.width, max(1, m.height-1)) + "\n" + ansi.TruncateWc(m.footer(), m.width, "")
 }
 
 func (m *Model) header() string {
@@ -47,7 +52,7 @@ func (m *Model) header() string {
 		if name == "" {
 			name = m.workspaceID
 		}
-		parts = append(parts, "Project", project, "›", name, shortID(m.workspaceID))
+		parts = append(parts, name)
 		parts = append(parts, statusBadge(m.snapshot.Status.Workspace.Status))
 		if phase := m.snapshot.Status.Workspace.Workflow; phase != nil && phase.Phase != "" {
 			parts = append(parts, "·", phase.Phase)
@@ -64,9 +69,6 @@ func (m *Model) header() string {
 	} else if !m.lastSuccess.IsZero() {
 		parts = append(parts, "·", "updated "+timeAgo(m.lastSuccess)+" ago")
 	}
-	if m.notice != "" {
-		parts = append(parts, "·", m.notice)
-	}
 	line := strings.Join(parts, " ")
 	return m.palette.style(m.palette.text, true).Render(ansi.TruncateWc(sanitizeLine(line), m.width, "…"))
 }
@@ -76,14 +78,14 @@ func (m *Model) tabs() string {
 		return m.palette.style(m.palette.info, true).Render("Workspaces") + "  / filter  f status"
 	}
 	labels := []struct{ key, page, name string }{
-		{"1", "dashboard", "Overview"}, {"2", "tasks", "Tasks"}, {"3", "worktrees", "Worktrees"}, {"4", "results", "Results"}, {"5", "more", "More"},
+		{"1", "dashboard", "Work"}, {"2", "tasks", "Tasks"}, {"3", "worktrees", "Worktrees"}, {"4", "results", "Results"}, {"5", "more", "More"},
 	}
 	var out []string
-	compact := m.width < 80
-	for _, label := range labels {
+	compact := m.width < 60
+	for i, label := range labels {
 		name := label.name
 		if compact {
-			name = label.key + " " + name
+			name = label.key + " " + []string{"Work", "Tasks", "Trees", "Out", "More"}[i]
 		} else {
 			name = label.key + " " + name
 		}
@@ -92,6 +94,9 @@ func (m *Model) tabs() string {
 		} else {
 			out = append(out, name)
 		}
+	}
+	if compact {
+		return strings.Join(out, " ")
 	}
 	return strings.Join(out, "   ")
 }
@@ -168,33 +173,7 @@ func appendFilterLine(filter string, lines []string) []string {
 }
 
 func (m *Model) dashboardView(mode layoutMode) []string {
-	if m.snapshotPending && m.snapshot.ObservedAt.IsZero() {
-		return []string{"Loading workspace…"}
-	}
-	if mode == layoutWide {
-		panels := m.dashboardPanels()
-		colWidth := max(30, (m.width-3)/2)
-		rowHeight := max(5, (m.height-7)/2)
-		var rendered []string
-		for _, index := range [][]int{{0, 1}, {2, 3}} {
-			left := m.panel(panels[index[0]].Title, panels[index[0]].Lines, colWidth, rowHeight, index[0] == m.focusedPanel)
-			right := m.panel(panels[index[1]].Title, panels[index[1]].Lines, colWidth, rowHeight, index[1] == m.focusedPanel)
-			rendered = append(rendered, lipgloss.JoinHorizontal(lipgloss.Top, left, " ", right))
-		}
-		return rendered
-	}
-	if mode == layoutShort {
-		panels := m.dashboardPanels()
-		if m.focusedPanel >= 2 {
-			focused := panels[m.focusedPanel]
-			return []string{m.panel(focused.Title, focused.Lines, m.width-2, max(4, m.height-5), true)}
-		}
-		colWidth := (m.width - 2) / 2
-		first := lipgloss.JoinHorizontal(lipgloss.Top, m.panel("Overview", panels[0].Lines, colWidth, 5, m.focusedPanel == 0), " ", m.panel("Orchestrator", panels[1].Lines, colWidth, 5, m.focusedPanel == 1))
-		second := m.panel(panels[2].Title, panels[2].Lines, m.width-2, max(4, m.height-12), false)
-		return []string{first, second}
-	}
-	return []string{m.viewport.View()}
+	return m.workDashboard()
 }
 
 func (m *Model) collectionView(mode layoutMode) []string {
@@ -202,7 +181,7 @@ func (m *Model) collectionView(mode layoutMode) []string {
 	if m.projectPending || m.snapshotPending {
 		return append([]string{"Refreshing…"}, m.renderItems(items, m.width-2, m.height-7)...)
 	}
-	count := fmt.Sprintf("%d / %d", len(items), len(m.allItems()))
+	count := fmt.Sprintf("%s · %d / %d · sort: %s", m.collectionTitle(), len(items), len(m.allItems()), firstNonempty(m.route.Sort, "priority"))
 	if m.route.Query != "" {
 		count += " · filter: " + sanitizeLine(m.route.Query)
 	}
@@ -243,32 +222,39 @@ func (m *Model) renderItems(items []collectionItem, width, height int) []string 
 	if selectedID == "" && len(items) > 0 {
 		selectedID = items[0].ID
 	}
-	start := 0
-	selected := -1
+	rowHeight := 2
+	if height < 4 {
+		rowHeight = 1
+	}
+	capacity := max(1, height/rowHeight)
+	selected := 0
 	for i, item := range items {
 		if item.ID == selectedID {
 			selected = i
 			break
 		}
 	}
-	if selected >= height {
-		start = selected - height + 1
-	}
-	end := min(len(items), start+height)
-	rows := make([]string, 0, end-start)
+	start := max(0, selected-capacity+1)
+	end := min(len(items), start+capacity)
+	rows := make([]string, 0, height)
 	for i := start; i < end; i++ {
 		item := items[i]
 		marker := "  "
 		if item.ID == selectedID {
-			marker = "> "
+			marker = "› "
 		}
-		state := statusBadge(item.State)
-		line := marker + sanitizeLine(item.Title) + "  " + state + "  " + sanitizeLine(item.Subtitle)
-		line = ansi.TruncateWc(line, width, "…")
-		if item.ID == m.route.SelectedID {
-			line = m.palette.style(m.palette.focus, true).Render(line)
+		badge := m.stateLabel(item.State)
+		if item.State == "" {
+			badge = ""
 		}
-		rows = append(rows, line)
+		title := rowText(item.Title, width-ansi.StringWidth(badge)-4)
+		if item.ID == selectedID {
+			title = m.palette.style(m.palette.focus, true).Render(title)
+		}
+		rows = append(rows, marker+badge+"  "+title)
+		if rowHeight == 2 {
+			rows = append(rows, m.palette.style(m.palette.muted, false).Render("  "+rowText(item.Subtitle, width-2)))
+		}
 	}
 	return rows
 }
@@ -276,7 +262,20 @@ func (m *Model) renderItems(items []collectionItem, width, height int) []string 
 func (m *Model) itemSummary(items []collectionItem) []string {
 	for _, item := range items {
 		if item.ID == m.route.SelectedID {
-			lines := []string{item.Title, statusBadge(item.State), "ID: " + item.ID, "", item.Subtitle}
+			lines := []string{item.Title, statusBadge(item.State), "t terminal · Enter details", "", item.Subtitle, "", "ID: " + item.ID}
+			if item.Kind == "session" {
+				if session, ok := findSession(m.snapshot.Status.Sessions, item.ID); ok {
+					if run, live := m.currentRun(session); live {
+						lines = append(lines, "Run: "+run.ID, "Model: "+run.Route.Model, "Pane: "+firstNonempty(run.PaneID, "launching"))
+					} else {
+						lines = append(lines, "No live run · t asks to resume")
+					}
+					if task, ok := m.task(session.TaskID); ok {
+						lines = append(lines, "Task: "+task.Title, statusBadge(task.State))
+					}
+					return truncateLines(lines, m.width*3/5)
+				}
+			}
 			lines = append(lines, m.quickDetails(item.Kind, item.ID)...)
 			return truncateLines(lines, m.width*3/5)
 		}
@@ -304,17 +303,20 @@ func (m *Model) footer() string {
 	if m.form != nil {
 		return "Huh form   Enter confirm   Esc cancel"
 	}
-	if m.actionFailure && m.lastAction != nil {
-		return "y retry the same operation key · r refresh · " + m.exitHint()
-	}
 	if m.filtering {
 		return m.filterInput.View() + "  Enter apply · Esc cancel"
 	}
-	if m.route.Query != "" {
+	if m.actionFailure && m.lastAction != nil {
+		return "y retry the same operation key · r refresh · " + m.exitHint()
+	}
+	if m.route.Query != "" || m.route.StatusFilter != "" {
 		return "Esc clear filter · ↑/↓ select · Enter open · / edit"
 	}
 	if m.route.Page == "dashboard" {
-		return "Tab/Shift+Tab panel   1–5 pages   a actions   g jump   w workspaces   o orchestrator   ? help   " + m.exitHint()
+		if m.width < 60 {
+			return "t terminal  Tab view  / filter  ? help"
+		}
+		return "t terminal  Tab view  / filter  s sort  a actions  ? help  " + m.exitHint()
 	}
 	if m.route.Page == "project" {
 		if m.managed {
@@ -324,14 +326,14 @@ func (m *Model) footer() string {
 	}
 	if m.isCollectionPage() {
 		if m.managed {
-			return "↑/↓ select   Enter open   / filter   f state/history   1–5 pages   g jump   r refresh   Esc back   q hide"
+			return "t terminal  Enter details  / filter  s sort  f state  a actions  q hide"
 		}
-		return "↑/↓ select   Enter open   / filter   f state/history   1–5 pages   g jump   r refresh   Esc back"
+		return "t terminal  Enter details  / filter  s sort  f state  a actions  Esc back"
 	}
 	if m.managed {
-		return "1–5 pages   a actions   g jump   w workspaces   o orchestrator   ? help   q hide"
+		return "t terminal  a actions  g jump  Esc back  ? help  q hide"
 	}
-	return "1–5 pages   a actions   g jump   w workspaces   o orchestrator   ? help   q quit"
+	return "t terminal  a actions  g jump  Esc back  ? help  q quit"
 }
 
 func (m *Model) helpView() string {
@@ -346,7 +348,10 @@ func (m *Model) helpView() string {
 		"  /           filter by case-insensitive name or ID",
 		"  f           cycle status/history filters on supported collections",
 		"  Tab / Shift+Tab  cycle focused dashboard panels or result types",
-		"  1–5         Overview, Tasks, Worktrees, Results, More",
+		"  1–5         Work, Tasks, Worktrees, Results, More",
+		"  t           open terminal / confirm starting or resuming a run",
+		"  l           current work",
+		"  s           sort by priority, name, recent execution",
 		"  w / o       choose workspace / inspect orchestrator",
 		"  v           view all attention items from the dashboard",
 		"  g           jump to a verified live tmux target",

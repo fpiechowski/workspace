@@ -192,7 +192,7 @@ func TestTabCyclesDashboardPanelsAndResultsTypes(t *testing.T) {
 		focus int
 		text  string
 	}{
-		{key: tea.KeyMsg{Type: tea.KeyTab}, focus: 1, text: "Orchestrator"},
+		{key: tea.KeyMsg{Type: tea.KeyTab}, focus: 1, text: "Tasks"},
 		{key: tea.KeyMsg{Type: tea.KeyTab}, focus: 2, text: "Needs attention"},
 		{key: tea.KeyMsg{Type: tea.KeyTab}, focus: 3, text: "Recent recorded activity"},
 	} {

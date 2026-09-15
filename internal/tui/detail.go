@@ -41,6 +41,8 @@ func (m *Model) dashboardSectionTitle(index int, title string) string {
 func (m *Model) focusDashboardPanel(delta int) {
 	const panelCount = 4
 	m.focusedPanel = (m.focusedPanel + delta + panelCount) % panelCount
+	m.route.Query, m.route.SelectedID, m.route.StatusFilter = "", "", ""
+	m.validateSelection()
 	m.rebuildViewport()
 	if layoutFor(m.width, m.height) != layoutNarrow {
 		return
@@ -76,7 +78,7 @@ func (m *Model) detailContent() string {
 		if !ok {
 			return missingEntity("task", id)
 		}
-		lines = append(lines, "Task", task.Title, statusBadge(task.State), "ID: "+task.ID, fmt.Sprintf("Attempt %d · profile %s · role %s", task.Attempt, task.Profile, task.Role), "", "Goal", task.Goal)
+		lines = append(lines, "Task", task.Title, statusBadge(task.State), m.taskItem(task).Subtitle, "t open / resume terminal · 1 sessions · 3 results", "ID: "+task.ID, fmt.Sprintf("Attempt %d · profile %s · role %s", task.Attempt, task.Profile, task.Role), "", "Goal", task.Goal)
 		if task.Reason != "" {
 			lines = append(lines, "", "Reason", task.Reason)
 		}

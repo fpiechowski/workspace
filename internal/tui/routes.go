@@ -13,6 +13,21 @@ func (m *Model) allItems() []collectionItem {
 	s := m.snapshot
 	items := []collectionItem{}
 	switch m.route.Page {
+	case "dashboard":
+		switch m.focusedPanel {
+		case 0:
+			return m.workItems()
+		case 1:
+			for _, task := range s.Status.Workspace.Tasks {
+				items = append(items, m.taskItem(task))
+			}
+		case 2:
+			return m.attentionItems()
+		case 3:
+			return m.activityItems()
+		}
+	case "work":
+		return m.workItems()
 	case "project":
 		for _, workspace := range m.project.Workspaces {
 			if m.route.StatusFilter == "active" && workspace.Status == "archived" || m.route.StatusFilter == "archived" && workspace.Status != "archived" {
@@ -26,7 +41,7 @@ func (m *Model) allItems() []collectionItem {
 			if workspace.Error != "" {
 				state = "error"
 			}
-			items = append(items, collectionItem{ID: workspace.ID, Kind: "workspace", Title: title, Subtitle: fmt.Sprintf("%s · %s · active %d · problems %d", workspace.Phase, shortID(workspace.ID), workspace.ActiveRuns, workspace.Problems), State: state})
+			items = append(items, collectionItem{ID: workspace.ID, Kind: "workspace", Title: title, Subtitle: fmt.Sprintf("%s · %s · active %d · problems %d", workspace.Phase, shortID(workspace.ID), workspace.ActiveRuns, workspace.Problems), State: state, At: workspace.CreatedAt})
 		}
 	case "more":
 		items = []collectionItem{
@@ -45,7 +60,7 @@ func (m *Model) allItems() []collectionItem {
 			if m.route.ParentID != "" && task.ID != m.route.ParentID {
 				continue
 			}
-			items = append(items, collectionItem{ID: task.ID, Kind: "task", Title: task.Title, Subtitle: fmt.Sprintf("attempt %d · %s · %s", task.Attempt, task.State, shortID(task.WorktreeID)), State: task.State})
+			items = append(items, m.taskItem(task))
 		}
 	case "worktrees":
 		for _, worktree := range s.Status.Worktrees {
@@ -92,7 +107,7 @@ func (m *Model) allItems() []collectionItem {
 						}
 					}
 				}
-				items = append(items, collectionItem{ID: artifact.ID, Kind: "artifact", Title: artifact.Name, Subtitle: artifact.Kind + attempt + " · " + artifact.Digest, State: state})
+				items = append(items, collectionItem{ID: artifact.ID, Kind: "artifact", Title: artifact.Name, Subtitle: artifact.Kind + attempt + " · " + artifact.Digest, State: state, At: artifact.CreatedAt})
 			}
 		case "handoffs":
 			for _, handoff := range s.Handoffs {
@@ -109,7 +124,7 @@ func (m *Model) allItems() []collectionItem {
 				if handoff.Stale {
 					state = "stale"
 				}
-				items = append(items, collectionItem{ID: handoff.ID, Kind: "handoff", Title: handoff.Summary, Subtitle: fmt.Sprintf("%s · task %s · attempt %d", handoff.Outcome, shortID(handoff.TaskID), handoff.Attempt), State: state})
+				items = append(items, collectionItem{ID: handoff.ID, Kind: "handoff", Title: handoff.Summary, Subtitle: fmt.Sprintf("%s · task %s · attempt %d", handoff.Outcome, shortID(handoff.TaskID), handoff.Attempt), State: state, At: handoff.CreatedAt})
 			}
 		case "checks":
 			for _, check := range s.Checks {
@@ -129,6 +144,9 @@ func (m *Model) allItems() []collectionItem {
 		for _, session := range s.Status.Sessions {
 			if m.route.ParentID != "" {
 				if task, ok := m.task(m.route.ParentID); ok {
+					if session.TaskID != task.ID {
+						continue
+					}
 					if m.route.StatusFilter == "history" && session.TaskAttempt == task.Attempt || m.route.StatusFilter != "history" && session.TaskAttempt != task.Attempt {
 						continue
 					}
@@ -143,14 +161,14 @@ func (m *Model) allItems() []collectionItem {
 			if !m.isTask(m.route.ParentID) && (m.route.StatusFilter == "current" && session.LifecycleState == "closed" || m.route.StatusFilter == "history" && session.LifecycleState != "closed") {
 				continue
 			}
-			items = append(items, collectionItem{ID: session.ID, Kind: "session", Title: session.AgentSnapshot.Name, Subtitle: fmt.Sprintf("%s · %s · attempt %d", session.LifecycleState, shortID(session.CurrentRunID), session.TaskAttempt), State: session.State})
+			items = append(items, collectionItem{ID: session.ID, Kind: "session", Title: session.AgentSnapshot.Name, Subtitle: fmt.Sprintf("%s · %s · attempt %d", session.LifecycleState, shortID(session.CurrentRunID), session.TaskAttempt), State: session.State, At: session.LastActiveAt})
 		}
 	case "runs":
 		for _, run := range s.Status.Runs {
 			if m.route.ParentID != "" && run.SessionID != m.route.ParentID {
 				continue
 			}
-			items = append(items, collectionItem{ID: run.ID, Kind: "run", Title: run.ID, Subtitle: fmt.Sprintf("%s · %s / %s · %s", run.State, run.Route.Provider, run.Route.Model, run.ClientThreadID), State: run.State})
+			items = append(items, collectionItem{ID: run.ID, Kind: "run", Title: run.ID, Subtitle: fmt.Sprintf("%s · %s / %s · %s", run.State, run.Route.Provider, run.Route.Model, run.ClientThreadID), State: run.State, At: run.CreatedAt})
 		}
 	case "agents":
 		seen := make(map[string]bool)
@@ -215,6 +233,7 @@ func (m *Model) filteredItems() []collectionItem {
 		}
 		out = append(out, item)
 	}
+	m.sortItems(out)
 	return out
 }
 
@@ -396,7 +415,7 @@ func (m *Model) attentionItems() []collectionItem {
 				continue
 			}
 			reportedRuns[run.ID] = struct{}{}
-			items = append(items, collectionItem{ID: run.ID, Kind: "run", Title: session.AgentSnapshot.Name + " run", Subtitle: run.Error, State: run.State})
+			items = append(items, collectionItem{ID: run.ID, Kind: "run", Title: session.AgentSnapshot.Name + " run", Subtitle: run.Error, State: run.State, At: run.CreatedAt})
 		}
 	}
 	if m.uiError != "" {

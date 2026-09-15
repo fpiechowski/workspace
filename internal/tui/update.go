@@ -12,6 +12,12 @@ import (
 
 func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
+	case animationMsg:
+		if m.quit || m.closed {
+			return m, nil
+		}
+		m.animationFrame = (m.animationFrame + 1) % 10
+		return m, animationTick()
 	case tea.WindowSizeMsg:
 		m.width, m.height = max(1, msg.Width), max(1, msg.Height)
 		m.filterInput.Width = max(8, min(40, m.width-10))
@@ -217,6 +223,14 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.form != nil {
+		if msg.Type == tea.KeyEsc || key == "ctrl+c" {
+			m.form = nil
+			m.formMode = ""
+			m.formConfirm = false
+			m.notice = "Action cancelled."
+			m.rebuildViewport()
+			return m, nil
+		}
 		return m.updateForm(msg)
 	}
 	if m.actionPending {
@@ -227,9 +241,6 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filtering = false
 		m.filterInput.Blur()
 		return m, m.hideManaged()
-	}
-	if key == "y" && m.actionFailure && m.lastAction != nil {
-		return m, m.runAction(*m.lastAction)
 	}
 	if m.filtering {
 		switch key {
@@ -254,6 +265,13 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.rebuildViewport()
 		return m, cmd
 	}
+	if key == "y" && m.actionFailure && m.lastAction != nil {
+		return m, m.runAction(*m.lastAction)
+	}
+	if key == "esc" && m.showHelp {
+		m.showHelp = false
+		return m, nil
+	}
 	if key == "ctrl+c" || key == "q" {
 		if m.managed {
 			return m, m.hideManaged()
@@ -265,6 +283,12 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.route.Query != "" {
 			m.route.Query, m.route.SelectedID = "", ""
 			m.filterInput.SetValue("")
+			m.rebuildViewport()
+			return m, nil
+		}
+		if m.route.StatusFilter != "" {
+			m.route.StatusFilter = ""
+			m.validateSelection()
 			m.rebuildViewport()
 			return m, nil
 		}
@@ -287,6 +311,30 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.projectPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false
 		m.loadError, m.runtimeError, m.uiError = "", "", ""
 		return m, m.beginRefresh()
+	}
+	if key == "s" && m.isCollectionPage() {
+		switch m.route.Sort {
+		case "":
+			m.route.Sort = "name"
+		case "name":
+			m.route.Sort = "recent"
+		default:
+			m.route.Sort = ""
+		}
+		m.rebuildViewport()
+		return m, nil
+	}
+	if key == "l" && m.workspaceID != "" {
+		m.navigate(route{Page: "dashboard"})
+		m.focusedPanel = 0
+		m.route.Query = ""
+		m.route.SelectedID = ""
+		m.route.StatusFilter = ""
+		m.validateSelection()
+		return m, nil
+	}
+	if key == "t" {
+		return m, m.openTerminal()
 	}
 	if key == "w" {
 		m.push(route{Page: "project"})
@@ -495,7 +543,7 @@ func (m *Model) validateSelection() {
 
 func (m *Model) isCollectionPage() bool {
 	switch m.route.Page {
-	case "project", "tasks", "worktrees", "results", "more", "sessions", "runs", "agents", "services", "decisions", "change_requests", "attention", "activity", "documents":
+	case "dashboard", "work", "project", "tasks", "worktrees", "results", "more", "sessions", "runs", "agents", "services", "decisions", "change_requests", "attention", "activity", "documents":
 		return true
 	default:
 		return false
@@ -555,12 +603,6 @@ func (m *Model) jumpSelected() tea.Cmd {
 	}
 	if m.route.Page == "worktree" || m.route.Page == "session" || m.route.Page == "run" || m.route.Page == "service" {
 		return m.jump(core.EntityRef{Kind: m.route.Page, ID: m.route.EntityID})
-	}
-	if m.route.Page == "dashboard" {
-		if session, _ := m.orchestrator(); session != nil {
-			return m.jump(core.EntityRef{Kind: "session", ID: session.ID})
-		}
-		return nil
 	}
 	if len(items) == 0 {
 		return nil

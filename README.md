@@ -180,10 +180,12 @@ workspace tui status --workspace ws_ID
 workspace tui hide --workspace ws_ID
 ```
 
-`1`–`5` otwierają Overview, Tasks, Worktrees, Results i More; na Dashboardzie
-`Tab`/`Shift+Tab` przełącza fokus panelu, a w Results typ wyniku. `Up`/`Down` lub
+`1`–`5` otwierają Work, Tasks, Worktrees, Results i More; na Dashboardzie
+`Tab`/`Shift+Tab` przełącza listę aktualnej pracy, zadań, uwag i aktywności, a w Results typ wyniku. `Up`/`Down` lub
 `j`/`k` zmienia zaznaczenie, `Enter` otwiera element, `Esc` wraca, `/` filtruje
-kolekcję, a `f` przełącza widok statusu lub historii. `a`
+kolekcję, a `f` przełącza widok statusu lub historii. `s` sortuje listę.
+`t` otwiera terminal zaznaczonego agenta lub potwierdzenie wznowienia;
+`o`, potem `t`, pozwala szybko otworzyć albo uruchomić orkiestratora. `a`
 otwiera tylko operacje dostępne dla zaznaczenia, a `g` przechodzi do zweryfikowanego
 okna/panelu tmux. `r` odświeża odczyt bez reconcile, `?` pokazuje pomoc. `--theme`
 przyjmuje `auto`, `dark` lub `light`; `--no-color` wymusza tekstowe badge.
