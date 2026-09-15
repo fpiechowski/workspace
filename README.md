@@ -10,8 +10,8 @@ i delegowanie implementacji do kolejnych worktree’ów.
   prompt, wynik procesu i dokładne pochodzenie operacji.
 - **Workspace**: WORKSPACE.md, AGENTS.md, WORKFLOW.md, zadania, artefakty i worktrees.
 
-Projekt i zakres: [plan](workspace-cli-design.md). Zakres implementacji i wyniki weryfikacji:
-[IMPLEMENTATION.md](IMPLEMENTATION.md).
+Wizja i granice produktu są opisane w [PRODUCT.md](PRODUCT.md), a model techniczny
+i mapa referencji w [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Instalacja
 

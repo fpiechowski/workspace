@@ -1,6 +1,6 @@
 # Issue input
 
-`workspace create --issue URL --workflow issue-resolution` retrieves an issue and
+`workspace create --issue URL --workflow plan-first` retrieves an issue and
 stores its title, body, original URL and retrieval time in `inputs/issue.md`.
 GitHub.com and GitLab.com select their installed, authenticated CLI automatically.
 For self-hosted services, configure the adapter explicitly:

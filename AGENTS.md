@@ -2,6 +2,21 @@
 
 Cel i zakres zmian określa bieżące polecenie użytkownika. Ten plik opisuje zasady pracy i weryfikacji.
 
+## Mapa dokumentacji
+
+- [README.md](README.md) — przeczytaj przy zmianach instalacji, konfiguracji, publicznego CLI albo instrukcji dla użytkownika.
+- [PRODUCT.md](PRODUCT.md) — przeczytaj przy decyzjach o zakresie, zachowaniu produktu, workflow i doświadczeniu użytkownika.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — przeczytaj przed zmianą modelu domenowego, trwałości, współbieżności, runtime, adapterów lub granic modułów.
+- [TODO.md](TODO.md) — przeczytaj podczas planowania nowej pracy; zawiera backlog, ale nie rozszerza zakresu bieżącego zlecenia.
+- [docs/clients.md](docs/clients.md) — przeczytaj przy zmianach adapterów agentów, native resume albo dostarczania wiadomości.
+- [docs/runtime.md](docs/runtime.md) — przeczytaj przy zmianach Session/Run, tmux, supervisora, usług, recovery albo cleanup.
+- [docs/operations.md](docs/operations.md) — przeczytaj przy zmianach mutacji, idempotencji, receipts, blokad albo efektów zewnętrznych.
+- [docs/revisions.md](docs/revisions.md) — przeczytaj przy zmianach inputu, migracji workflow lub unieważniania wyników.
+- [docs/checks.md](docs/checks.md) — przeczytaj przy zmianach przechwytywania i akceptacji dowodów testowych.
+- [docs/trackers.md](docs/trackers.md) — przeczytaj przy zmianach pobierania i snapshotowania issue.
+
+Dokumenty powinny opisywać aktualny kontrakt, nie jednorazowy stan implementacji. Po zmianie zachowania zaktualizuj dokument nadrzędny i tylko te referencje szczegółowe, których kontrakt faktycznie się zmienił.
+
 ## Planowanie i zakres
 
 - Przed edycją sprawdź stan repozytorium i przeczytaj odpowiednie pliki oraz testy. Zachowaj zastane zmiany; nie resetuj ani nie nadpisuj pracy użytkownika.
