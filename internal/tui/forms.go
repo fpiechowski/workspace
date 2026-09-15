@@ -311,6 +311,9 @@ func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
 	m.notice = "Action completed. Refreshing workspace…"
 	m.generation++
 	m.projectPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false
+	if message.call.NavigationRef != nil {
+		return tea.Batch(m.beginRefresh(), m.jumpAttempt(*message.call.NavigationRef, true))
+	}
 	if message.call.OpenTerminal {
 		ref := core.EntityRef{Kind: "session", ID: message.call.TargetID}
 		if message.call.Action == "start_orchestrator" {
@@ -332,6 +335,9 @@ func actionCaption(call ActionCall) string {
 	case "resume_workspace":
 		return "Mark the workspace active; this does not restart stopped Runs"
 	case "reconcile":
+		if call.NavigationRef != nil {
+			return "Terminal unavailable. Reconcile workspace runtime?"
+		}
 		return "Reconcile recorded sessions against the selected tmux runtime"
 	case "pause_interrupt":
 		return "Pause workspace and stop only the confirmed active Runs and services"
@@ -357,6 +363,9 @@ func actionCaption(call ActionCall) string {
 }
 
 func actionDescription(action string, call ActionCall) string {
+	if call.NavigationRef != nil {
+		return "Refresh recorded runtime state and recover eligible processes. This can restart the orchestrator; stopped workers are not automatically restarted. Then retry the selected terminal. A historical run will not redirect to a newer run."
+	}
 	if action == "pause_interrupt" {
 		runs := strings.Join(call.ExpectedRunIDs, ", ")
 		services := strings.Join(call.ExpectedServiceIDs, ", ")

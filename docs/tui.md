@@ -20,7 +20,8 @@ Stan ma symbol i podpis; running/starting mają animowany wskaźnik, także bez 
 `s` zmienia sortowanie (priorytet pracy, nazwa, ostatnie wykonanie); zaznaczenie
 pozostaje przypięte do ID. Widok szeroki dodaje szczegóły zaznaczenia obok listy,
 a wąski zachowuje postęp i dwuwierszowe wpisy. Przy małej wysokości wpis zajmuje
-jeden wiersz. Pasek skrótów ma zawsze zarezerwowany ostatni wiersz.
+jeden wiersz. Wpisy są rozdzielone linią, a zaznaczenie obejmuje tytuł i opis
+na wspólnym tle; bez koloru pozostaje znacznik wyboru i separator. Pasek skrótów ma zawsze zarezerwowany ostatni wiersz.
 
 More zawiera Sessions, Agents, Services, Decisions, Change requests, Runtime, Needs
 attention, Recent recorded activity i Documents. Task prowadzi do bieżących sesji,
@@ -66,6 +67,15 @@ i po sukcesie otwiera jego terminal. `o`, a następnie `t`, otwiera orkiestrator
 lub potwierdzenie jego uruchomienia. Zadanie z wieloma sesjami otwiera ich listę do
 jawnego wyboru; zadanie bez sesji wskazuje potrzebę delegacji przez orkiestratora.
 Historyczny Run pozostaje dokładnym celem i nie jest automatycznie wznawiany.
+
+Jeżeli nawigacja zgłosi brak sesji lub panelu tmux, TUI proponuje reconcile
+w formularzu potwierdzenia. Esc i Cancel pozostawiają runtime bez zmian.
+Po potwierdzeniu wykonuje jedną operację reconcile i ponawia nawigację do tego
+samego celu. Reconcile może odtworzyć kwalifikującego się orkiestratora; nie
+restartuje automatycznie zatrzymanych workerów. Gdy cel nadal jest niedostępny,
+TUI wskazuje Current work i `t` do otwarcia lub wznowienia sesji, bez pętli
+potwierdzeń. Niejednoznaczny cel, niezgodne ownership lub socket nie wywołują
+propozycji reconcile.
 
 ## Akcje i synchronizacja
 

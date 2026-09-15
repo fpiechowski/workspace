@@ -139,9 +139,7 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.navigationPending = false
 		if msg.err != nil {
-			m.loadError = sanitizeLine(msg.err.Error())
-			m.rebuildViewport()
-			return m, nil
+			return m, m.navigationFailure(msg.err, msg.ref, msg.afterReconcile)
 		}
 		if m.navigator == nil {
 			m.loadError = "terminal navigation is unavailable"
@@ -153,31 +151,28 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				defer cancel()
-				return navigationResultMsg{generation: gen, err: navigator.Select(ctx, target)}
+				return navigationResultMsg{generation: gen, ref: msg.ref, afterReconcile: msg.afterReconcile, err: navigator.Select(ctx, target)}
 			}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		cmd, err := m.navigator.PrepareAttach(ctx, msg.target)
 		cancel()
 		if err != nil {
-			m.loadError = sanitizeLine(err.Error())
-			m.rebuildViewport()
-			return m, nil
+			return m, m.navigationFailure(err, msg.ref, msg.afterReconcile)
 		}
 		gen := m.generation
-		return m, tea.ExecProcess(cmd, func(err error) tea.Msg { return navigationResultMsg{generation: gen, err: err} })
+		return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+			return navigationResultMsg{generation: gen, ref: msg.ref, afterReconcile: msg.afterReconcile, err: err}
+		})
 	case navigationResultMsg:
 		if msg.generation != m.generation {
 			return m, nil
 		}
 		if msg.err != nil {
-			m.loadError = sanitizeLine(msg.err.Error())
-		} else {
-			m.loadError = ""
-			return m, m.beginRefresh()
+			return m, m.navigationFailure(msg.err, msg.ref, msg.afterReconcile)
 		}
-		m.rebuildViewport()
-		return m, nil
+		m.loadError = ""
+		return m, m.beginRefresh()
 	case actionResultMsg:
 		return m, m.finishAction(msg)
 	case hideResultMsg:
@@ -617,6 +612,10 @@ func (m *Model) jumpSelected() tea.Cmd {
 }
 
 func (m *Model) jump(ref core.EntityRef) tea.Cmd {
+	return m.jumpAttempt(ref, false)
+}
+
+func (m *Model) jumpAttempt(ref core.EntityRef, afterReconcile bool) tea.Cmd {
 	if m.backend == nil || m.navigator == nil || m.navigationPending {
 		return nil
 	}
@@ -630,6 +629,6 @@ func (m *Model) jump(ref core.EntityRef) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		target, err := backend.ResolveNavigationTarget(ctx, workspace, ref)
-		return navigationTargetMsg{generation: gen, target: target, err: err}
+		return navigationTargetMsg{generation: gen, ref: ref, afterReconcile: afterReconcile, target: target, err: err}
 	}
 }

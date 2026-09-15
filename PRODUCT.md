@@ -114,6 +114,8 @@ ACK-owania inboxa ani automatycznej akceptacji wyników.
 Pierwszy ekran TUI skupia się na postępie zaakceptowanych zadań i aktualnej pracy
 agentów. Łączy zadanie, sesję i bieżący Run w czytelnym wpisie, odróżnia wykonanie
 procesu od akceptacji wyniku oraz umożliwia otwarcie lub jawne wznowienie terminala.
+Brak panelu podczas nawigacji prowadzi do propozycji reconcile wymagającej
+potwierdzenia użytkownika, a następnie ponownej próby otwarcia tego samego celu.
 
 TUI może działać ręcznie jako przeglądarka albo jako zarządzany panel obok orkiestratora.
 Supervisor odtwarza wyłącznie panel o zapisanej, zweryfikowanej tożsamości; q w tym

@@ -22,6 +22,7 @@ type Navigator interface {
 }
 
 type ActionCall struct {
+	NavigationRef      *core.EntityRef
 	OpenTerminal       bool
 	Action             string
 	TargetID           string

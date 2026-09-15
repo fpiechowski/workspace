@@ -144,13 +144,17 @@ type previewMsg struct {
 type refreshTimerMsg struct{}
 type animationMsg struct{}
 type navigationTargetMsg struct {
-	generation uint64
-	target     core.NavigationTarget
-	err        error
+	ref            core.EntityRef
+	afterReconcile bool
+	generation     uint64
+	target         core.NavigationTarget
+	err            error
 }
 type navigationResultMsg struct {
-	generation uint64
-	err        error
+	ref            core.EntityRef
+	afterReconcile bool
+	generation     uint64
+	err            error
 }
 type actionResultMsg struct {
 	generation uint64

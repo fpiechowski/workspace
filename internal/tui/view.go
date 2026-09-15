@@ -222,11 +222,14 @@ func (m *Model) renderItems(items []collectionItem, width, height int) []string 
 	if selectedID == "" && len(items) > 0 {
 		selectedID = items[0].ID
 	}
-	rowHeight := 2
+	rowHeight := 3
 	if height < 4 {
 		rowHeight = 1
 	}
-	capacity := max(1, height/rowHeight)
+	capacity := max(1, (height+1)/rowHeight)
+	if rowHeight == 1 {
+		capacity = height
+	}
 	selected := 0
 	for i, item := range items {
 		if item.ID == selectedID {
@@ -251,9 +254,20 @@ func (m *Model) renderItems(items []collectionItem, width, height int) []string 
 		if item.ID == selectedID {
 			title = m.palette.style(m.palette.focus, true).Render(title)
 		}
-		rows = append(rows, marker+badge+"  "+title)
-		if rowHeight == 2 {
-			rows = append(rows, m.palette.style(m.palette.muted, false).Render("  "+rowText(item.Subtitle, width-2)))
+		line := marker + badge + "  " + title
+		if item.ID == selectedID && !m.palette.noColor {
+			line = lipgloss.NewStyle().Background(m.palette.selection).Width(width).Render(line)
+		}
+		rows = append(rows, line)
+		if rowHeight > 1 {
+			line = m.palette.style(m.palette.muted, false).Render("  " + rowText(item.Subtitle, width-2))
+			if item.ID == selectedID && !m.palette.noColor {
+				line = lipgloss.NewStyle().Background(m.palette.selection).Width(width).Render(line)
+			}
+			rows = append(rows, line)
+			if i+1 < end {
+				rows = append(rows, m.palette.style(m.palette.border, false).Render(strings.Repeat("─", width)))
+			}
 		}
 	}
 	return rows

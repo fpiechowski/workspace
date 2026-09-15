@@ -15,8 +15,7 @@ i `work.go`.
 
 Paleta rozróżnia tekst podstawowy, informacje pomocnicze, fokus i znaczenie statusu.
 `auto` oraz pusty wybór używają palety ciemnej. Tło terminala pozostaje ustawieniem
-użytkownika; token `selection` jest zdefiniowany, lecz renderer list nie używa go
-do wypełnienia zaznaczenia.
+użytkownika; token `selection` wypełnia cały zaznaczony wpis, łącznie z jego opisem.
 
 | Token | Dark | Light | Rola |
 |---|---|---|---|
@@ -27,7 +26,7 @@ do wypełnienia zaznaczenia.
 | `success` | `#86EFAC` | `#166534` | Accepted, completed, ready |
 | `warning` | `#FDE68A` | `#92400E` | Blokady, review i przerwanie |
 | `danger` | `#FDA4AF` | `#BE123C` | Failed, error |
-| `selection` | `#1E293B` | `#E0F2FE` | Zdefiniowany token zaznaczenia |
+| `selection` | `#1E293B` | `#E0F2FE` | Tło zaznaczonego wpisu |
 
 `--no-color` usuwa kolory, zachowując tekst, symbole, pogrubienie i animację.
 Status musi pozostawać rozpoznawalny bez barwy.
@@ -35,7 +34,7 @@ Status musi pozostawać rozpoznawalny bez barwy.
 ## Typography
 
 Krój i rozmiar pisma wyznacza terminal. Hierarchię tworzą pogrubione nagłówki,
-kolor fokusu, nawiasy aktywnej zakładki i przygaszony podtytuł. Szerokości mierzy się
+kolor fokusu, tło zaznaczonego wpisu, nawiasy aktywnej zakładki i przygaszony podtytuł. Szerokości mierzy się
 w kolumnach terminala, z uwzględnieniem Unicode; długi tekst jest skracany przez `…`.
 
 ## Layout
@@ -51,7 +50,8 @@ kontekstowe skróty, a komunikat zajmuje wiersz bezpośrednio nad nimi.
 - Kolekcje i picker projektu od **100×24** pokazują listę i szczegóły obok siebie;
   szerokość listy jest oparta na dwóch piątych szerokości terminala.
 - Wpis ma dwa wiersze: stan i tytuł, następnie kontekst. Gdy na listę pozostają
-  mniej niż cztery wiersze, wpis zwija się do jednego. Zaznaczenie pozostaje widoczne.
+  mniej niż cztery wiersze, wpis zwija się do jednego. W pozostałych rozmiarach
+  sąsiednie wpisy oddziela pozioma linia. Zaznaczenie pozostaje widoczne.
 - Etykiety sekcji Work skracają się poniżej 75 kolumn, a główne zakładki,
   podsumowanie i skróty używają krótszej wersji poniżej 60 kolumn.
 
