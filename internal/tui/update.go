@@ -163,10 +163,14 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if err != nil {
 			return m, m.navigationFailure(err, msg.ref, msg.afterReconcile)
 		}
-		gen := m.generation
-		return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
-			return navigationResultMsg{generation: gen, ref: msg.ref, afterReconcile: msg.afterReconcile, err: err}
-		})
+		// Do not use tea.ExecProcess here. Bubble Tea v1.3.10 can restart its
+		// renderer before the old renderer goroutine stops, leaving animation
+		// updates in the model but no longer flushing frames (upstream #1778).
+		m.externalProcess = &ExternalProcessRequest{
+			Cmd: cmd, Ref: msg.ref, AfterReconcile: msg.afterReconcile, Generation: m.generation,
+		}
+		m.quit = true
+		return m, tea.Quit
 	case navigationResultMsg:
 		if msg.generation != m.generation {
 			return m, nil

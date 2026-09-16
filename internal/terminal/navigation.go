@@ -189,7 +189,7 @@ func (n *TmuxNavigator) Attach(ctx context.Context, target core.NavigationTarget
 }
 
 // PrepareAttach verifies the target and prepares an interactive command for
-// Bubble Tea's ExecProcess, which restores the terminal around the handoff.
+// the CLI's terminal-restoring handoff loop.
 func (n *TmuxNavigator) PrepareAttach(ctx context.Context, target core.NavigationTarget) (*exec.Cmd, error) {
 	if n.env("TMUX") != "" {
 		return nil, &core.Error{Code: "tmux_server_mismatch", Message: "interactive attach must start outside tmux; use jump from an attached TUI"}

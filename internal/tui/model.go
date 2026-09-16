@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os/exec"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -106,6 +107,19 @@ type Model struct {
 	mutationPending    bool
 	closed             bool
 	animationFrame     int
+	externalProcess    *ExternalProcessRequest
+	resumeCmd          tea.Cmd
+}
+
+// ExternalProcessRequest is a prepared interactive process which must run
+// after Bubble Tea has fully restored the terminal. Keeping this handoff
+// outside tea.ExecProcess avoids Bubble Tea's renderer stop/start race
+// (https://github.com/charmbracelet/bubbletea/issues/1778).
+type ExternalProcessRequest struct {
+	Cmd            *exec.Cmd
+	Ref            core.EntityRef
+	AfterReconcile bool
+	Generation     uint64
 }
 
 type projectMsg struct {
@@ -209,7 +223,29 @@ func (m *Model) Init() tea.Cmd {
 	if !m.projectFound || m.initialError != "" || m.backend == nil {
 		return nil
 	}
-	return tea.Batch(m.beginRefresh(), animationTick())
+	resume := m.resumeCmd
+	m.resumeCmd = nil
+	return tea.Batch(m.beginRefresh(), animationTick(), resume)
+}
+
+// TakeExternalProcessRequest transfers a prepared process to the CLI runner.
+// A nil result means that the program exited normally.
+func (m *Model) TakeExternalProcessRequest() *ExternalProcessRequest {
+	request := m.externalProcess
+	m.externalProcess = nil
+	return request
+}
+
+// ResumeExternalProcess applies the result of an external process and prepares
+// the command that the next, fresh tea.Program must run during Init.
+func (m *Model) ResumeExternalProcess(request *ExternalProcessRequest, err error) {
+	m.quit = false
+	_, m.resumeCmd = m.Update(navigationResultMsg{
+		generation:     m.generation,
+		err:            err,
+		ref:            request.Ref,
+		afterReconcile: request.AfterReconcile,
+	})
 }
 
 func (m *Model) activeWorkspace() string { return m.workspaceID }

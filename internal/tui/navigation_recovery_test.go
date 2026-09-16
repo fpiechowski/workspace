@@ -1,13 +1,45 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"workspace/internal/core"
 )
+
+type externalNavigator struct{}
+
+func (externalNavigator) Select(context.Context, core.NavigationTarget) error { return nil }
+func (externalNavigator) PrepareAttach(context.Context, core.NavigationTarget) (*exec.Cmd, error) {
+	return exec.Command("echo", "attached"), nil
+}
+
+func TestExternalNavigationRequestsProcessAndQuitsProgram(t *testing.T) {
+	t.Setenv("TMUX", "")
+	m := workFixture()
+	m.navigator = externalNavigator{}
+	ref := core.EntityRef{Kind: "run", ID: "run_worker"}
+	_, cmd := m.Update(navigationTargetMsg{
+		generation: m.generation,
+		ref:        ref,
+		target:     core.NavigationTarget{SessionName: "workspace"},
+	})
+	if cmd == nil || cmd() != (tea.QuitMsg{}) {
+		t.Fatal("external navigation must quit the current program")
+	}
+	request := m.TakeExternalProcessRequest()
+	if request == nil || request.Cmd == nil || request.Ref != ref || !m.quit {
+		t.Fatalf("invalid external process request: %#v", request)
+	}
+	if _, err := os.Stat(request.Cmd.Path); err != nil {
+		t.Fatalf("prepared command is not executable: %v", err)
+	}
+}
 
 func TestMissingPaneOffersReconcileWithoutExecutingIt(t *testing.T) {
 	for _, duringSelect := range []bool{false, true} {
