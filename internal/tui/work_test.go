@@ -111,6 +111,55 @@ func TestEscapeCancelsActionSelectAndConfirmation(t *testing.T) {
 	}
 }
 
+func TestEnterSubmitsConfirmationSelection(t *testing.T) {
+	t.Run("confirm", func(t *testing.T) {
+		m := workFixture()
+		backend := &actionHarness{}
+		m.backend = backend
+		m.beginAction("start_orchestrator", "")
+
+		m.updateKey(tea.KeyMsg{Type: tea.KeyRight})
+		_, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
+		if cmd == nil {
+			t.Fatal("Enter did not advance the confirmation field")
+		}
+		_, cmd = m.Update(cmd())
+		if cmd == nil {
+			t.Fatal("confirmation field did not advance to form submission")
+		}
+		_, cmd = m.Update(cmd())
+		if !m.actionPending || m.form != nil || cmd == nil {
+			t.Fatalf("Enter did not submit Confirm: pending=%t form=%v cmd=%v", m.actionPending, m.form, cmd)
+		}
+		if len(backend.calls) != 0 {
+			t.Fatal("action command ran synchronously while submitting the form")
+		}
+	})
+
+	t.Run("cancel", func(t *testing.T) {
+		m := workFixture()
+		backend := &actionHarness{}
+		m.backend = backend
+		m.beginAction("start_orchestrator", "")
+
+		_, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
+		if cmd == nil {
+			t.Fatal("Enter did not advance the confirmation field")
+		}
+		_, cmd = m.Update(cmd())
+		if cmd == nil {
+			t.Fatal("confirmation field did not advance to form submission")
+		}
+		_, cmd = m.Update(cmd())
+		if m.actionPending || m.form != nil || cmd != nil || m.notice != "Action cancelled." {
+			t.Fatalf("Enter did not submit Cancel: pending=%t form=%v cmd=%v notice=%q", m.actionPending, m.form, cmd, m.notice)
+		}
+		if len(backend.calls) != 0 {
+			t.Fatal("Cancel invoked an action")
+		}
+	})
+}
+
 type terminalHarness struct {
 	Backend
 	refs []core.EntityRef

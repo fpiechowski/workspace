@@ -197,6 +197,9 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.updateKey(msg)
 	}
+	if m.form != nil {
+		return m.updateForm(message)
+	}
 	if m.route.Page == "dashboard" || m.isDetailPage() {
 		updated, cmd := m.viewport.Update(message)
 		m.viewport = updated
