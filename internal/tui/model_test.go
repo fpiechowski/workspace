@@ -153,6 +153,50 @@ func TestCollectionStateFilterCyclesAvailableValues(t *testing.T) {
 	}
 }
 
+func TestCollectionRefreshKeepsWideSelectionDetails(t *testing.T) {
+	model := New(Config{ProjectFound: true, WorkspaceID: "ws_refresh"})
+	model.width, model.height = 120, 24
+	model.snapshot = core.WorkspaceSnapshot{Status: core.Status{Workspace: core.Workspace{
+		ID: "ws_refresh",
+		Tasks: []core.Task{{
+			ID:       "task_selected",
+			TaskSpec: core.TaskSpec{Title: "Selected task", Goal: "Keep the selected details visible"},
+			State:    "running",
+		}},
+	}}}
+	model.route = route{Page: "tasks", SelectedID: "task_selected"}
+	model.snapshotPending = true
+
+	view := strings.Join(model.collectionView(layoutWide), "\n")
+	if !strings.Contains(view, "refreshing…") {
+		t.Fatalf("refresh status was not shown: %q", view)
+	}
+	if !strings.Contains(view, "Selected task") || !strings.Contains(view, "Goal: Keep the selected details visible") {
+		t.Fatalf("refresh dropped the selected row or its details: %q", view)
+	}
+	twoColumnRow := false
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Count(line, "Selected task") >= 2 {
+			twoColumnRow = true
+			break
+		}
+	}
+	if !twoColumnRow {
+		t.Fatalf("wide collection did not retain its two-column layout: %q", view)
+	}
+}
+
+func TestCollectionInitialRefreshExplainsMissingData(t *testing.T) {
+	model := New(Config{ProjectFound: true, WorkspaceID: "ws_initial"})
+	model.route = route{Page: "tasks"}
+	model.snapshotPending = true
+
+	view := strings.Join(model.collectionView(layoutWide), "\n")
+	if view != "Loading workspace data…" {
+		t.Fatalf("initial refresh should clearly explain missing data: %q", view)
+	}
+}
+
 func TestDashboardAttentionShowsFivePrioritizedRowsAndViewAll(t *testing.T) {
 	model := New(Config{ProjectFound: true, WorkspaceID: "ws_attention"})
 	model.snapshot = core.WorkspaceSnapshot{Status: core.Status{Workspace: core.Workspace{

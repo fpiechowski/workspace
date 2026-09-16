@@ -180,10 +180,14 @@ func (m *Model) dashboardView(mode layoutMode) []string {
 
 func (m *Model) collectionView(mode layoutMode) []string {
 	items := m.filteredItems()
-	if m.projectPending || m.snapshotPending {
-		return append([]string{"Refreshing…"}, m.renderItems(items, m.width-2, m.height-7)...)
+	pending := m.projectPending || m.snapshotPending
+	if pending && len(m.allItems()) == 0 {
+		return []string{"Loading workspace data…"}
 	}
 	count := fmt.Sprintf("%s · %d / %d · sort: %s", m.collectionTitle(), len(items), len(m.allItems()), firstNonempty(m.route.Sort, "priority"))
+	if pending {
+		count += " · refreshing…"
+	}
 	if m.route.Query != "" {
 		count += " · filter: " + sanitizeLine(m.route.Query)
 	}
