@@ -61,6 +61,11 @@ OpenCode Runs expose a unique loopback endpoint owned by that Run. The superviso
 checks readiness, posts the marker-bearing prompt to the active TUI session and confirms
 the marker in session history before recording delivery. A new Run gets a new endpoint;
 the logical Session may retain the same native thread ID.
+An active Run migrated from the retired bundled OpenCode transport cannot be repaired in
+place: it has no server flags or Run-scoped endpoint. The supervisor records a durable
+`restart_required` delivery phase, leaves the message unacknowledged and undelivered, and
+waits for one explicit stop/resume. That resume creates the native endpoint and keeps the
+pending message eligible for delivery on the successor Run.
 A generic client's optional
 `deliver_argv` receives `{thread_id}`, `{message_file}` and
 `{message_id}` and must return `{"accepted":true}`. It must deduplicate message IDs;

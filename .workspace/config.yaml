@@ -6,7 +6,6 @@ clients:
     adapter: opencode
     launch_argv: [opencode, --auto, --model, "{model}", --prompt, "{prompt}"]
     resume_argv: [opencode, --auto, --session, "{thread_id}", --model, "{model}", --prompt, "{prompt}"]
-    deliver_argv: [python3, "{project_dir}/scripts/opencode-deliver.py", "{thread_id}", "{message_file}", "{message_id}"]
 
 profiles:
   thinker:

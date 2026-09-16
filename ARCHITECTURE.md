@@ -124,6 +124,10 @@ Jest źródłem prawdy dla fazy workflow, zadań, decyzji i zaakceptowanych wyni
 Publiczny `status --json` ma własny jawny numer schematu. TUI korzysta z prywatnego
 `WorkspaceSnapshot`; nie dodaje encji do `index.json`, nie zmienia schematu publicznego
 Status i nie zapisuje Session/Run dla własnego procesu.
+Prywatny rejestr ma staged migrations: przy otwarciu starsze wersje przechodzą kolejno
+przez wymagane etapy i są zapisywane atomowo. Migracja v4 aktualizuje wyłącznie snapshot
+klienta Session dla dokładnie wycofanego, bundled wrappera OpenCode; Runy i ich pochodzenie
+pozostają niezmienione.
 
 Szablony są kopiowane do workspace przy jego tworzeniu. Późniejsza zmiana szablonu
 projektowego nie zmienia trwającej pracy. Jawna migracja zachowuje wcześniejsze pliki,

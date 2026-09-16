@@ -81,7 +81,11 @@ func (s *Service) openCodeHistory(ctx context.Context, endpoint, thread string) 
 func (s *Service) deliverOpenCodeMessage(ctx context.Context, selector string, session Session, run Run, message Message) error {
 	_ = session
 	if run.OpenCodeEndpoint == "" || run.ClientThreadID == "" {
-		return fail("opencode_unavailable", "current Run has no native OpenCode endpoint or session")
+		deliveryErr := "active OpenCode Run has no Run-scoped endpoint or session; stop and resume the Session"
+		if err := s.setDeliveryPhase(ctx, selector, message.ID, run.ID, "restart_required", deliveryErr); err != nil {
+			return err
+		}
+		return fail("restart_required", "%s", deliveryErr)
 	}
 	marker := "[workspace-message-id:" + message.ID + "]"
 	if err := s.setDeliveryPhase(ctx, selector, message.ID, run.ID, "checking", ""); err != nil {
