@@ -44,7 +44,7 @@ func (m *Model) focusDashboardPanel(delta int) {
 	m.route.Query, m.route.SelectedID, m.route.StatusFilter = "", "", ""
 	m.validateSelection()
 	m.rebuildViewport()
-	if layoutFor(m.width, m.height) != layoutNarrow {
+	if layoutFor(m.width, m.height) != layoutCompact {
 		return
 	}
 	panels := m.dashboardPanels()

@@ -1,23 +1,30 @@
 package tui
 
+// Minimum supported terminal size. Anything smaller renders the size message.
+const (
+	minLayoutWidth  = 40
+	minLayoutHeight = 12
+	// Split layouts (list plus preview) require at least this width and height.
+	wideLayoutWidth  = 100
+	wideLayoutHeight = 24
+)
+
 type layoutMode int
 
 const (
 	layoutTiny layoutMode = iota
-	layoutNarrow
-	layoutShort
+	layoutCompact
 	layoutWide
 )
 
+// layoutFor makes a single layout decision shared by every page, including
+// Work. Compact is the intentional single-column mode for medium terminals.
 func layoutFor(width, height int) layoutMode {
-	if width < 40 || height < 12 {
+	if width < minLayoutWidth || height < minLayoutHeight {
 		return layoutTiny
 	}
-	if width >= 100 && height >= 24 {
+	if width >= wideLayoutWidth && height >= wideLayoutHeight {
 		return layoutWide
 	}
-	if width >= 80 && height < 24 {
-		return layoutShort
-	}
-	return layoutNarrow
+	return layoutCompact
 }

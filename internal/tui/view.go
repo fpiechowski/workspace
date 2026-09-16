@@ -9,6 +9,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// View composes the shell as header, primary navigation, optional breadcrumb,
+// content, a status/notice row, and a contextual key legend. The status row and
+// legend are always reserved so they stay visible at every supported size.
 func (m *Model) View() string {
 	if m.width < 1 || m.height < 1 {
 		return ""
@@ -21,21 +24,27 @@ func (m *Model) View() string {
 		}
 		return fitFrame(message, m.width, m.height)
 	}
-	lines := []string{m.header()}
+	top := []string{m.header(), m.tabs()}
+	if crumb := m.breadcrumb(); crumb != "" {
+		top = append(top, crumb)
+	}
+	var content []string
 	if m.showHelp {
-		lines = append(lines, m.helpView())
+		content = strings.Split(m.helpView(), "\n")
 	} else {
-		lines = append(lines, m.tabs())
-		body := m.bodyView(mode)
-		lines = append(lines, body...)
+		content = m.bodyView(mode)
 	}
-	lines = append(lines, m.footer())
-	// Reserve the last row for controls even when a form or body overflows.
-	body := strings.Join(lines[:len(lines)-1], "\n")
-	if m.notice != "" {
-		return fitFrame(body, m.width, max(1, m.height-2)) + "\n" + rowText(m.notice, m.width) + "\n" + ansi.TruncateWc(m.footer(), m.width, "")
+	contentRows := max(1, m.height-len(top)-2)
+	content = clipLines(content, contentRows, m.width)
+	rows := append(top, content...)
+	for len(rows) < m.height-2 {
+		rows = append(rows, "")
 	}
-	return fitFrame(body, m.width, max(1, m.height-1)) + "\n" + ansi.TruncateWc(m.footer(), m.width, "")
+	rows = append(rows, m.statusRow(), ansi.TruncateWc(m.footer(), m.width, ""))
+	if len(rows) > m.height {
+		rows = rows[:m.height]
+	}
+	return fitFrame(strings.Join(rows, "\n"), m.width, m.height)
 }
 
 func (m *Model) header() string {
@@ -72,12 +81,12 @@ func (m *Model) header() string {
 		parts = append(parts, "·", "updated "+timeAgo(m.lastSuccess)+" ago")
 	}
 	line := strings.Join(parts, " ")
-	return m.palette.style(m.palette.text, true).Render(ansi.TruncateWc(sanitizeLine(line), m.width, "…"))
+	return m.palette.titleStyle().Render(ansi.TruncateWc(sanitizeLine(line), m.width, "…"))
 }
 
 func (m *Model) tabs() string {
 	if m.workspaceID == "" || m.route.Page == "project" {
-		return m.palette.style(m.palette.info, true).Render("Workspaces") + "  / filter  f status"
+		return m.palette.headingStyle().Render("Workspaces") + "  / filter  f status"
 	}
 	labels := []struct{ key, page, name string }{
 		{"1", "dashboard", "Work"}, {"2", "tasks", "Tasks"}, {"3", "worktrees", "Worktrees"}, {"4", "results", "Results"}, {"5", "more", "More"},
@@ -92,7 +101,7 @@ func (m *Model) tabs() string {
 			name = label.key + " " + name
 		}
 		if m.route.Page == label.page {
-			out = append(out, m.palette.style(m.palette.focus, true).Render("["+name+"]"))
+			out = append(out, m.palette.headingStyle().Render("["+name+"]"))
 		} else {
 			out = append(out, name)
 		}
@@ -101,6 +110,127 @@ func (m *Model) tabs() string {
 		return strings.Join(out, " ")
 	}
 	return strings.Join(out, "   ")
+}
+
+// breadcrumb gives secondary and detail routes an explicit location so the
+// primary tabs alone do not have to carry the whole hierarchy.
+func (m *Model) breadcrumb() string {
+	if m.showHelp || m.workspaceID == "" {
+		return ""
+	}
+	switch m.route.Page {
+	case "project", "dashboard", "error":
+		return ""
+	}
+	if m.isDetailPage() {
+		line := detailSection(m.route.Page)
+		if title := m.routeTitle(); title != "" {
+			line += " / " + title
+		}
+		return m.palette.metaStyle().Render(ansi.TruncateWc(sanitizeLine(line), m.width, "…"))
+	}
+	if m.route.ParentID != "" {
+		if parent := m.parentTitle(m.route.ParentID); parent != "" {
+			return m.palette.metaStyle().Render(ansi.TruncateWc(sanitizeLine(parent+" / "+m.collectionTitle()), m.width, "…"))
+		}
+	}
+	return ""
+}
+
+var detailSections = map[string]string{
+	"task": "Tasks", "worktree": "Worktrees", "session": "Sessions", "run": "Runs",
+	"agent": "Agents", "service": "Services", "artifact": "Artifacts", "handoff": "Handoffs",
+	"check": "Checks", "decision": "Decisions", "change_request": "Change requests",
+	"preview": "Preview", "orchestrator": "Orchestrator", "runtime": "Runtime",
+}
+
+func detailSection(page string) string {
+	if section, ok := detailSections[page]; ok {
+		return section
+	}
+	return "Workspace"
+}
+
+func (m *Model) routeTitle() string {
+	id := m.route.EntityID
+	switch m.route.Page {
+	case "task":
+		if task, ok := m.task(id); ok {
+			return firstNonempty(task.Title, id)
+		}
+	case "worktree":
+		if worktree, ok := findWorktree(m.snapshot.Status.Worktrees, id); ok {
+			return firstNonempty(worktree.Name, id)
+		}
+	case "session":
+		if session, ok := findSession(m.snapshot.Status.Sessions, id); ok {
+			return firstNonempty(session.AgentSnapshot.Name, id)
+		}
+	case "agent":
+		if agent, ok := findAgent(m.snapshot.Status.Agents, id); ok {
+			return firstNonempty(agent.Name, id)
+		}
+	case "service":
+		if service, ok := findService(m.snapshot.Services, id); ok {
+			return firstNonempty(service.Name, id)
+		}
+	case "artifact":
+		if artifact, ok := findArtifact(m.snapshot.Status.Workspace.Artifacts, id); ok {
+			return firstNonempty(artifact.Name, id)
+		}
+	case "handoff":
+		if handoff, ok := findHandoff(m.snapshot.Handoffs, id); ok {
+			return firstNonempty(handoff.Outcome, id)
+		}
+	case "check":
+		if check, ok := findCheck(m.snapshot.Checks, id); ok {
+			return firstNonempty(strings.Join(check.Argv, " "), id)
+		}
+	case "decision":
+		if decision, ok := findDecision(m.snapshot.Status.Workspace.Decisions, m.snapshot.Status.Workspace.PendingDecision, id); ok {
+			return firstNonempty(decision.Question, id)
+		}
+	case "change_request":
+		if request, ok := findChangeRequest(m.snapshot.Status.Workspace.ChangeRequests, id); ok {
+			return firstNonempty(request.Title, id)
+		}
+	case "preview":
+		return firstNonempty(m.preview.Name, id)
+	}
+	return id
+}
+
+func (m *Model) parentTitle(id string) string {
+	if task, ok := m.task(id); ok {
+		return firstNonempty(task.Title, id)
+	}
+	if session, ok := findSession(m.snapshot.Status.Sessions, id); ok {
+		return firstNonempty(session.AgentSnapshot.Name, id)
+	}
+	if agent, ok := findAgent(m.snapshot.Status.Agents, id); ok {
+		return firstNonempty(agent.Name, id)
+	}
+	return id
+}
+
+// statusRow is the status/notice region. It surfaces an explicit notice or the
+// current pending state, and stays reserved even when idle.
+func (m *Model) statusRow() string {
+	text := sanitizeLine(m.notice)
+	switch {
+	case text == "" && m.actionPending:
+		text = "Working… keep this panel open."
+	case text == "" && (m.snapshotPending || m.projectPending):
+		text = "Refreshing…"
+	}
+	if text == "" {
+		return ""
+	}
+	style := m.palette.noticeStyle()
+	if !m.palette.noColor {
+		style = style.Width(m.width)
+	}
+	return style.Render(ansi.TruncateWc(text, m.width, "…"))
 }
 
 func (m *Model) bodyView(mode layoutMode) []string {
@@ -175,7 +305,7 @@ func appendFilterLine(filter string, lines []string) []string {
 }
 
 func (m *Model) dashboardView(mode layoutMode) []string {
-	return m.workDashboard()
+	return m.workDashboard(mode)
 }
 
 func (m *Model) collectionView(mode layoutMode) []string {
@@ -257,20 +387,19 @@ func (m *Model) renderItems(items []collectionItem, width, height int) []string 
 			badge = ""
 		}
 		title := rowText(item.Title, width-ansi.StringWidth(badge)-4)
-		if item.ID == selectedID {
-			title = m.palette.style(m.palette.focus, true).Render(title)
+		chosen := item.ID == selectedID
+		if chosen {
+			rows = append(rows, m.palette.selectedStyle(width).Render(marker+badge+"  "+title))
+		} else {
+			rows = append(rows, marker+badge+"  "+title)
 		}
-		line := marker + badge + "  " + title
-		if item.ID == selectedID && !m.palette.noColor {
-			line = lipgloss.NewStyle().Background(m.palette.selection).Width(width).Render(line)
-		}
-		rows = append(rows, line)
 		if rowHeight > 1 {
-			line = m.palette.style(m.palette.muted, false).Render("  " + rowText(item.Subtitle, width-2))
-			if item.ID == selectedID && !m.palette.noColor {
-				line = lipgloss.NewStyle().Background(m.palette.selection).Width(width).Render(line)
+			subtitle := "  " + rowText(item.Subtitle, width-2)
+			if chosen {
+				rows = append(rows, m.palette.selectedStyle(width).Render(subtitle))
+			} else {
+				rows = append(rows, m.palette.metaStyle().Render(subtitle))
 			}
-			rows = append(rows, line)
 			if i+1 < end {
 				rows = append(rows, m.palette.style(m.palette.border, false).Render(strings.Repeat("─", width)))
 			}
@@ -309,14 +438,14 @@ func (m *Model) panel(title string, lines []string, width, height int, focused b
 	}
 	inside := max(1, width-4)
 	body := make([]string, 0, height-2)
-	body = append(body, m.palette.style(m.palette.info, true).Render(ansi.TruncateWc(sanitizeLine(title), inside, "…")))
+	body = append(body, m.palette.headingStyle().Render(ansi.TruncateWc(sanitizeLine(title), inside, "…")))
 	for _, line := range lines {
 		if len(body) >= height-2 {
 			break
 		}
 		body = append(body, ansi.TruncateWc(sanitizeLine(line), inside, "…"))
 	}
-	return m.palette.borderStyle(focused).Width(max(1, width-2)).Height(max(1, height-2)).Render(strings.Join(body, "\n"))
+	return m.palette.panelStyle(focused).Width(max(1, width-2)).Height(max(1, height-2)).Render(strings.Join(body, "\n"))
 }
 
 func (m *Model) footer() string {
@@ -408,6 +537,24 @@ func fitFrame(value string, width, height int) string {
 		lines = append(lines, "")
 	}
 	return strings.Join(lines, "\n")
+}
+
+// clipLines splits embedded newlines and limits the content region so the
+// reserved status row and key legend always survive the frame.
+func clipLines(lines []string, height, width int) []string {
+	if height < 1 {
+		return nil
+	}
+	out := make([]string, 0, height)
+	for _, line := range lines {
+		for _, part := range strings.Split(line, "\n") {
+			if len(out) >= height {
+				return out
+			}
+			out = append(out, ansi.TruncateWc(part, width, ""))
+		}
+	}
+	return out
 }
 
 func truncateLines(lines []string, width int) []string {

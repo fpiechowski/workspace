@@ -563,14 +563,14 @@ func huhTheme(p palette) *huh.Theme {
 		theme.Blurred.BlurredButton = lipgloss.NewStyle().SetString("[ Cancel ]")
 		return theme
 	}
-	theme.Focused.SelectSelector = lipgloss.NewStyle().Foreground(p.focus).Bold(true).SetString("> ")
-	theme.Focused.Title = lipgloss.NewStyle().Foreground(p.text).Bold(true)
+	theme.Focused.SelectSelector = lipgloss.NewStyle().Foreground(p.accent).Bold(true).SetString("> ")
+	theme.Focused.Title = lipgloss.NewStyle().Foreground(p.primary).Bold(true)
 	theme.Focused.ErrorIndicator = lipgloss.NewStyle().Foreground(p.danger).SetString(" !")
 	theme.Focused.ErrorMessage = lipgloss.NewStyle().Foreground(p.danger)
 	theme.Focused.FocusedButton = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(p.success).Padding(0, 2)
-	theme.Focused.BlurredButton = lipgloss.NewStyle().Foreground(p.text).Padding(0, 2)
-	theme.Focused.TextInput.Prompt = lipgloss.NewStyle().Foreground(p.focus)
-	theme.Focused.TextInput.Placeholder = lipgloss.NewStyle().Foreground(p.muted)
-	theme.Focused.TextInput.Text = lipgloss.NewStyle().Foreground(p.text)
+	theme.Focused.BlurredButton = lipgloss.NewStyle().Foreground(p.primary).Padding(0, 2)
+	theme.Focused.TextInput.Prompt = lipgloss.NewStyle().Foreground(p.accent)
+	theme.Focused.TextInput.Placeholder = lipgloss.NewStyle().Foreground(p.secondary)
+	theme.Focused.TextInput.Text = lipgloss.NewStyle().Foreground(p.primary)
 	return theme
 }

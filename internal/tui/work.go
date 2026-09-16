@@ -176,7 +176,7 @@ func (m *Model) progressLines() []string {
 
 var workSections = []string{"Current work", "Tasks", "Needs attention", "Recent recorded activity"}
 
-func (m *Model) workDashboard() []string {
+func (m *Model) workDashboard(mode layoutMode) []string {
 	if m.snapshot.ObservedAt.IsZero() {
 		return []string{m.dashboardContent()}
 	}
@@ -198,7 +198,7 @@ func (m *Model) workDashboard() []string {
 		}
 		sections = append(sections, title)
 	}
-	lines = append(lines, "", m.palette.style(m.palette.info, true).Render(strings.Join(sections, "  ")))
+	lines = append(lines, "", m.palette.headingStyle().Render(strings.Join(sections, "  ")))
 	items := m.filteredItems()
 	filter := ""
 	if m.route.StatusFilter != "" {
@@ -208,14 +208,14 @@ func (m *Model) workDashboard() []string {
 		filter += " · /" + m.route.Query
 	}
 	lines = append(lines, fmt.Sprintf("%s%s · %d shown · sort: %s", workSections[m.focusedPanel], filter, len(items), firstNonempty(m.route.Sort, "priority")))
-	available := max(1, m.height-3-len(lines))
+	available := max(1, m.contentHeight()-len(lines))
 	if m.notice != "" {
 		available = max(1, available-1)
 	}
 	if len(items) == 0 {
 		return append(lines, "No records in this view. / search · f status · Esc clear")
 	}
-	if m.width >= 110 {
+	if mode == layoutWide {
 		leftWidth := m.width * 3 / 5
 		left := strings.Join(m.renderItems(items, leftWidth, available), "\n")
 		right := truncateLines(m.itemSummary(items), m.width-leftWidth-3)
@@ -238,11 +238,11 @@ func (m *Model) liveGlyph() string {
 
 func (m *Model) stateLabel(state string) string {
 	label := statusBadge(state)
-	color := m.palette.muted
+	color := m.palette.secondary
 	switch state {
 	case "running", "starting":
 		label = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}[m.animationFrame%10] + " " + state
-		color = m.palette.info
+		color = m.palette.accent
 	case "accepted", "completed", "ready":
 		color = m.palette.success
 	case "failed", "error":

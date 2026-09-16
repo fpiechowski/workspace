@@ -113,5 +113,11 @@ func (m *Model) rebuildViewport() {
 }
 
 func (m *Model) contentHeight() int {
-	return max(1, m.height-5)
+	// Header, primary navigation, status/notice row, and key legend are always
+	// reserved. Detail and parented routes add one breadcrumb row.
+	rows := m.height - 4
+	if m.breadcrumb() != "" {
+		rows--
+	}
+	return max(1, rows)
 }
