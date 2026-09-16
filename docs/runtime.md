@@ -103,5 +103,11 @@ and cleans up the verified pane; UI ownership is not counted as an active domain
 process and does not block `clean`. Before downgrading the binary, run `workspace tui
 hide`, since an older launcher cannot identify the new pane type.
 
+Project-picker Delete Workspace is a separate destructive discard, not an archive or
+clean shortcut. After typed-ID confirmation it kills the complete workspace tmux session,
+force-removes registered worktrees and their local `workspace/<id>/…` branches, then
+removes durable workspace state. It intentionally does not preserve dirty or unpublished
+local work and therefore does not require release, archive, or clean gates.
+
 The full screen, navigation, action and terminal behavior is documented in
 [`tui.md`](tui.md).

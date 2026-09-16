@@ -57,4 +57,7 @@ Delete w TUI wymaga przepisania pełnego ID. Task i Session są logicznie usuwan
 audytowalny tombstone; receipt pozostaje w rejestrze workspace'u, a guard obejmuje
 rewizję oraz odpowiednio attempt lub ostatni Run. Fizyczne Delete Workspace korzysta
 z project-scoped receipt poza katalogiem docelowym, więc ten sam klucz i payload można
-bezpiecznie ponowić po usunięciu katalogu. Zmiana rewizji albo targetu kończy się konfliktem.
+bezpiecznie ponowić po usunięciu katalogu. Nie wymaga archive/release: zatrzymuje runtime,
+wymusza usunięcie worktrees (także brudnych) i lokalnych gałęzi `workspace/<id>/…`, po
+czym usuwa cały stan. Zmiana rewizji albo targetu kończy się konfliktem. Archive z TUI
+jest niedestrukcyjne, ma własny guard rewizji i zachowuje dotychczasowe bramki lifecycle.

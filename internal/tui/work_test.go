@@ -187,6 +187,27 @@ func TestProjectAndWorkspaceDeletionActions(t *testing.T) {
 	if model.formMode != "destructive" || model.formAction.ExpectedRevision != 9 || model.formAction.TargetID != "ws_delete" {
 		t.Fatalf("workspace deletion guard is incomplete: %+v mode=%q", model.formAction, model.formMode)
 	}
+	if !strings.Contains(model.formAction.TargetDetails, "uncommitted file") || !strings.Contains(model.formAction.TargetDetails, "cannot be undone") {
+		t.Fatalf("workspace deletion warning is incomplete: %q", model.formAction.TargetDetails)
+	}
+}
+
+func TestCompletedWorkspaceCanBeArchivedFromTUI(t *testing.T) {
+	model := workFixture()
+	model.backend = &actionHarness{}
+	model.snapshot.Status.Workspace.Status = "completed"
+	model.snapshot.Status.Workspace.Revision = 12
+	model.navigate(route{Page: "dashboard"})
+
+	if cmd := model.beginAction("archive_workspace", ""); cmd == nil {
+		t.Fatal("archive did not require confirmation")
+	}
+	if model.form == nil || model.formMode != "confirm" || model.formAction.ExpectedRevision != 12 {
+		t.Fatalf("archive confirmation did not preserve the workspace revision: %+v mode=%q", model.formAction, model.formMode)
+	}
+	if !strings.Contains(actionCaption(model.formAction), "Archive completed workspace") {
+		t.Fatalf("archive confirmation is unclear: %q", actionCaption(model.formAction))
+	}
 }
 
 func TestDeletedTasksAndSessionsDisappearFromCollections(t *testing.T) {

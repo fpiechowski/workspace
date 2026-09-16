@@ -112,8 +112,11 @@ guardy bieżącej rewizji, próby lub RunID. Nie dodaje akcji wysyłania wiadomo
 ACK-owania inboxa ani automatycznej akceptacji wyników.
 
 W pickerze projektu użytkownik może utworzyć workspace z opisem i opcjonalnym workflow
-albo trwale usunąć pusty lub zarchiwizowany i uprzątnięty workspace. Wewnątrz workspace'u
-może usunąć task bez zależności i utrwalonych wyników oraz nieaktywną sesję bez referencji
+albo świadomie odrzucić go w całości bez wymogu release/archive. Pełne usunięcie wymaga
+przepisania ID, zatrzymuje runtime i usuwa stan, worktrees, niezacommitowane pliki oraz
+lokalne gałęzie workspace'u. Wewnątrz zakończonego workspace'u TUI udostępnia archive,
+które zachowuje historię i respektuje bramki release oraz aktywnego runtime. Można też
+usunąć task bez zależności i utrwalonych wyników oraz nieaktywną sesję bez referencji
 wynikowych. Taski i sesje otrzymują audytowalny tombstone i znikają z normalnych widoków;
 operacja nie przepisuje ani nie kasuje historii, na której opierają się inne rekordy.
 

@@ -77,8 +77,10 @@ Usunięcie Task lub Session z TUI jest logiczne: rekord otrzymuje `deleted_at` i
 w trwałym stanie jako tombstone dla receiptów i historycznych referencji, ale znika z
 normalnych kolekcji TUI i liczników postępu. Core odrzuca tombstone aktywnej Session,
 zaakceptowanego lub zależnego Taska oraz rekordów z utrwalonymi wynikami. Usunięcie
-całego workspace'u jest fizyczną operacją projektu i ma receipt poza usuwanym katalogiem;
-jest dozwolone tylko dla pustego workspace'u albo po archive i clean wszystkich worktrees.
+całego workspace'u jest fizyczną operacją projektu i ma receipt poza usuwanym katalogiem.
+Jest jawnym discardem niezależnym od archive/release: zatrzymuje sesję runtime, wymusza
+usunięcie należących do workspace'u worktrees i lokalnych gałęzi, a następnie usuwa cały
+katalog stanu. Ścieżki i prefiksy gałęzi są sprawdzane przed destrukcyjnymi efektami.
 
 Najważniejsze niezmienniki:
 
@@ -144,8 +146,9 @@ sprawdzany przed retry. Pełny kontrakt znajduje się w
 
 Destrukcyjne akcje TUI dodatkowo wymagają przepisania pełnego ID. Delete Task/Session
 korzysta z guardów rewizji i attempt/ostatniego Run, natomiast Delete Workspace zapisuje
-idempotentny receipt w projektowym rejestrze operacji, dzięki czemu retry działa także
-po fizycznym usunięciu katalogu.
+idempotentny receipt w projektowym rejestrze operacji, zatrzymuje runtime oraz usuwa
+worktrees i gałęzie przed katalogiem. Retry po zakończonym fizycznym usunięciu odtwarza
+wynik z project-scoped receiptu. Archive z TUI ma osobny guard rewizji i nie kasuje danych.
 
 Kontrola ról, tryb read-only i dzierżawa worktree są kontraktem współpracujących
 procesów działających na jednym koncie systemowym, nie granicą bezpieczeństwa systemu

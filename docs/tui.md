@@ -25,8 +25,13 @@ na wspólnym tle; bez koloru pozostaje znacznik wyboru i separator. Pasek skrót
 
 `a` w pickerze projektu udostępnia utworzenie workspace'u (tytuł, opis i opcjonalny
 workflow) oraz trwałe usunięcie zaznaczonego workspace'u. Usunięcie jest dostępne dopiero
-po wpisaniu pełnego ID; core zezwala na nie dla workspace'u pustego albo zarchiwizowanego,
-którego worktrees mają stan `removed`.
+po wpisaniu pełnego ID i nie wymaga release ani archive. Jest pełnym discardem: zatrzymuje
+runtime i usuwa stan, wszystkie worktrees wraz z niezacommitowanymi plikami oraz lokalne
+gałęzie `workspace/<id>/…`. Tej operacji nie można cofnąć.
+
+Na Dashboard `a` udostępnia `Archive completed workspace`, gdy stan to `completed`.
+Archive wymaga potwierdzenia, sprawdza rewizję oraz zachowuje wszystkie dane. Core nadal
+wymaga potwierdzonego release'u i braku aktywnych Session oraz usług.
 
 More zawiera Sessions, Agents, Services, Decisions, Change requests, Runtime, Needs
 attention, Recent recorded activity i Documents. Task prowadzi do bieżących sesji,

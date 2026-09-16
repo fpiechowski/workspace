@@ -186,8 +186,9 @@ workspace tui hide --workspace ws_ID
 kolekcję, a `f` przełącza widok statusu lub historii. `s` sortuje listę.
 `t` otwiera terminal zaznaczonego agenta lub potwierdzenie wznowienia;
 `o`, potem `t`, pozwala szybko otworzyć albo uruchomić orkiestratora. `a`
-otwiera tylko operacje dostępne dla zaznaczenia, w tym tworzenie/usuwanie workspace'ów
-w pickerze projektu oraz usuwanie niepowiązanych tasków i nieaktywnych sesji. `g` przechodzi do zweryfikowanego
+otwiera tylko operacje dostępne dla zaznaczenia, w tym tworzenie i pełne usuwanie
+workspace'ów w pickerze projektu, archiwizację zakończonego workspace'u oraz usuwanie
+niepowiązanych tasków i nieaktywnych sesji. `g` przechodzi do zweryfikowanego
 okna/panelu tmux. `r` odświeża odczyt bez reconcile, `?` pokazuje pomoc. `--theme`
 przyjmuje `auto`, `dark` lub `light`; `--no-color` wymusza tekstowe badge.
 
@@ -204,8 +205,10 @@ próbą zadania albo dokładnym RunID; „Pause and interrupt” pokazuje Runy i
 które zostaną zatrzymane. Interfejs nie akceptuje automatycznie handoffów ani decyzji.
 Operacje usuwania wymagają wpisania pełnego ID. Taski i sesje są ukrywane przez
 audytowalny tombstone, a core odrzuca usunięcie danych aktywnych, zależnych lub mających
-utrwalone wyniki. Katalog workspace'u można trwale usunąć tylko wtedy, gdy workspace
-jest pusty albo zarchiwizowany, a wszystkie jego worktrees zostały bezpiecznie uprzątnięte.
+utrwalone wyniki. Delete Workspace jest odrębnym, nieodwracalnym discardem: po wpisaniu
+pełnego ID zatrzymuje runtime i usuwa stan, worktrees, niezacommitowane pliki oraz lokalne
+gałęzie workspace'u bez wymagania release lub archive. Archive zachowuje historię i nadal
+wymaga zakończonego workflow, potwierdzonego release'u i braku aktywnych sesji/usług.
 Przed downgrade binarium ukryj zarządzany panel przez `workspace tui hide`: starszy
 launcher nie rozpoznaje jeszcze własności nowego panelu.
 Szczegóły ekranów i skrótów: [docs/tui.md](docs/tui.md).

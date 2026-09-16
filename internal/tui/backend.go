@@ -86,6 +86,9 @@ func (b CoreBackend) PerformAction(ctx context.Context, selector string, call Ac
 		return err
 	case "delete_workspace":
 		return b.Service.DeleteWorkspace(ctx, call.TargetID, call.Key, call.ExpectedRevision)
+	case "archive_workspace":
+		_, err := b.Service.ArchiveGuarded(ctx, selector, call.Key, call.ExpectedRevision)
+		return err
 	case "pause":
 		_, err := b.Service.SetPausedGuarded(ctx, selector, true, call.Key, core.MutationGuard{ExpectedRevision: call.ExpectedRevision})
 		return err

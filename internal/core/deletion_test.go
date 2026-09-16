@@ -2,10 +2,12 @@ package core
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
-func TestDeleteWorkspaceRequiresEmptyOrArchivedAndReplaysAfterRemoval(t *testing.T) {
+func TestDeleteWorkspaceDiscardsActiveWorkspaceAndReplaysAfterRemoval(t *testing.T) {
 	s, id := fixture(t)
 	ctx := context.Background()
 	status, err := s.Status(ctx, id)
@@ -26,11 +28,32 @@ func TestDeleteWorkspaceRequiresEmptyOrArchivedAndReplaysAfterRemoval(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateTask(ctx, created.Workspace.ID, TaskSpec{Title: "Plan", Goal: "Plan safely", Role: "planner", AcceptanceCriteria: []string{"Plan exists"}}, "task-create"); err != nil {
+	agent, worktree := worker(t, s, created.Workspace.ID, "discarded")
+	if err := os.WriteFile(filepath.Join(worktree.Path, "uncommitted.txt"), []byte("discard me"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	err = s.DeleteWorkspace(ctx, created.Workspace.ID, "delete-nonempty", 0)
-	expectCode(t, err, "workspace_delete_refused")
+	if _, err := s.StartSession(ctx, created.Workspace.ID, SessionOptions{Agent: agent.ID, Worktree: worktree.ID}); err != nil {
+		t.Fatal(err)
+	}
+	status, err = s.Status(ctx, created.Workspace.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteWorkspace(ctx, created.Workspace.ID, "delete-active", status.Workspace.Revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(worktree.Path); !os.IsNotExist(err) {
+		t.Fatalf("discarded worktree still exists: %v", err)
+	}
+	if exists, err := localBranchExists(ctx, s.Root, worktree.Branch); err != nil || exists {
+		t.Fatalf("discarded workspace branch remains: exists=%t err=%v", exists, err)
+	}
+	if panes := s.Runtime.(*fakeRuntime).panes; len(panes) != 0 {
+		t.Fatalf("discarded workspace runtime remains: %+v", panes)
+	}
+	if err := s.DeleteWorkspace(ctx, created.Workspace.ID, "delete-active", status.Workspace.Revision); err != nil {
+		t.Fatalf("active workspace deletion did not replay: %v", err)
+	}
 }
 
 func TestDeleteSessionAndTaskCreateAuditableTombstones(t *testing.T) {

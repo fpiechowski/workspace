@@ -82,7 +82,7 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		add("Create a new workspace", "create_workspace")
 		if item, _, items := m.selectedItem(); len(items) > 0 && item.ID == targetID && item.State != "error" {
 			add("Jump to the workspace tmux session", "jump")
-			add("Permanently delete this workspace", "delete_workspace")
+			add("Permanently delete workspace and all local work", "delete_workspace")
 		}
 	case "project":
 		add("Create a new workspace", "create_workspace")
@@ -99,6 +99,9 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		}
 		if workspaceState == "needs_workflow" {
 			add("Select workflow", "select_workflow")
+		}
+		if workspaceState == "completed" {
+			add("Archive completed workspace", "archive_workspace")
 		}
 		if workspaceState != "archived" {
 			add("Reconcile runtime", "reconcile")
@@ -140,10 +143,14 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 			if workspace.ID == targetID {
 				call.ExpectedRevision = workspace.Revision
 				call.TargetName = firstNonempty(workspace.Title, workspace.ID)
-				call.TargetDetails = "Only an empty workspace or an archived workspace with cleaned worktrees can be permanently deleted."
+				call.TargetDetails = "This permanently stops its runtime and deletes every task, session, artifact, uncommitted file, worktree and local workspace branch. Release or archive is not required. This cannot be undone."
 				break
 			}
 		}
+	}
+	if action == "archive_workspace" {
+		call.TargetName = firstNonempty(m.snapshot.Status.Workspace.Title, m.workspaceID)
+		call.TargetDetails = "Archive this completed workspace. The core still requires confirmed release and no active Sessions or services. Worktrees and history are retained until explicitly cleaned or deleted."
 	}
 	m.formAction = call
 	m.formReason = ""
@@ -444,6 +451,8 @@ func actionCaption(call ActionCall) string {
 		return "Create workspace " + firstNonempty(call.TargetName, "Untitled issue")
 	case "delete_workspace":
 		return "Permanently delete workspace " + targetName + " · " + targetID
+	case "archive_workspace":
+		return "Archive completed workspace " + targetName
 	case "pause":
 		return "Pause the workspace and leave current Runs untouched"
 	case "resume_workspace":

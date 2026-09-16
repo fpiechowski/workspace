@@ -24,7 +24,7 @@ type fakeRuntime struct {
 
 func (r *fakeRuntime) Launch(_ context.Context, l Launch) (Pane, error) {
 	r.launches++
-	p := Pane{ID: fmt.Sprintf("%%%d", r.launches), WindowID: "@1", SessionID: l.SessionID, RunID: l.RunID}
+	p := Pane{ID: fmt.Sprintf("%%%d", r.launches), WindowID: "@1", SessionID: l.SessionID, RunID: l.RunID, WorkspaceID: l.WorkspaceID}
 	r.panes[p.ID] = p
 	return p, nil
 }
@@ -38,7 +38,15 @@ func (r *fakeRuntime) Inspect(_ context.Context, id string) (Pane, error) {
 	}
 	return p, nil
 }
-func (r *fakeRuntime) Stop(_ context.Context, id string) error      { delete(r.panes, id); return nil }
+func (r *fakeRuntime) Stop(_ context.Context, id string) error { delete(r.panes, id); return nil }
+func (r *fakeRuntime) StopWorkspace(_ context.Context, workspaceID string) error {
+	for id, pane := range r.panes {
+		if pane.WorkspaceID == workspaceID {
+			delete(r.panes, id)
+		}
+	}
+	return nil
+}
 func (r *fakeRuntime) Attach(context.Context, string, string) error { return nil }
 
 func fixture(t *testing.T) (*Service, string) {

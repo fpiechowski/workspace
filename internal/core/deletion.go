@@ -2,13 +2,17 @@ package core
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
-// DeleteWorkspace permanently removes either an empty workspace or an archived
-// workspace whose worktrees have already been cleaned. The receipt is stored at
-// project scope so a transport retry still succeeds after the directory is gone.
+// DeleteWorkspace permanently discards a workspace regardless of workflow state.
+// It stops the workspace runtime and removes its worktrees and local workspace
+// branches before deleting durable state. The receipt is stored at project scope
+// so a transport retry still succeeds after the directory is gone.
 func (s *Service) DeleteWorkspace(ctx context.Context, selector, key string, expectedRevision int) error {
 	if key == "" {
 		return fail("operation_key_required", "workspace deletion requires an operation key")
@@ -36,9 +40,6 @@ func (s *Service) DeleteWorkspace(ctx context.Context, selector, key string, exp
 		if expectedRevision != 0 && d.State.Revision != expectedRevision {
 			return false, fail("revision_conflict", "workspace changed while deletion was being confirmed")
 		}
-		if err := workspaceDeletionAllowed(d); err != nil {
-			return false, err
-		}
 		cfg, err := s.Config()
 		if err != nil {
 			return false, err
@@ -58,6 +59,20 @@ func (s *Service) DeleteWorkspace(ctx context.Context, selector, key string, exp
 		if filepath.Base(cleanDir) != d.State.ID || !contained(cleanStorage, cleanDir) || cleanDir == cleanStorage {
 			return false, fail("unsafe_path", "workspace directory is outside the configured storage root")
 		}
+		if s.Runtime == nil {
+			return false, fail("runtime_unavailable", "cannot stop workspace runtime before deletion")
+		}
+		if err := s.Runtime.StopWorkspace(ctx, d.State.ID); err != nil {
+			return false, err
+		}
+		for _, worktree := range d.Registry.Worktrees {
+			if err := s.discardWorkspaceWorktree(ctx, d, worktree); err != nil {
+				return false, err
+			}
+		}
+		if _, err := git(ctx, s.Root, "worktree", "prune"); err != nil {
+			return false, err
+		}
 		if err := os.RemoveAll(cleanDir); err != nil {
 			return false, err
 		}
@@ -69,34 +84,66 @@ func (s *Service) DeleteWorkspace(ctx context.Context, selector, key string, exp
 	return err
 }
 
-func workspaceDeletionAllowed(d *Document) error {
-	for _, session := range d.Registry.Sessions {
-		if session.Active() {
-			return fail("workspace_delete_refused", "stop active session %s before deleting the workspace", session.ID)
+func (s *Service) discardWorkspaceWorktree(ctx context.Context, d *Document, worktree Worktree) error {
+	root := filepath.Join(d.Dir, "worktrees")
+	cleanPath, err := filepath.Abs(worktree.Path)
+	if err != nil {
+		return err
+	}
+	if !contained(root, cleanPath) || cleanPath == root {
+		return fail("unsafe_path", "worktree %s is outside the workspace", worktree.ID)
+	}
+	branchPrefix := "workspace/" + d.State.ID + "/"
+	if !strings.HasPrefix(worktree.Branch, branchPrefix) {
+		return fail("unsafe_path", "worktree %s uses an unmanaged branch", worktree.ID)
+	}
+	registered, err := s.registeredWorktree(ctx, cleanPath)
+	if err != nil {
+		return err
+	}
+	if registered {
+		if _, err := git(ctx, s.Root, "worktree", "remove", "--force", "--force", "--", cleanPath); err != nil {
+			return err
 		}
+	} else if err := os.RemoveAll(cleanPath); err != nil {
+		return err
 	}
-	for _, service := range d.Registry.Services {
-		if service.Active() {
-			return fail("workspace_delete_refused", "stop active service %s before deleting the workspace", service.ID)
-		}
+	exists, err := localBranchExists(ctx, s.Root, worktree.Branch)
+	if err != nil {
+		return err
 	}
-	empty := len(d.Registry.Agents) == 1 && len(d.State.Tasks) == 0 && len(d.State.Artifacts) == 0 && len(d.State.Decisions) == 0 &&
-		d.State.PendingDecision == nil && d.State.Integration == nil && len(d.State.ChangeRequests) == 0 &&
-		len(d.Registry.Worktrees) == 0 && len(d.Registry.Sessions) == 0 && len(d.Registry.Runs) == 0 &&
-		len(d.Registry.Services) == 0 && len(d.Registry.Checks) == 0 && len(d.Registry.Handoffs) == 0 &&
-		len(d.Registry.Messages) == 0
-	if empty {
-		return nil
-	}
-	if d.State.Status != "archived" {
-		return fail("workspace_delete_refused", "only an empty or archived workspace can be deleted")
-	}
-	for _, worktree := range d.Registry.Worktrees {
-		if worktree.State != "removed" {
-			return fail("workspace_delete_refused", "clean worktree %s before deleting the archived workspace", worktree.ID)
+	if exists {
+		if _, err := git(ctx, s.Root, "branch", "-D", "--", worktree.Branch); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func (s *Service) registeredWorktree(ctx context.Context, target string) (bool, error) {
+	listing, err := git(ctx, s.Root, "worktree", "list", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(listing, "\n") {
+		if strings.HasPrefix(line, "worktree ") && filepath.Clean(strings.TrimPrefix(line, "worktree ")) == filepath.Clean(target) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func localBranchExists(ctx context.Context, root, branch string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	err := cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fail("git_error", "could not inspect branch %s: %v", branch, err)
 }
 
 // DeleteTask records an auditable tombstone. It refuses to erase dependencies,

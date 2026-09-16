@@ -46,6 +46,7 @@ type Runtime interface {
 	Launch(context.Context, Launch) (Pane, error)
 	Inspect(context.Context, string) (Pane, error)
 	Stop(context.Context, string) error
+	StopWorkspace(context.Context, string) error
 	Attach(context.Context, string, string) error
 }
 type Tmux struct{ Socket string }
@@ -381,6 +382,13 @@ func paneOwns(p Pane, sessionID, runID string) bool {
 }
 func (t Tmux) Stop(ctx context.Context, pane string) error {
 	_, err := t.call(ctx, "kill-pane", "-t", pane)
+	return err
+}
+func (t Tmux) StopWorkspace(ctx context.Context, workspaceID string) error {
+	_, err := t.call(ctx, "kill-session", "-t", "="+TmuxName(workspaceID))
+	if tmuxMissingSession(err) {
+		return nil
+	}
 	return err
 }
 func (t Tmux) Attach(ctx context.Context, workspaceID, pane string) error {

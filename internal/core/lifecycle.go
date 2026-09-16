@@ -51,10 +51,25 @@ func (s *Service) Pause(ctx context.Context, selector string, interrupt bool, ke
 }
 
 func (s *Service) Archive(ctx context.Context, selector string, keys ...string) (Status, error) {
+	return s.archive(ctx, selector, 0, keys...)
+}
+
+func (s *Service) ArchiveGuarded(ctx context.Context, selector, key string, expectedRevision int) (Status, error) {
+	return s.archive(ctx, selector, expectedRevision, key)
+}
+
+func (s *Service) archive(ctx context.Context, selector string, expectedRevision int, keys ...string) (Status, error) {
 	var out Status
-	err := mutate(s, ctx, selector, keys, "archive", &out, s.requireOrchestrator, func(d *Document) error {
+	request := any("archive")
+	if expectedRevision != 0 {
+		request = []any{"archive", expectedRevision}
+	}
+	err := mutate(s, ctx, selector, keys, request, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
+		}
+		if expectedRevision != 0 && d.State.Revision != expectedRevision {
+			return fail("revision_conflict", "workspace changed while archiving was being confirmed")
 		}
 		if d.State.Status == "archived" {
 			out = d.Status()
