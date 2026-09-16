@@ -215,7 +215,14 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				if cfg.Profiles == nil {
 					cfg.Profiles = map[string]Profile{}
 				}
-				cfg.Clients[prior.Route.Client] = prior.ClientSnapshot
+				priorClient := prior.ClientSnapshot
+				// Older registries predate native OpenCode delivery. Upgrade the
+				// default snapshot on resume; an explicit generic delivery wrapper
+				// remains backward-compatible.
+				if priorClient.Adapter == "opencode" && !priorClient.NativeDelivery && len(priorClient.DeliverArgv) == 0 {
+					priorClient.NativeDelivery = true
+				}
+				cfg.Clients[prior.Route.Client] = priorClient
 				profileCfg := cfg.Profiles[profile]
 				if prior.ClientThreadID != "" {
 					profileCfg.Routes = []Route{prior.Route}
