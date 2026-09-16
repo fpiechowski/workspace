@@ -7,7 +7,10 @@ import (
 	"sort"
 )
 
-const registrySchemaVersion = 3
+const (
+	logicalRegistrySchemaVersion = 3
+	registrySchemaVersion        = 4
+)
 
 func migratedSessionID(key string) string {
 	sum := sha256.Sum256([]byte("workspace/logical-session/v2\x00" + key))
@@ -19,7 +22,7 @@ func migratedSessionID(key string) string {
 // so every persisted provenance reference and active legacy process remains
 // resolvable. Grouping is deliberately conservative.
 func migrateRegistryV2(d *Document) bool {
-	if d.Registry.SchemaVersion >= registrySchemaVersion {
+	if d.Registry.SchemaVersion >= logicalRegistrySchemaVersion {
 		d.syncSessions()
 		return false
 	}
@@ -169,7 +172,57 @@ func migrateRegistryV2(d *Document) bool {
 			}
 		}
 	}
+	d.Registry.SchemaVersion = logicalRegistrySchemaVersion
+	d.syncSessions()
+	return changed
+}
+
+// migrateRegistryV3 upgrades only persisted Session client snapshots. Runs
+// and all references to concrete executions are intentionally untouched.
+func migrateRegistryV3(d *Document) bool {
+	if d.Registry.SchemaVersion >= registrySchemaVersion {
+		d.syncSessions()
+		return false
+	}
+	if d.Registry.SchemaVersion != logicalRegistrySchemaVersion {
+		return false
+	}
+	for i := range d.Registry.Sessions {
+		client, upgraded := upgradeLegacyOpenCodeClient(d.Registry.Sessions[i].ClientSnapshot)
+		if !upgraded {
+			continue
+		}
+		// The historical snapshot is known to be a project client shape. Run
+		// the same normalizer used by Config so capabilities are regenerated.
+		if normalized, err := normalizeClient(client); err == nil {
+			client = normalized
+		}
+		d.Registry.Sessions[i].ClientSnapshot = client
+	}
 	d.Registry.SchemaVersion = registrySchemaVersion
 	d.syncSessions()
+	return true
+}
+
+// migrateRegistry applies private registry migrations in source-version
+// order. Each stage is idempotent; loadDocument persists the resulting
+// document once through the normal atomic write-ahead path.
+func migrateRegistry(d *Document) bool {
+	changed := false
+	for d.Registry.SchemaVersion < registrySchemaVersion {
+		var stepChanged bool
+		switch d.Registry.SchemaVersion {
+		case 0, 1, 2:
+			stepChanged = migrateRegistryV2(d)
+		case logicalRegistrySchemaVersion:
+			stepChanged = migrateRegistryV3(d)
+		default:
+			return changed
+		}
+		if !stepChanged {
+			return changed
+		}
+		changed = true
+	}
 	return changed
 }

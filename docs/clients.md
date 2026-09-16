@@ -25,8 +25,12 @@ preserving the compatible `client_thread_id`. Delivery posts a visible marker-be
 prompt to that exact session and accepts it only after the marker appears in history;
 HTTP success or process startup alone is not delivery. A busy or unready TUI leaves the
 message in the inbox for retry. Delivery, inbox ACK and handoff acceptance are separate
-operations. Explicit non-native OpenCode configurations remain readable and keep their
-configured generic adapter behavior; they never silently start `opencode run`.
+operations. OpenCode with no `deliver_argv` is native by default. A genuinely custom,
+non-empty `deliver_argv` remains an external transport and is preserved. The exact
+historical bundled argv `python3 {project_dir}/scripts/opencode-deliver.py {thread_id}
+{message_file} {message_id}` is migrated from persisted Session snapshots to native
+delivery; similar or custom wrappers are not changed. Explicit non-native configurations
+remain readable and keep their configured generic adapter behavior.
 
 `client_thread_id` is not a workspace identity or mailbox address. The binding is
 unique across active logical Sessions for the same adapter. Manual binding, Codex

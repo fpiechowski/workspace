@@ -281,8 +281,8 @@ na rozmowę; `session history sess_ID` i `run list` pokazują wszystkie uruchomi
 `archive` i `clean --dry-run` są osobne od potwierdzenia release’u.
 [Runtime, komunikacja i sprzątanie](docs/runtime.md).
 
-WORKSPACE.md jest kanonicznym stanem workflow; `.runtime/index.json` zawiera rejestry
-operacyjne w wersji `schema_version: 2`, z osobnymi tablicami `sessions` i `runs`.
+WORKSPACE.md jest kanonicznym stanem workflow; `.runtime/index.json` zawiera prywatny
+rejestr operacyjny w wersji `schema_version: 4`, z osobnymi tablicami `sessions` i `runs`.
 `status --json` publikuje ten sam jawny kontrakt wersji. Starszy indeks jest migrowany
 atomowo przy pierwszym otwarciu; dawne `sess_*` pozostają trwałymi aliasami Run, więc
 checks, handoffs, artifacts i messages zachowują pochodzenie. Aktualizuj opis przez

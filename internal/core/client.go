@@ -6,7 +6,34 @@ import (
 	"time"
 )
 
+var legacyOpenCodeDeliverArgv = []string{
+	"python3",
+	"{project_dir}/scripts/opencode-deliver.py",
+	"{thread_id}",
+	"{message_file}",
+	"{message_id}",
+}
+
+// upgradeLegacyOpenCodeClient recognizes only the bundled delivery wrapper
+// shipped by the historical project configuration. It deliberately compares
+// argv values rather than checking whether a path exists: the registry must
+// remain migratable after the retired wrapper has been removed.
+func upgradeLegacyOpenCodeClient(client Client) (Client, bool) {
+	if client.Adapter != "opencode" || len(client.DeliverArgv) != len(legacyOpenCodeDeliverArgv) {
+		return client, false
+	}
+	for i, arg := range client.DeliverArgv {
+		if arg != legacyOpenCodeDeliverArgv[i] {
+			return client, false
+		}
+	}
+	client.DeliverArgv = nil
+	client.NativeDelivery = true
+	return client, true
+}
+
 func normalizeClient(client Client) (Client, error) {
+	client, _ = upgradeLegacyOpenCodeClient(client)
 	switch client.Adapter {
 	case "codex":
 		if len(client.LaunchArgv) == 0 {
@@ -23,11 +50,14 @@ func normalizeClient(client Client) (Client, error) {
 	case "opencode":
 		if len(client.LaunchArgv) == 0 {
 			client.LaunchArgv = []string{"opencode", "--model", "{model}", "--prompt", "{prompt}"}
-			client.NativeDelivery = true
 		}
 		if len(client.ResumeArgv) == 0 {
 			client.ResumeArgv = []string{"opencode", "--session", "{thread_id}", "--model", "{model}", "--prompt", "{prompt}"}
 		}
+		// OpenCode is native by default. A non-empty delivery wrapper is an
+		// explicit external transport and remains external, even if an older
+		// config also set NativeDelivery.
+		client.NativeDelivery = len(client.DeliverArgv) == 0
 	case "command":
 	default:
 		return client, fail("invalid_config", "unknown client adapter %q", client.Adapter)
@@ -44,11 +74,10 @@ func normalizeClient(client Client) (Client, error) {
 		if len(client.ResumeArgv) > 0 {
 			client.Capabilities = append(client.Capabilities, "resume")
 		}
-		if len(client.DeliverArgv) > 0 {
-			client.Capabilities = append(client.Capabilities, "deliver")
-		}
 		if client.Adapter == "opencode" && client.NativeDelivery {
 			client.Capabilities = append(client.Capabilities, "deliver", "observe")
+		} else if len(client.DeliverArgv) > 0 {
+			client.Capabilities = append(client.Capabilities, "deliver")
 		}
 	}
 	return client, nil
@@ -70,6 +99,9 @@ func (s *Service) setDeliveryPhase(ctx context.Context, selector, messageID, run
 		for i := range d.Registry.Deliveries {
 			attempt := &d.Registry.Deliveries[i]
 			if attempt.MessageID == messageID && attempt.RunID == runID {
+				if attempt.Phase == phase && attempt.Error == deliveryErr {
+					return nil
+				}
 				attempt.Phase, attempt.Error, attempt.UpdatedAt = phase, deliveryErr, nowUTC()
 				return saveDocument(d)
 			}
