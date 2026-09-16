@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"workspace/internal/core"
@@ -277,7 +278,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showHelp = false
 		return m, nil
 	}
-	if key == "ctrl+c" || key == "q" {
+	if key == "ctrl+c" || keybind.Matches(msg, m.keys.Exit) {
 		if m.managed {
 			return m, m.hideManaged()
 		}
@@ -300,24 +301,52 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.pop()
 		return m, nil
 	}
-	if key == "?" {
+	if keybind.Matches(msg, m.keys.Help) {
 		m.showHelp = !m.showHelp
+		if m.showHelp {
+			m.helpViewport.GotoTop()
+		}
 		return m, nil
 	}
-	if key == "/" && m.isCollectionPage() {
+	if m.showHelp {
+		// Scroll keys are owned by the help viewport; any other command
+		// dismisses help and keeps working as documented.
+		switch {
+		case keybind.Matches(msg, m.keys.Up):
+			m.helpViewport.LineUp(1)
+			return m, nil
+		case keybind.Matches(msg, m.keys.Down):
+			m.helpViewport.LineDown(1)
+			return m, nil
+		case keybind.Matches(msg, m.keys.PageUp):
+			m.helpViewport.PageUp()
+			return m, nil
+		case keybind.Matches(msg, m.keys.PageDown):
+			m.helpViewport.PageDown()
+			return m, nil
+		case keybind.Matches(msg, m.keys.Top):
+			m.helpViewport.GotoTop()
+			return m, nil
+		case keybind.Matches(msg, m.keys.Bottom):
+			m.helpViewport.GotoBottom()
+			return m, nil
+		}
+		m.showHelp = false
+	}
+	if keybind.Matches(msg, m.keys.Filter) && m.isCollectionPage() {
 		m.filtering = true
 		m.filterOriginal, m.filterSelection = m.route.Query, m.route.SelectedID
 		m.filterInput.SetValue(m.route.Query)
 		cmd := m.filterInput.Focus()
 		return m, cmd
 	}
-	if key == "r" {
+	if keybind.Matches(msg, m.keys.Refresh) {
 		m.generation++
 		m.projectPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false
 		m.loadError, m.runtimeError, m.uiError = "", "", ""
 		return m, m.beginRefresh()
 	}
-	if key == "s" && m.isCollectionPage() {
+	if keybind.Matches(msg, m.keys.Sort) && m.isCollectionPage() {
 		switch m.route.Sort {
 		case "":
 			m.route.Sort = "name"
@@ -329,7 +358,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.rebuildViewport()
 		return m, nil
 	}
-	if key == "l" && m.workspaceID != "" {
+	if keybind.Matches(msg, m.keys.CurrentWork) && m.workspaceID != "" {
 		m.navigate(route{Page: "dashboard"})
 		m.focusedPanel = 0
 		m.route.Query = ""
@@ -338,22 +367,22 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.validateSelection()
 		return m, nil
 	}
-	if key == "t" {
+	if keybind.Matches(msg, m.keys.Terminal) {
 		return m, m.openTerminal()
 	}
-	if key == "w" {
+	if keybind.Matches(msg, m.keys.WorkspacePicker) {
 		m.push(route{Page: "project"})
 		return m, m.beginRefresh()
 	}
-	if key == "o" && m.workspaceID != "" {
+	if keybind.Matches(msg, m.keys.Orchestrator) && m.workspaceID != "" {
 		m.push(route{Page: "orchestrator"})
 		return m, nil
 	}
-	if key == "v" && m.route.Page == "dashboard" {
+	if keybind.Matches(msg, m.keys.Attention) && m.route.Page == "dashboard" {
 		m.push(route{Page: "attention"})
 		return m, nil
 	}
-	if key == "f" && m.isCollectionPage() {
+	if keybind.Matches(msg, m.keys.FilterNext) && m.isCollectionPage() {
 		options := m.statusFilterOptions()
 		if len(options) <= 1 {
 			m.notice = "No status or history filter is available for this collection."
@@ -374,29 +403,27 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.rebuildViewport()
 		return m, nil
 	}
-	if (key == "tab" || key == "shift+tab") && m.route.Page == "results" {
-		tabs := []string{"artifacts", "handoffs", "checks"}
-		index := 0
-		for i, tab := range tabs {
-			if tab == m.route.Tab {
-				index = i
-			}
-		}
-		if key == "tab" {
-			index = (index + 1) % len(tabs)
-		} else {
-			index = (index + len(tabs) - 1) % len(tabs)
-		}
-		m.navigate(route{Page: "results", Tab: tabs[index]})
-		return m, nil
-	}
-	if (key == "tab" || key == "shift+tab") && m.route.Page == "dashboard" {
+	if keybind.Matches(msg, m.keys.Focus) || keybind.Matches(msg, m.keys.FocusPrev) {
 		delta := 1
-		if key == "shift+tab" {
+		if keybind.Matches(msg, m.keys.FocusPrev) {
 			delta = -1
 		}
-		m.focusDashboardPanel(delta)
-		return m, nil
+		switch m.route.Page {
+		case "results":
+			tabs := []string{"artifacts", "handoffs", "checks"}
+			index := 0
+			for i, tab := range tabs {
+				if tab == m.route.Tab {
+					index = i
+				}
+			}
+			index = (index + delta + len(tabs)) % len(tabs)
+			m.navigate(route{Page: "results", Tab: tabs[index]})
+			return m, nil
+		case "dashboard":
+			m.focusDashboardPanel(delta)
+			return m, nil
+		}
 	}
 	if m.route.Page == "task" && (key == "1" || key == "2" || key == "3") {
 		switch key {
@@ -409,34 +436,34 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	switch key {
-	case "1":
+	switch {
+	case keybind.Matches(msg, m.keys.Primary[0]):
 		m.navigate(route{Page: "dashboard"})
-	case "2":
+	case keybind.Matches(msg, m.keys.Primary[1]):
 		m.navigate(route{Page: "tasks"})
-	case "3":
+	case keybind.Matches(msg, m.keys.Primary[2]):
 		m.navigate(route{Page: "worktrees"})
-	case "4":
+	case keybind.Matches(msg, m.keys.Primary[3]):
 		m.navigate(route{Page: "results", Tab: "artifacts"})
-	case "5":
+	case keybind.Matches(msg, m.keys.Primary[4]):
 		m.navigate(route{Page: "more"})
-	case "up", "k":
+	case keybind.Matches(msg, m.keys.Up):
 		m.moveSelection(-1)
-	case "down", "j":
+	case keybind.Matches(msg, m.keys.Down):
 		m.moveSelection(1)
-	case "pgup":
+	case keybind.Matches(msg, m.keys.PageUp):
 		if m.isCollectionPage() {
 			m.moveSelection(-max(1, m.contentHeight()-2))
 		} else {
 			m.viewport.PageUp()
 		}
-	case "pgdown":
+	case keybind.Matches(msg, m.keys.PageDown):
 		if m.isCollectionPage() {
 			m.moveSelection(max(1, m.contentHeight()-2))
 		} else {
 			m.viewport.PageDown()
 		}
-	case "home":
+	case keybind.Matches(msg, m.keys.Top):
 		if m.isCollectionPage() {
 			items := m.filteredItems()
 			if len(items) > 0 {
@@ -445,7 +472,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.viewport.GotoTop()
 		}
-	case "end":
+	case keybind.Matches(msg, m.keys.Bottom):
 		if m.isCollectionPage() {
 			items := m.filteredItems()
 			if len(items) > 0 {
@@ -454,7 +481,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.viewport.GotoBottom()
 		}
-	case "enter":
+	case keybind.Matches(msg, m.keys.Open):
 		if m.route.Page == "session" {
 			m.push(route{Page: "runs", ParentID: m.route.EntityID})
 			return m, nil
@@ -472,11 +499,11 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.openSelection()
-	case "g":
+	case keybind.Matches(msg, m.keys.Jump):
 		return m, m.jumpSelected()
-	case "a":
+	case keybind.Matches(msg, m.keys.Actions):
 		return m, m.openActionMenu()
-	case "esc":
+	case keybind.Matches(msg, m.keys.Back):
 		m.pop()
 	}
 	m.rebuildViewport()

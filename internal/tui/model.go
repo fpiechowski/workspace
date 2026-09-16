@@ -55,6 +55,8 @@ type Model struct {
 	palette         palette
 	width, height   int
 	viewport        viewport.Model
+	helpViewport    viewport.Model
+	keys            keyMap
 	filterInput     textinput.Model
 	filtering       bool
 	filterOriginal  string
@@ -203,11 +205,13 @@ func New(config Config) *Model {
 		hideKey:      core.ID("tuihide"),
 		palette:      makePalette(config.Theme, config.NoColor),
 		width:        80, height: 24,
+		keys:               defaultKeyMap(),
 		filterInput:        input,
 		worktreeInspection: make(map[string]core.WorktreeObservation),
 		routeMemory:        make(map[routeKey]routeMemory),
 	}
 	m.viewport = viewport.New(76, 16)
+	m.helpViewport = viewport.New(76, 16)
 	if m.workspaceID == "" {
 		m.route = route{Page: "project"}
 	} else {

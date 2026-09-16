@@ -9,8 +9,8 @@ i nie uruchamia orkiestratora ani supervisora; jawna akcja w pickerze może utwo
 Picker projektu pokazuje tytuł, status, fazę, aktywne Runy, problemy, pełny ID, ścieżkę,
 źródło wejścia i datę utworzenia. Wybór workspace'u otwiera Work: postęp zaakceptowanych zadań,
 liczbę zadań w toku, oczekujących na review i zablokowanych oraz liczbę aktywnych
-agentów. Podsumowanie pozostaje widoczne przy przełączaniu list Current work, Tasks,
-Needs attention i Recent recorded activity. Current work pokazuje orkiestratora,
+agentów. Podsumowanie pozostaje widoczne przy przełączaniu sekcji Agents & runs, Tasks,
+Needs attention i Recent recorded activity. Agents & runs pokazuje orkiestratora,
 aktywne wykonania oraz niezamknięte sesje bieżących prób niezaakceptowanych zadań.
 Każdy wiersz łączy agenta z zadaniem, stanem i modelem. Tasks pokazuje stan zadania
 oraz liczbę aktywnych wykonań, sesji i runów jego bieżącej próby. Zakończenie runu
@@ -44,8 +44,11 @@ i read-only readerów oraz osobną, oznaczoną czasem obserwację Git.
 filtr substring po nazwie, ID i podtytule; porównanie nie rozróżnia wielkości liter.
 `Esc` podczas edycji przywraca poprzednią wartość i zaznaczenie. Poza edycją czyści najpierw filtr tekstowy, następnie statusowy, zanim wróci do poprzedniej strony. `f` przełącza aktywny/archiwalny
 widok workspace'ów i statusowe lub historyczne filtry odpowiednich kolekcji. Na Dashboard
-`Tab`/`Shift+Tab` zmienia fokus między Current work, Tasks, Needs attention i Recent
-recorded activity. Na Results zmienia typ wyniku: artifacts, handoffs lub checks. Użyj
+`Tab`/`Shift+Tab` zmienia fokus między Agents & runs, Tasks, Needs attention i Recent
+recorded activity. Na Results zmienia typ wyniku: artifacts, handoffs lub checks; aktywny
+typ jest nazwany w linii pomocniczej. Trasy szczegółów i kolekcji zależnych pokazują
+breadcrumb, a na szczegółach zadania `1`–`3` są skrótami do powiązanych zasobów
+(Sessions, Worktrees, Results), nie do stron głównych. Użyj
 `1`–`5`, aby przejść do głównych stron.
 
 | Klawisz | Działanie |
@@ -58,7 +61,7 @@ recorded activity. Na Results zmienia typ wyniku: artifacts, handoffs lub checks
 | `f` | Przełącz status albo historię na wspieranych listach |
 | `Tab` / `Shift+Tab` | Zmień fokus panelu Dashboard albo typ wyników |
 | `s` | Sortuj według priorytetu, nazwy lub ostatniego wykonania |
-| `l` | Wróć do Current work |
+| `l` | Wróć do Agents & runs |
 | `t` | Otwórz terminal agenta albo potwierdź start/wznowienie |
 | `a` | Otwórz dostępne akcje zaznaczenia lub workspace'u |
 | `g` | Skocz do zweryfikowanego celu tmux |
@@ -70,6 +73,11 @@ recorded activity. Na Results zmienia typ wyniku: artifacts, handoffs lub checks
 `Esc` i `Ctrl+C` anulują otwarty formularz, także jego filtr i potwierdzenie; pozostałe klawisze należą do formularza. `Ctrl+C`
 w zarządzanym panelu poza formularzem zapisuje hide. Podczas edycji tekstu filtr przejmuje
 klawisze, więc `q`, `g` i cyfry nie uruchomią skrótów aplikacji.
+
+Stopka pokazuje wyłącznie polecenia dostępne dla bieżącego zaznaczenia i możliwości
+backendu; nieobsługiwane terminal, skok i akcje nie są reklamowane. `?` otwiera
+przewijalną pomoc pogrupowaną na Navigation, View, Runtime, Actions i Exit; pozycję
+przewijania widać w wierszu statusu, a `?` lub `Esc` wracają do poprzedniego widoku.
 
 `t` na aktywnej sesji otwiera jej dokładny bieżący Run po weryfikacji ownership.
 Na nieaktywnej sesji prosi o potwierdzenie wznowienia, tworzy nowy Run przez core
@@ -86,7 +94,7 @@ w formularzu potwierdzenia. Esc i Cancel pozostawiają runtime bez zmian.
 Po potwierdzeniu wykonuje jedną operację reconcile i ponawia nawigację do tego
 samego celu. Reconcile może odtworzyć kwalifikującego się orkiestratora; nie
 restartuje automatycznie zatrzymanych workerów. Gdy cel nadal jest niedostępny,
-TUI wskazuje Current work i `t` do otwarcia lub wznowienia sesji, bez pętli
+TUI wskazuje Agents & runs i `t` do otwarcia lub wznowienia sesji, bez pętli
 potwierdzeń. Niejednoznaczny cel, niezgodne ownership lub socket nie wywołują
 propozycji reconcile.
 

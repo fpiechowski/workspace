@@ -308,7 +308,7 @@ func (m *Model) dashboardPanels() [4]struct {
 		Lines []string
 	}
 	metrics := m.snapshot.Metrics
-	panels[0].Title = "Overview"
+	panels[0].Title = "Agents & runs"
 	panels[0].Lines = []string{
 		fmt.Sprintf("Accepted %d / %d", metrics.TaskAccepted, metrics.TaskTotal),
 		fmt.Sprintf("Running %d · blocked %d · needs changes %d", metrics.TaskRunning, metrics.TaskBlocked, metrics.TaskNeedsChanges),

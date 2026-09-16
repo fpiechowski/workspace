@@ -83,9 +83,12 @@ otrzymują nawiasy `[ ]`, zaznaczony wpis znacznik `›`, a pasek postępu znaki
 
 ## Components
 
-**Current work.** Wybieralny wpis łączy agenta, zadanie, stan wykonania i model.
+**Agents & runs.** Wybieralny wpis łączy agenta, zadanie, stan wykonania i model.
 Lista obejmuje orkiestratora, aktywne wykonania i niezamknięte sesje bieżących prób
-niezaakceptowanych zadań. Zaznaczenie jest związane z ID także po sortowaniu.
+niezaakceptowanych zadań. Zaznaczenie jest związane z ID także po sortowaniu. Sekcja
+jest pierwszą z czterech sekcji Dashboardu (Agents & runs, Tasks, Needs attention,
+Recent recorded activity); aktywna sekcja ma znaczniki tekstowe `[ ]`, dzięki czemu
+fokus pozostaje widoczny bez koloru.
 
 **Status.** Symbolowi zawsze towarzyszy podpis: `✓` sukces, `×` błąd, `!` blokada,
 `◈` review, `○` oczekiwanie, `■` zatrzymanie lub zamknięcie, `◇` przerwanie lub wyjście.
@@ -102,6 +105,16 @@ dokładny cel i nie przekierowuje automatycznie do nowszego wykonania.
 wielkości liter. `Enter` zatwierdza. `Esc` podczas edycji przywraca wcześniejszy filtr
 i zaznaczenie; poza edycją usuwa najpierw filtr tekstowy, potem statusowy, a dopiero
 następnie wraca do poprzedniej strony. Stopka pokazuje dostępne działanie.
+
+**Pomoc i skróty.** Wszystkie skróty pochodzą z jednego, scentralizowanego zestawu
+`bubbles/key`. Stopka i pełna pomoc renderują wyłącznie powiązania włączone dla
+bieżącego zaznaczenia; nieobsługiwane `t`, `g` i `a` nie są reklamowane dla wpisów
+bez procesu lub akcji. Pełna pomoc jest przewijana przez `bubbles/viewport` i
+pogrupowana na **Navigation, View, Runtime, Actions, Exit**, więc każda grupa jest
+osiągalna już przy 40×12; pozycję przewijania pokazuje wiersz statusu. Na szczegółach
+zadania `1`–`3` występują jako skróty do powiązanych zasobów, nie jako nawigacja
+główna. Breadcrumb oraz linia typów Results (`[Artifacts] Handoffs Checks`) nazywają
+miejsce bez polegania na kolorze.
 
 ## Do's and Don'ts
 

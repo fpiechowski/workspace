@@ -24,16 +24,17 @@ func (m *Model) dashboardContent() string {
 	lines = append(lines, panels[2].Lines...)
 	lines = append(lines, "", m.dashboardSectionTitle(3, panels[3].Title))
 	lines = append(lines, panels[3].Lines...)
-	lines = append(lines, "", "Choose 1 Overview · 2 Tasks · 3 Worktrees · 4 Results · 5 More")
 	if len(m.attentionItems()) > 4 {
-		lines = append(lines, "v opens all attention items")
+		lines = append(lines, "", "v opens all attention items")
 	}
 	return safeContent(lines)
 }
 
+// dashboardSectionTitle marks the focused section with text markers so focus
+// survives in no-color terminals.
 func (m *Model) dashboardSectionTitle(index int, title string) string {
 	if m.focusedPanel == index {
-		return "> " + title
+		return "[" + title + "]"
 	}
 	return "  " + title
 }
@@ -78,7 +79,7 @@ func (m *Model) detailContent() string {
 		if !ok {
 			return missingEntity("task", id)
 		}
-		lines = append(lines, "Task", task.Title, statusBadge(task.State), m.taskItem(task).Subtitle, "t open / resume terminal · 1 sessions · 3 results", "ID: "+task.ID, fmt.Sprintf("Attempt %d · profile %s · role %s", task.Attempt, task.Profile, task.Role), "", "Goal", task.Goal)
+		lines = append(lines, "Task", task.Title, statusBadge(task.State), m.taskItem(task).Subtitle, "t open / resume terminal", "ID: "+task.ID, fmt.Sprintf("Attempt %d · profile %s · role %s", task.Attempt, task.Profile, task.Role), "", "Goal", task.Goal)
 		if task.Reason != "" {
 			lines = append(lines, "", "Reason", task.Reason)
 		}
@@ -88,7 +89,7 @@ func (m *Model) detailContent() string {
 		lines = append(lines, bulletLines(task.DependsOn)...)
 		lines = append(lines, "", "Required artifacts")
 		lines = append(lines, bulletLines(task.RequiredArtifacts)...)
-		lines = append(lines, "", "Related sessions and results", "1 Sessions · 2 Worktrees · 3 Results · f toggles attempt history")
+		lines = append(lines, "", "Related resources (shortcuts, not primary navigation)", "1 Sessions · 2 Worktrees · 3 Results · f toggles attempt history")
 		if task.AcceptedHandoff != "" {
 			lines = append(lines, "Accepted handoff: "+task.AcceptedHandoff)
 		}

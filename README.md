@@ -183,7 +183,8 @@ workspace tui hide --workspace ws_ID
 ```
 
 `1`–`5` otwierają Work, Tasks, Worktrees, Results i More; na Dashboardzie
-`Tab`/`Shift+Tab` przełącza listę aktualnej pracy, zadań, uwag i aktywności, a w Results typ wyniku. `Up`/`Down` lub
+`Tab`/`Shift+Tab` przełącza sekcje Agents & runs, zadań, uwag i aktywności, a w Results typ wyniku
+(aktywny typ jest nazwany w linii pomocniczej). `Up`/`Down` lub
 `j`/`k` zmienia zaznaczenie, `Enter` otwiera element, `Esc` wraca, `/` filtruje
 kolekcję, a `f` przełącza widok statusu lub historii. `s` sortuje listę.
 `t` otwiera terminal zaznaczonego agenta lub potwierdzenie wznowienia;
@@ -191,7 +192,8 @@ kolekcję, a `f` przełącza widok statusu lub historii. `s` sortuje listę.
 otwiera tylko operacje dostępne dla zaznaczenia, w tym tworzenie i pełne usuwanie
 workspace'ów w pickerze projektu, archiwizację zakończonego workspace'u oraz usuwanie
 niepowiązanych tasków i nieaktywnych sesji. `g` przechodzi do zweryfikowanego
-okna/panelu tmux. `r` odświeża odczyt bez reconcile, `?` pokazuje pomoc. `--theme`
+okna/panelu tmux. `r` odświeża odczyt bez reconcile, `?` pokazuje przewijalną pomoc
+pogrupowaną na Navigation, View, Runtime, Actions i Exit (osiągalną już przy 40×12). `--theme`
 przyjmuje `auto`, `dark` lub `light`; `--no-color` wymusza tekstowe badge.
 
 W ręcznie uruchomionym TUI `q` kończy program. W zarządzanym panelu `q`, a poza

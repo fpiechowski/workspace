@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -28,13 +29,16 @@ func (m *Model) View() string {
 	if crumb := m.breadcrumb(); crumb != "" {
 		top = append(top, crumb)
 	}
+	contentRows := max(1, m.height-len(top)-2)
 	var content []string
 	if m.showHelp {
-		content = strings.Split(m.helpView(), "\n")
+		m.helpViewport.Width = max(1, m.width)
+		m.helpViewport.Height = contentRows
+		m.helpViewport.SetContent(m.helpView())
+		content = strings.Split(m.helpViewport.View(), "\n")
 	} else {
 		content = m.bodyView(mode)
 	}
-	contentRows := max(1, m.height-len(top)-2)
 	content = clipLines(content, contentRows, m.width)
 	rows := append(top, content...)
 	for len(rows) < m.height-2 {
@@ -129,12 +133,42 @@ func (m *Model) breadcrumb() string {
 		}
 		return m.palette.metaStyle().Render(ansi.TruncateWc(sanitizeLine(line), m.width, "…"))
 	}
+	if m.route.Page == "results" {
+		prefix := "Results"
+		if m.route.ParentID != "" {
+			if parent := m.parentTitle(m.route.ParentID); parent != "" {
+				prefix = parent + " / Results"
+			}
+		}
+		return m.palette.metaStyle().Render(ansi.TruncateWc(sanitizeLine(prefix+" · "+m.resultsTabLine()), m.width, "…"))
+	}
 	if m.route.ParentID != "" {
 		if parent := m.parentTitle(m.route.ParentID); parent != "" {
 			return m.palette.metaStyle().Render(ansi.TruncateWc(sanitizeLine(parent+" / "+m.collectionTitle()), m.width, "…"))
 		}
 	}
 	return ""
+}
+
+var resultTabs = []struct{ ID, Name string }{
+	{"artifacts", "Artifacts"},
+	{"handoffs", "Handoffs"},
+	{"checks", "Checks"},
+}
+
+// resultsTabLine names the active Results type so the secondary navigation is
+// explicit instead of only appearing inside the count line.
+func (m *Model) resultsTabLine() string {
+	active := firstNonempty(m.route.Tab, "artifacts")
+	parts := make([]string, 0, len(resultTabs))
+	for _, tab := range resultTabs {
+		name := tab.Name
+		if tab.ID == active {
+			name = "[" + name + "]"
+		}
+		parts = append(parts, name)
+	}
+	return strings.Join(parts, "  ")
 }
 
 var detailSections = map[string]string{
@@ -216,6 +250,9 @@ func (m *Model) parentTitle(id string) string {
 // statusRow is the status/notice region. It surfaces an explicit notice or the
 // current pending state, and stays reserved even when idle.
 func (m *Model) statusRow() string {
+	if m.showHelp {
+		return m.helpPosition()
+	}
 	text := sanitizeLine(m.notice)
 	switch {
 	case text == "" && m.actionPending:
@@ -448,67 +485,70 @@ func (m *Model) panel(title string, lines []string, width, height int, focused b
 	return m.palette.panelStyle(focused).Width(max(1, width-2)).Height(max(1, height-2)).Render(strings.Join(body, "\n"))
 }
 
+// footer derives the contextual key legend from the enabled bindings. Special
+// input modes (forms, filter editing, failures) show their own legends.
 func (m *Model) footer() string {
 	if m.form != nil {
-		return "Huh form   Enter confirm   Esc cancel"
+		return m.legend([]key.Binding{m.keys.FormConfirm, m.keys.Cancel})
 	}
 	if m.filtering {
-		return m.filterInput.View() + "  Enter apply · Esc cancel"
+		return m.filterInput.View() + "  " + m.legend([]key.Binding{m.keys.Apply, m.keys.Cancel})
 	}
 	if m.actionFailure && m.lastAction != nil {
-		return "y retry same operation · a new action · r refresh · " + m.exitHint()
+		return m.legend([]key.Binding{m.keys.Retry, m.keys.Actions, m.keys.Refresh, m.exitBinding()})
 	}
 	if m.route.Query != "" || m.route.StatusFilter != "" {
-		return "Esc clear filter · ↑/↓ select · Enter open · / edit"
+		return m.legend([]key.Binding{m.keys.ClearFilter, m.keys.Up, m.keys.Open, m.keys.Filter})
 	}
-	if m.route.Page == "dashboard" {
-		if m.width < 60 {
-			return "t terminal  Tab view  / filter  ? help"
-		}
-		return "t terminal  Tab view  / filter  s sort  a actions  ? help  " + m.exitHint()
-	}
-	if m.route.Page == "project" {
-		if m.managed {
-			return "↑/↓ select   Enter open   / filter   f status   r refresh   ? help   q hide"
-		}
-		return "↑/↓ select   Enter open   / filter   f status   r refresh   ? help   q quit"
-	}
-	if m.isCollectionPage() {
-		if m.managed {
-			return "t terminal  Enter details  / filter  s sort  f state  a actions  q hide"
-		}
-		return "t terminal  Enter details  / filter  s sort  f state  a actions  Esc back"
-	}
-	if m.managed {
-		return "t terminal  a actions  g jump  Esc back  ? help  q hide"
-	}
-	return "t terminal  a actions  g jump  Esc back  ? help  q quit"
+	return m.legend(m.shortHelp())
 }
 
-func (m *Model) helpView() string {
-	quit := "quit this manual TUI"
-	if m.managed {
-		quit = "hide this managed panel"
+// helpPosition is the fixed scroll indicator for the viewport-backed full help.
+func (m *Model) helpPosition() string {
+	total := m.helpViewport.TotalLineCount()
+	visible := m.helpViewport.VisibleLineCount()
+	top := m.helpViewport.YOffset
+	bottom := min(total, top+visible)
+	text := fmt.Sprintf("Help · lines %d–%d of %d · ↑/↓ or PgUp/PgDn scroll · ? or Esc to close", top+1, bottom, total)
+	style := m.palette.noticeStyle()
+	if !m.palette.noColor {
+		style = style.Width(m.width)
 	}
-	return strings.Join([]string{
-		"Keyboard help",
-		"  ↑/↓ or j/k  move through rows or scroll the active detail",
-		"  Enter       open selection; it never starts or stops a process",
-		"  /           filter by case-insensitive name or ID",
-		"  f           cycle status/history filters on supported collections",
-		"  Tab / Shift+Tab  cycle focused dashboard panels or result types",
-		"  1–5         Work, Tasks, Worktrees, Results, More",
-		"  t           open terminal / confirm starting or resuming a run",
-		"  l           current work",
-		"  s           sort by priority, name, recent execution",
-		"  w / o       choose workspace / inspect orchestrator",
-		"  v           view all attention items from the dashboard",
-		"  g           jump to a verified live tmux target",
-		"  r           refresh durable and runtime observations",
-		"  Esc         clear filter or return to the previous page",
-		"  q           " + quit,
-		"Press ? to return.",
-	}, "\n")
+	return style.Render(ansi.TruncateWc(text, m.width, "…"))
+}
+
+// helpView renders the full, categorized help from the same centralized
+// bindings as the footer. The viewport in View makes every group reachable at
+// the 40x12 minimum.
+func (m *Model) helpView() string {
+	lines := []string{"Keyboard help"}
+	for _, group := range m.keyGroups() {
+		keys := make([]key.Binding, 0, len(group.Keys))
+		width := 0
+		for _, binding := range group.Keys {
+			if !binding.Enabled() {
+				continue
+			}
+			keys = append(keys, binding)
+			if w := ansi.StringWidth(binding.Help().Key); w > width {
+				width = w
+			}
+		}
+		if len(keys) == 0 {
+			continue
+		}
+		lines = append(lines, "", group.Title)
+		for _, binding := range keys {
+			head := binding.Help()
+			pad := strings.Repeat(" ", max(0, width-ansi.StringWidth(head.Key)))
+			lines = append(lines, "  "+head.Key+pad+"   "+head.Desc)
+		}
+	}
+	if m.managed {
+		lines = append(lines, "", "Press q or Ctrl+C to hide this managed panel; the workspace keeps running.")
+	}
+	lines = append(lines, "", "Press ? or Esc to return.")
+	return strings.Join(lines, "\n")
 }
 
 func (m *Model) exitHint() string {

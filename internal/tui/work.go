@@ -174,7 +174,7 @@ func (m *Model) progressLines() []string {
 	return []string{fmt.Sprintf("%s  %d/%d accepted · %d%%", bar, done, total, 100*done/total), detail}
 }
 
-var workSections = []string{"Current work", "Tasks", "Needs attention", "Recent recorded activity"}
+var workSections = []string{"Agents & runs", "Tasks", "Needs attention", "Recent recorded activity"}
 
 func (m *Model) workDashboard(mode layoutMode) []string {
 	if m.snapshot.ObservedAt.IsZero() {
@@ -191,7 +191,7 @@ func (m *Model) workDashboard(mode layoutMode) []string {
 	var sections []string
 	for i, title := range workSections {
 		if m.width < 75 {
-			title = []string{"Work", "Tasks", "Attention", "Activity"}[i]
+			title = []string{"Agents", "Tasks", "Attention", "Activity"}[i]
 		}
 		if m.focusedPanel == i {
 			title = "[" + title + "]"
@@ -310,7 +310,7 @@ func (m *Model) openTerminal() tea.Cmd {
 	if kind == "run" || kind == "worktree" || kind == "service" || kind == "workspace" {
 		return m.jump(core.EntityRef{Kind: kind, ID: id})
 	}
-	m.notice = "Select an agent or task to open its terminal. l opens Current work."
+	m.notice = "Select an agent or task to open its terminal. l opens Agents & runs."
 	return nil
 }
 
