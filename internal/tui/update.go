@@ -93,6 +93,9 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.loadError = ""
+		if msg.action == "create_workspace" {
+			return m, m.openCreateWorkspaceForm(msg.names)
+		}
 		if len(msg.names) == 0 {
 			m.notice = "No workflows are configured for this project."
 			m.rebuildViewport()

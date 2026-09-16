@@ -233,6 +233,9 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, key strin
 		if err != nil {
 			return err
 		}
+		if t.DeletedAt != nil {
+			return fail("task_deleted", "task %s was deleted", t.ID)
+		}
 		if guard.ExpectedAttempt != 0 && t.Attempt != guard.ExpectedAttempt {
 			return fail("target_changed", "task %s moved from attempt %d to %d", id, guard.ExpectedAttempt, t.Attempt)
 		}

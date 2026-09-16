@@ -16,15 +16,16 @@ type TaskSpec struct {
 }
 type Task struct {
 	TaskSpec        `yaml:",inline"`
-	ID              string `yaml:"id" json:"id"`
-	State           string `yaml:"state" json:"state"`
-	Attempt         int    `yaml:"attempt" json:"attempt"`
-	InputDigest     string `yaml:"input_digest" json:"input_digest"`
-	WorktreeID      string `yaml:"worktree_id,omitempty" json:"worktree_id,omitempty"`
-	SessionID       string `yaml:"session_id,omitempty" json:"session_id,omitempty"`
-	RunID           string `yaml:"run_id,omitempty" json:"run_id,omitempty"`
-	AcceptedHandoff string `yaml:"accepted_handoff,omitempty" json:"accepted_handoff,omitempty"`
-	Reason          string `yaml:"reason,omitempty" json:"reason,omitempty"`
+	ID              string     `yaml:"id" json:"id"`
+	State           string     `yaml:"state" json:"state"`
+	Attempt         int        `yaml:"attempt" json:"attempt"`
+	InputDigest     string     `yaml:"input_digest" json:"input_digest"`
+	WorktreeID      string     `yaml:"worktree_id,omitempty" json:"worktree_id,omitempty"`
+	SessionID       string     `yaml:"session_id,omitempty" json:"session_id,omitempty"`
+	RunID           string     `yaml:"run_id,omitempty" json:"run_id,omitempty"`
+	AcceptedHandoff string     `yaml:"accepted_handoff,omitempty" json:"accepted_handoff,omitempty"`
+	Reason          string     `yaml:"reason,omitempty" json:"reason,omitempty"`
+	DeletedAt       *time.Time `yaml:"deleted_at,omitempty" json:"deleted_at,omitempty"`
 }
 type Artifact struct {
 	ID            string    `yaml:"id" json:"id"`

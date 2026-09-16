@@ -53,6 +53,7 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 	case "task":
 		if task, ok := m.task(targetID); ok && task.State != "accepted" {
 			add("Retry task · increment attempt and invalidate dependent results", "retry_task")
+			add("Delete task · only when it has no durable results or dependents", "delete_task")
 		}
 	case "session":
 		if session, ok := findSession(m.snapshot.Status.Sessions, targetID); ok {
@@ -61,6 +62,9 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 			} else if session.ClosedAt == nil {
 				add("Resume this session", "resume_session")
 				add("Close idle session", "close_session")
+			}
+			if !session.Active() && session.AgentID != m.snapshot.Status.Workspace.OrchestratorAgentID {
+				add("Delete session · only when no durable result references it", "delete_session")
 			}
 		}
 	case "run":
@@ -75,9 +79,13 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 			add("Stop service · "+service.Name, "stop_service")
 		}
 	case "workspace":
+		add("Create a new workspace", "create_workspace")
 		if item, _, items := m.selectedItem(); len(items) > 0 && item.ID == targetID && item.State != "error" {
 			add("Jump to the workspace tmux session", "jump")
+			add("Permanently delete this workspace", "delete_workspace")
 		}
+	case "project":
+		add("Create a new workspace", "create_workspace")
 	case "dashboard", "orchestrator", "runtime":
 		workspaceState := m.snapshot.Status.Workspace.Status
 		if workspaceState != "archived" && workspaceState != "completed" {
@@ -120,19 +128,36 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 	if action == "jump" {
 		return m.jump(core.EntityRef{Kind: "workspace", ID: targetID})
 	}
+	if action == "create_workspace" {
+		targetID = ""
+	}
 	call := ActionCall{
 		Action: action, TargetID: targetID, WorkspaceID: m.workspaceID, Key: core.ID("tui"),
 		ExpectedRevision: m.snapshot.Status.Workspace.Revision,
+	}
+	if action == "delete_workspace" {
+		for _, workspace := range m.project.Workspaces {
+			if workspace.ID == targetID {
+				call.ExpectedRevision = workspace.Revision
+				call.TargetName = firstNonempty(workspace.Title, workspace.ID)
+				call.TargetDetails = "Only an empty workspace or an archived workspace with cleaned worktrees can be permanently deleted."
+				break
+			}
+		}
 	}
 	m.formAction = call
 	m.formReason = ""
 	m.formConfirm = false
 	switch action {
-	case "retry_task":
+	case "retry_task", "delete_task":
 		if task, ok := m.task(targetID); ok {
 			call.ExpectedAttempt = task.Attempt
 			call.TargetName = firstNonempty(task.Title, task.ID)
-			call.TargetDetails = m.retryImpact(task)
+			if action == "retry_task" {
+				call.TargetDetails = m.retryImpact(task)
+			} else {
+				call.TargetDetails = "The task disappears from normal TUI views. The core refuses deletion when dependencies, active sessions, handoffs, artifacts, checks, integration or change requests still reference it."
+			}
 		}
 	case "stop_run":
 		if session, ok := findSession(m.snapshot.Status.Sessions, targetID); ok {
@@ -140,10 +165,14 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 			call.TargetName = firstNonempty(session.AgentSnapshot.Name, session.ID)
 			call.TargetDetails = fmt.Sprintf("Session %s · task %s · attempt %d · worktree %s", session.ID, firstNonempty(session.TaskID, "none"), session.TaskAttempt, firstNonempty(session.WorktreeID, "none"))
 		}
-	case "resume_session", "close_session":
+	case "resume_session", "close_session", "delete_session":
 		if session, ok := findSession(m.snapshot.Status.Sessions, targetID); ok {
 			call.TargetName = firstNonempty(session.AgentSnapshot.Name, session.ID)
 			call.TargetDetails = fmt.Sprintf("Session %s · task %s · attempt %d · worktree %s · model %s", session.ID, firstNonempty(session.TaskID, "none"), session.TaskAttempt, firstNonempty(session.WorktreeID, "none"), firstNonempty(session.Route.Model, "unspecified"))
+			if action == "delete_session" {
+				call.ExpectedRunID = session.LastRunID
+				call.TargetDetails += "\nThe core refuses deletion while the session is active or referenced by durable results or messages."
+			}
 		}
 	case "stop_service":
 		if service, ok := findService(m.snapshot.Services, targetID); ok {
@@ -170,6 +199,23 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 		sort.Strings(call.ExpectedServiceIDs)
 	}
 	m.formAction = call
+	if action == "create_workspace" {
+		backend, ok := m.backend.(WorkflowBackend)
+		if !ok {
+			m.loadError = "this backend does not support workspace creation"
+			m.rebuildViewport()
+			return nil
+		}
+		m.actionPending = true
+		m.notice = "Loading available workflows…"
+		backend, gen := backend, m.generation
+		return func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			names, err := backend.WorkflowNames(ctx, "")
+			return workflowNamesMsg{generation: gen, action: action, names: names, err: err}
+		}
+	}
 	if action == "select_workflow" {
 		backend, ok := m.backend.(WorkflowBackend)
 		if !ok {
@@ -185,8 +231,11 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			names, err := backend.WorkflowNames(ctx, workspace)
-			return workflowNamesMsg{generation: gen, names: names, err: err}
+			return workflowNamesMsg{generation: gen, action: action, names: names, err: err}
 		}
+	}
+	if action == "delete_workspace" || action == "delete_task" || action == "delete_session" {
+		return m.openDestructiveConfirm(action)
 	}
 	if action == "retry_task" || action == "close_session" {
 		m.formMode = "reason"
@@ -205,6 +254,46 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 		return m.form.Init()
 	}
 	return m.openConfirm(action)
+}
+
+func (m *Model) openCreateWorkspaceForm(names []string) tea.Cmd {
+	m.formTitle, m.formInput, m.formWorkflow = "", "", ""
+	options := []huh.Option[string]{huh.NewOption("Choose later", "")}
+	for _, name := range names {
+		options = append(options, huh.NewOption(sanitizeLine(name), name))
+	}
+	m.formMode = "create_workspace"
+	m.form = huh.NewForm(huh.NewGroup(
+		huh.NewInput().Key("title").Title("Workspace title").Placeholder("Short descriptive title").Value(&m.formTitle).Validate(func(value string) error {
+			if strings.TrimSpace(value) == "" {
+				return fmt.Errorf("a title is required")
+			}
+			return nil
+		}),
+		huh.NewInput().Key("input").Title("Issue or task description").Placeholder("What should this workspace accomplish?").Value(&m.formInput).Validate(func(value string) error {
+			if strings.TrimSpace(value) == "" {
+				return fmt.Errorf("a description is required")
+			}
+			return nil
+		}),
+		huh.NewSelect[string]().Key("workflow").Title("Workflow").Options(options...).Value(&m.formWorkflow),
+	)).WithWidth(max(20, m.width-8)).WithHeight(max(7, m.height-8)).WithTheme(huhTheme(m.palette))
+	return m.form.Init()
+}
+
+func (m *Model) openDestructiveConfirm(action string) tea.Cmd {
+	m.formTyped = ""
+	target := m.formAction.TargetID
+	m.formMode = "destructive"
+	m.form = huh.NewForm(huh.NewGroup(
+		huh.NewInput().Key("confirm_id").Title(actionCaption(m.formAction)).Description("Type the exact ID to confirm permanent removal:\n" + target).Value(&m.formTyped).Validate(func(value string) error {
+			if strings.TrimSpace(value) != target {
+				return fmt.Errorf("enter the exact ID %s", target)
+			}
+			return nil
+		}),
+	)).WithWidth(max(20, m.width-8)).WithHeight(max(5, m.height-8)).WithTheme(huhTheme(m.palette))
+	return m.form.Init()
 }
 
 func (m *Model) openConfirm(action string) tea.Cmd {
@@ -258,6 +347,19 @@ func (m *Model) updateForm(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.formMode = ""
 		return m, tea.Batch(cmd, m.confirmWorkflowSelection(selected))
 	}
+	if mode == "create_workspace" {
+		m.formAction.TargetName = strings.TrimSpace(m.form.GetString("title"))
+		m.formAction.Input = strings.TrimSpace(m.form.GetString("input"))
+		m.formAction.Workflow = m.form.GetString("workflow")
+		m.form = nil
+		m.formMode = ""
+		return m, tea.Batch(cmd, m.runAction(m.formAction))
+	}
+	if mode == "destructive" {
+		m.form = nil
+		m.formMode = ""
+		return m, tea.Batch(cmd, m.runAction(m.formAction))
+	}
 	confirmed := m.form.GetBool("confirm")
 	m.form = nil
 	m.formMode = ""
@@ -301,7 +403,7 @@ func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
 		m.actionFailure = true
 		m.lastAction = &message.call
 		m.loadError = sanitizeLine(message.err.Error())
-		m.notice = "Operation failed with key " + message.call.Key + ". Press y to retry the same operation; a starts a new intent."
+		m.notice = "Operation failed: " + m.loadError + " · y retry · a new action"
 		m.rebuildViewport()
 		return nil
 	}
@@ -311,6 +413,14 @@ func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
 	m.notice = "Action completed. Refreshing workspace…"
 	m.generation++
 	m.projectPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false
+	if message.call.Action == "delete_workspace" {
+		m.workspaceID = ""
+		m.stack = nil
+		m.activateRoute(route{Page: "project"})
+	}
+	if message.call.Action == "delete_task" && m.route.Page == "task" || message.call.Action == "delete_session" && m.route.Page == "session" {
+		m.pop()
+	}
 	if message.call.NavigationRef != nil {
 		return tea.Batch(m.beginRefresh(), m.jumpAttempt(*message.call.NavigationRef, true))
 	}
@@ -330,6 +440,10 @@ func actionCaption(call ActionCall) string {
 	switch call.Action {
 	case "start_orchestrator":
 		return "Start or resume the orchestrator in workspace " + call.WorkspaceID
+	case "create_workspace":
+		return "Create workspace " + firstNonempty(call.TargetName, "Untitled issue")
+	case "delete_workspace":
+		return "Permanently delete workspace " + targetName + " · " + targetID
 	case "pause":
 		return "Pause the workspace and leave current Runs untouched"
 	case "resume_workspace":
@@ -353,8 +467,12 @@ func actionCaption(call ActionCall) string {
 		return "Stop only current Run " + call.ExpectedRunID + " from session " + targetID
 	case "close_session":
 		return "Close idle session " + targetName + " · " + targetID
+	case "delete_session":
+		return "Delete session " + targetName + " · " + targetID
 	case "retry_task":
 		return "Retry task " + targetName + " · " + targetID + " and reset affected downstream tasks"
+	case "delete_task":
+		return "Delete task " + targetName + " · " + targetID
 	case "stop_service":
 		return "Stop service " + targetName + " · " + targetID
 	default:

@@ -1,8 +1,8 @@
 # Interfejs terminalowy
 
 `workspace tui` jest interaktywną prezentacją lokalnego stanu workspace'u i używa tych
-samych zapytań oraz mutacji core co CLI. Ręczna instancja nie tworzy workspace'u,
-orkiestratora ani supervisora przez sam odczyt lub odświeżenie.
+samych zapytań oraz mutacji core co CLI. Sam odczyt lub odświeżenie niczego nie tworzy
+i nie uruchamia orkiestratora ani supervisora; jawna akcja w pickerze może utworzyć workspace.
 
 ## Ekrany i nawigacja
 
@@ -22,6 +22,11 @@ pozostaje przypięte do ID. Widok szeroki dodaje szczegóły zaznaczenia obok li
 a wąski zachowuje postęp i dwuwierszowe wpisy. Przy małej wysokości wpis zajmuje
 jeden wiersz. Wpisy są rozdzielone linią, a zaznaczenie obejmuje tytuł i opis
 na wspólnym tle; bez koloru pozostaje znacznik wyboru i separator. Pasek skrótów ma zawsze zarezerwowany ostatni wiersz.
+
+`a` w pickerze projektu udostępnia utworzenie workspace'u (tytuł, opis i opcjonalny
+workflow) oraz trwałe usunięcie zaznaczonego workspace'u. Usunięcie jest dostępne dopiero
+po wpisaniu pełnego ID; core zezwala na nie dla workspace'u pustego albo zarchiwizowanego,
+którego worktrees mają stan `removed`.
 
 More zawiera Sessions, Agents, Services, Decisions, Change requests, Runtime, Needs
 attention, Recent recorded activity i Documents. Task prowadzi do bieżących sesji,
@@ -82,7 +87,11 @@ propozycji reconcile.
 Akcje są ograniczone do istniejącego kontraktu core. Dostępne są m.in. start/resume
 orkiestratora, pause, guarded pause-and-interrupt, resume workspace, reconcile, wybór
 workflow, retry task, session resume/stop/close i stop service. Runtime udostępnia show
-i hide zarządzanego TUI. TUI nie wysyła wiadomości do agentów, nie ACK-uje inboxa,
+i hide zarządzanego TUI. Menu Task i Session udostępnia też Delete. Wymaga ono wpisania
+pełnego ID i zapisuje tombstone `deleted_at`; rekord znika z normalnych kolekcji, ale
+pozostaje w historii dla receiptów. Core odrzuca aktywną sesję, sesję z referencjami
+wynikowymi, zaakceptowany lub zależny task oraz task z aktywnymi sesjami albo utrwalonymi
+handoffami, artefaktami, checks, integracją lub change requestem. TUI nie wysyła wiadomości do agentów, nie ACK-uje inboxa,
 nie akceptuje handoffów ani decyzji.
 
 Każda nowa, potwierdzona intencja dostaje klucz `tui_<ULID>`. Podwójne zatwierdzenie

@@ -46,8 +46,11 @@ type WorkspaceMetrics struct {
 
 func workspaceMetrics(d *Document) WorkspaceMetrics {
 	var m WorkspaceMetrics
-	m.TaskTotal = len(d.State.Tasks)
 	for _, task := range d.State.Tasks {
+		if task.DeletedAt != nil {
+			continue
+		}
+		m.TaskTotal++
 		switch task.State {
 		case "accepted":
 			m.TaskAccepted++
@@ -113,6 +116,9 @@ func attentionItems(d *Document) []string {
 		session, err := findSession(d, run.SessionID)
 		if err != nil {
 			items["run:"+run.ID] = struct{}{}
+			continue
+		}
+		if session.DeletedAt != nil {
 			continue
 		}
 		if session.CurrentRunID != run.ID && session.LastRunID != run.ID {

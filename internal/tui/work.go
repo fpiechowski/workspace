@@ -26,6 +26,9 @@ func (m *Model) currentRun(session core.Session) (core.Run, bool) {
 func (m *Model) taskSessions(task core.Task) []core.Session {
 	var sessions []core.Session
 	for _, session := range m.snapshot.Status.Sessions {
+		if session.DeletedAt != nil {
+			continue
+		}
 		if session.TaskID == task.ID && session.TaskAttempt == task.Attempt {
 			sessions = append(sessions, session)
 		}
@@ -141,8 +144,12 @@ func (m *Model) sortItems(items []collectionItem) {
 }
 
 func (m *Model) progressLines() []string {
-	total, done, working, review, blocked := len(m.snapshot.Status.Workspace.Tasks), 0, 0, 0, 0
+	total, done, working, review, blocked := 0, 0, 0, 0, 0
 	for _, task := range m.snapshot.Status.Workspace.Tasks {
+		if task.DeletedAt != nil {
+			continue
+		}
+		total++
 		switch task.State {
 		case "accepted":
 			done++

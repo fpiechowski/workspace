@@ -60,6 +60,8 @@ func (m *Model) header() string {
 	}
 	if m.initialError != "" {
 		parts = append(parts, "·", "[!] "+m.initialError)
+	} else if m.actionFailure && m.loadError != "" {
+		parts = append(parts, "·", "[!] action failed")
 	} else if m.loadError != "" {
 		stale := "[!] refresh failed"
 		if !m.lastSuccess.IsZero() {
@@ -321,7 +323,7 @@ func (m *Model) footer() string {
 		return m.filterInput.View() + "  Enter apply · Esc cancel"
 	}
 	if m.actionFailure && m.lastAction != nil {
-		return "y retry the same operation key · r refresh · " + m.exitHint()
+		return "y retry same operation · a new action · r refresh · " + m.exitHint()
 	}
 	if m.route.Query != "" || m.route.StatusFilter != "" {
 		return "Esc clear filter · ↑/↓ select · Enter open · / edit"

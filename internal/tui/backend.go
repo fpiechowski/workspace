@@ -30,6 +30,8 @@ type ActionCall struct {
 	TargetName         string
 	TargetDetails      string
 	Reason             string
+	Input              string
+	Workflow           string
 	Key                string
 	ExpectedRevision   int
 	ExpectedRunID      string
@@ -79,6 +81,11 @@ func (b CoreBackend) PerformAction(ctx context.Context, selector string, call Ac
 	case "start_orchestrator":
 		_, err := b.Service.StartSupervisedOrchestrator(ctx, selector, call.Key)
 		return err
+	case "create_workspace":
+		_, err := b.Service.Create(ctx, core.CreateOptions{Title: call.TargetName, Input: call.Input, Workflow: call.Workflow, OperationKey: call.Key})
+		return err
+	case "delete_workspace":
+		return b.Service.DeleteWorkspace(ctx, call.TargetID, call.Key, call.ExpectedRevision)
 	case "pause":
 		_, err := b.Service.SetPausedGuarded(ctx, selector, true, call.Key, core.MutationGuard{ExpectedRevision: call.ExpectedRevision})
 		return err
@@ -104,6 +111,12 @@ func (b CoreBackend) PerformAction(ctx context.Context, selector string, call Ac
 		return err
 	case "retry_task":
 		_, err := b.Service.RetryTaskGuarded(ctx, selector, call.TargetID, call.Reason, call.Key, core.MutationGuard{ExpectedRevision: call.ExpectedRevision, ExpectedAttempt: call.ExpectedAttempt})
+		return err
+	case "delete_task":
+		_, err := b.Service.DeleteTask(ctx, selector, call.TargetID, call.Key, core.MutationGuard{ExpectedRevision: call.ExpectedRevision, ExpectedAttempt: call.ExpectedAttempt})
+		return err
+	case "delete_session":
+		_, err := b.Service.DeleteSession(ctx, selector, call.TargetID, call.Key, core.MutationGuard{ExpectedRevision: call.ExpectedRevision, ExpectedRunID: call.ExpectedRunID})
 		return err
 	case "stop_service":
 		_, err := b.Service.StopService(ctx, selector, call.TargetID, call.Key)

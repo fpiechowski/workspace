@@ -59,6 +59,7 @@ type WorkspaceSummary struct {
 	CreatedAt   time.Time `json:"created_at,omitempty"`
 	ActiveRuns  int       `json:"active_runs"`
 	Problems    int       `json:"problems"`
+	Revision    int       `json:"revision"`
 	Error       string    `json:"error,omitempty"`
 }
 
@@ -119,7 +120,7 @@ func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) 
 				continue
 			}
 			row.ID, row.ProjectID = doc.State.ID, doc.State.ProjectID
-			row.Title, row.Status, row.CreatedAt = doc.State.Title, doc.State.Status, doc.State.CreatedAt
+			row.Title, row.Status, row.CreatedAt, row.Revision = doc.State.Title, doc.State.Status, doc.State.CreatedAt, doc.State.Revision
 			row.InputSource = doc.State.Input.Source
 			if doc.State.Workflow != nil {
 				row.Phase = doc.State.Workflow.Phase
@@ -139,6 +140,7 @@ func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) 
 				Status:      status.Workspace.Status,
 				InputSource: status.Workspace.Input.Source,
 				CreatedAt:   status.Workspace.CreatedAt,
+				Revision:    status.Workspace.Revision,
 			}
 			if status.Workspace.Workflow != nil {
 				row.Phase = status.Workspace.Workflow.Phase

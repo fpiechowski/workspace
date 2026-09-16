@@ -57,6 +57,9 @@ func (m *Model) allItems() []collectionItem {
 		}
 	case "tasks":
 		for _, task := range s.Status.Workspace.Tasks {
+			if task.DeletedAt != nil {
+				continue
+			}
 			if m.route.ParentID != "" && task.ID != m.route.ParentID {
 				continue
 			}
@@ -142,6 +145,9 @@ func (m *Model) allItems() []collectionItem {
 		}
 	case "sessions":
 		for _, session := range s.Status.Sessions {
+			if session.DeletedAt != nil {
+				continue
+			}
 			if m.route.ParentID != "" {
 				if task, ok := m.task(m.route.ParentID); ok {
 					if session.TaskID != task.ID {

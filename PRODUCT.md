@@ -111,6 +111,12 @@ z tych samych zapytań i operacji core co CLI; każda mutacja ma potwierdzenie o
 guardy bieżącej rewizji, próby lub RunID. Nie dodaje akcji wysyłania wiadomości,
 ACK-owania inboxa ani automatycznej akceptacji wyników.
 
+W pickerze projektu użytkownik może utworzyć workspace z opisem i opcjonalnym workflow
+albo trwale usunąć pusty lub zarchiwizowany i uprzątnięty workspace. Wewnątrz workspace'u
+może usunąć task bez zależności i utrwalonych wyników oraz nieaktywną sesję bez referencji
+wynikowych. Taski i sesje otrzymują audytowalny tombstone i znikają z normalnych widoków;
+operacja nie przepisuje ani nie kasuje historii, na której opierają się inne rekordy.
+
 Pierwszy ekran TUI skupia się na postępie zaakceptowanych zadań i aktualnej pracy
 agentów. Łączy zadanie, sesję i bieżący Run w czytelnym wpisie, odróżnia wykonanie
 procesu od akceptacji wyniku oraz umożliwia otwarcie lub jawne wznowienie terminala.

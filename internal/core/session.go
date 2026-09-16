@@ -594,6 +594,9 @@ func (s *Service) stopSession(ctx context.Context, selector, id, expectedRunID s
 		if err != nil {
 			return err
 		}
+		if p.DeletedAt != nil {
+			return fail("session_deleted", "session %s was deleted", p.ID)
+		}
 		if err := s.requireSessionOwner(d, p.ID); err != nil {
 			return err
 		}
@@ -648,6 +651,9 @@ func (s *Service) CloseSession(ctx context.Context, selector, id, reason string,
 		if err != nil {
 			return err
 		}
+		if p.DeletedAt != nil {
+			return fail("session_deleted", "session %s was deleted", p.ID)
+		}
 		if p.Active() {
 			return fail("session_active", "stop the current run before closing the logical session")
 		}
@@ -673,6 +679,9 @@ func (s *Service) ResumeAgent(ctx context.Context, selector, agent, key string) 
 		var latest *Session
 		for i := range d.Registry.Sessions {
 			session := &d.Registry.Sessions[i]
+			if session.DeletedAt != nil {
+				continue
+			}
 			if session.AgentID == a.ID && (latest == nil || session.LastActiveAt.After(latest.LastActiveAt) || session.LastActiveAt.Equal(latest.LastActiveAt) && session.ID > latest.ID) {
 				latest = session
 			}

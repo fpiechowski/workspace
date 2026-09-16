@@ -144,6 +144,7 @@ type Session struct {
 	ClientThreadID string     `json:"client_thread_id,omitempty" yaml:"client_thread_id,omitempty"`
 	ReadOnly       bool       `json:"read_only" yaml:"read_only"`
 	CreatedAt      time.Time  `json:"created_at" yaml:"created_at"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty" yaml:"deleted_at,omitempty"`
 	ClosedAt       *time.Time `json:"closed_at,omitempty" yaml:"closed_at,omitempty"`
 	CloseReason    string     `json:"close_reason,omitempty" yaml:"close_reason,omitempty"`
 	LifecycleState string     `json:"lifecycle_state" yaml:"lifecycle_state"`

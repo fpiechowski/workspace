@@ -52,3 +52,9 @@ mutacji ponownie. `tui show` i `tui hide` zapisują osobne receipts w `.runtime/
 nie w rejestrze Session/Run. `q` w zarządzanym panelu zapisuje ten sam trwały zamiar hide
 przed przywróceniem terminala i zakończeniem procesu; usunięcie panelu wykonuje później
 supervisor po zweryfikowaniu jego tożsamości.
+
+Delete w TUI wymaga przepisania pełnego ID. Task i Session są logicznie usuwane przez
+audytowalny tombstone; receipt pozostaje w rejestrze workspace'u, a guard obejmuje
+rewizję oraz odpowiednio attempt lub ostatni Run. Fizyczne Delete Workspace korzysta
+z project-scoped receipt poza katalogiem docelowym, więc ten sam klucz i payload można
+bezpiecznie ponowić po usunięciu katalogu. Zmiana rewizji albo targetu kończy się konfliktem.

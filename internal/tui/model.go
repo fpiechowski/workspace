@@ -65,6 +65,9 @@ type Model struct {
 	formWorkflow    string
 	formConfirm     bool
 	formReason      string
+	formTitle       string
+	formInput       string
+	formTyped       string
 	formAction      ActionCall
 	formTargetID    string
 	actionPending   bool
@@ -127,6 +130,7 @@ type uiStatusMsg struct {
 }
 type workflowNamesMsg struct {
 	generation uint64
+	action     string
 	names      []string
 	err        error
 }

@@ -160,6 +160,81 @@ func TestEnterSubmitsConfirmationSelection(t *testing.T) {
 	})
 }
 
+func TestProjectAndWorkspaceDeletionActions(t *testing.T) {
+	model := New(Config{ProjectFound: true})
+	model.backend = &actionHarness{workflows: []string{"plan-first"}}
+	model.project = core.ProjectOverview{
+		ObservedAt: time.Now(),
+		Workspaces: []core.WorkspaceSummary{{ID: "ws_delete", Title: "Disposable", Status: "active", Revision: 9}},
+	}
+	model.route = route{Page: "project", SelectedID: "ws_delete"}
+	model.validateSelection()
+
+	if cmd := model.beginAction("create_workspace", ""); cmd == nil {
+		t.Fatal("create workspace did not load workflows")
+	} else {
+		_, _ = model.Update(cmd())
+	}
+	if model.form == nil || model.formMode != "create_workspace" {
+		t.Fatalf("create workspace form was not opened: mode=%q", model.formMode)
+	}
+	model.form = nil
+	model.formMode = ""
+
+	if cmd := model.beginAction("delete_workspace", "ws_delete"); cmd == nil {
+		t.Fatal("delete workspace did not require typed confirmation")
+	}
+	if model.formMode != "destructive" || model.formAction.ExpectedRevision != 9 || model.formAction.TargetID != "ws_delete" {
+		t.Fatalf("workspace deletion guard is incomplete: %+v mode=%q", model.formAction, model.formMode)
+	}
+}
+
+func TestDeletedTasksAndSessionsDisappearFromCollections(t *testing.T) {
+	model := workFixture()
+	now := time.Now()
+	model.snapshot.Status.Workspace.Tasks = append(model.snapshot.Status.Workspace.Tasks,
+		core.Task{ID: "task_deleted", TaskSpec: core.TaskSpec{Title: "Deleted task"}, State: "deleted", DeletedAt: &now})
+	model.snapshot.Status.Sessions = append(model.snapshot.Status.Sessions,
+		core.Session{ID: "sess_deleted", AgentSnapshot: core.Agent{Name: "Deleted session"}, DeletedAt: &now})
+
+	model.navigate(route{Page: "tasks"})
+	for _, item := range model.filteredItems() {
+		if item.ID == "task_deleted" {
+			t.Fatal("deleted task remained in the task collection")
+		}
+	}
+	model.navigate(route{Page: "sessions"})
+	for _, item := range model.filteredItems() {
+		if item.ID == "sess_deleted" {
+			t.Fatal("deleted session remained in the session collection")
+		}
+	}
+}
+
+func TestActionFailureShowsErrorInsteadOfOperationKey(t *testing.T) {
+	model := workFixture()
+	model.width, model.height = 160, 30
+	call := ActionCall{Action: "delete_task", TargetID: "task_work", Key: "tui_01M2N7NTJQGV6Y84126SVNVD9A"}
+	err := &core.Error{Code: "task_referenced", Message: "task is required by task_child"}
+
+	model.finishAction(actionResultMsg{generation: model.generation, call: call, err: err})
+
+	if !strings.Contains(model.notice, err.Error()) {
+		t.Fatalf("failure notice does not contain the operation error: %q", model.notice)
+	}
+	if strings.Contains(model.notice, call.Key) {
+		t.Fatalf("failure notice exposes the operation key instead of the error: %q", model.notice)
+	}
+	if model.lastAction == nil || model.lastAction.Key != call.Key {
+		t.Fatal("failed action did not preserve its key for an exact retry")
+	}
+	if view := model.View(); !strings.Contains(view, err.Error()) {
+		t.Fatalf("rendered failure does not contain the operation error:\n%s", view)
+	} else if !strings.Contains(view, "action failed") || strings.Contains(view, "refresh failed") {
+		t.Fatalf("rendered action failure has a misleading status:\n%s", view)
+	}
+}
+
 type terminalHarness struct {
 	Backend
 	refs []core.EntityRef

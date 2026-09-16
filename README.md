@@ -186,7 +186,8 @@ workspace tui hide --workspace ws_ID
 kolekcję, a `f` przełącza widok statusu lub historii. `s` sortuje listę.
 `t` otwiera terminal zaznaczonego agenta lub potwierdzenie wznowienia;
 `o`, potem `t`, pozwala szybko otworzyć albo uruchomić orkiestratora. `a`
-otwiera tylko operacje dostępne dla zaznaczenia, a `g` przechodzi do zweryfikowanego
+otwiera tylko operacje dostępne dla zaznaczenia, w tym tworzenie/usuwanie workspace'ów
+w pickerze projektu oraz usuwanie niepowiązanych tasków i nieaktywnych sesji. `g` przechodzi do zweryfikowanego
 okna/panelu tmux. `r` odświeża odczyt bez reconcile, `?` pokazuje pomoc. `--theme`
 przyjmuje `auto`, `dark` lub `light`; `--no-color` wymusza tekstowe badge.
 
@@ -201,6 +202,10 @@ show nie uruchamia samodzielnie nowego workspace ani supervisora.
 TUI używa tych samych zapytań i mutacji core co CLI. Potwierdzenia są chronione rewizją,
 próbą zadania albo dokładnym RunID; „Pause and interrupt” pokazuje Runy i usługi,
 które zostaną zatrzymane. Interfejs nie akceptuje automatycznie handoffów ani decyzji.
+Operacje usuwania wymagają wpisania pełnego ID. Taski i sesje są ukrywane przez
+audytowalny tombstone, a core odrzuca usunięcie danych aktywnych, zależnych lub mających
+utrwalone wyniki. Katalog workspace'u można trwale usunąć tylko wtedy, gdy workspace
+jest pusty albo zarchiwizowany, a wszystkie jego worktrees zostały bezpiecznie uprzątnięte.
 Przed downgrade binarium ukryj zarządzany panel przez `workspace tui hide`: starszy
 launcher nie rozpoznaje jeszcze własności nowego panelu.
 Szczegóły ekranów i skrótów: [docs/tui.md](docs/tui.md).

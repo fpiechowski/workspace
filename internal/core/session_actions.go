@@ -42,6 +42,9 @@ func (s *Service) ResumeSession(ctx context.Context, selector, sessionOrRunID, k
 				return err
 			}
 		}
+		if session.DeletedAt != nil {
+			return fail("session_deleted", "session %s was deleted", session.ID)
+		}
 		opt = SessionOptions{
 			Agent:         session.AgentID,
 			Worktree:      session.WorktreeID,
