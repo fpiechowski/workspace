@@ -210,6 +210,15 @@ func TestCompletedWorkspaceCanBeArchivedFromTUI(t *testing.T) {
 	}
 }
 
+func TestWorkspaceDeletionAllowsSlowMountedFilesystemCleanup(t *testing.T) {
+	if got := actionTimeout(ActionCall{Action: "delete_workspace"}); got != 10*time.Minute {
+		t.Fatalf("workspace deletion timeout = %s", got)
+	}
+	if got := actionTimeout(ActionCall{Action: "archive_workspace"}); got != 45*time.Second {
+		t.Fatalf("ordinary action timeout = %s", got)
+	}
+}
+
 func TestDeletedTasksAndSessionsDisappearFromCollections(t *testing.T) {
 	model := workFixture()
 	now := time.Now()

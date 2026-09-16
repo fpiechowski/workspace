@@ -395,10 +395,19 @@ func (m *Model) runAction(call ActionCall) tea.Cmd {
 	m.notice = "Working… " + actionCaption(call)
 	backend, workspace, gen := backend, m.workspaceID, m.generation
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), actionTimeout(call))
 		defer cancel()
 		return actionResultMsg{generation: gen, call: call, err: backend.PerformAction(ctx, workspace, call)}
 	}
+}
+
+func actionTimeout(call ActionCall) time.Duration {
+	if call.Action == "delete_workspace" {
+		// Removing large worktrees from a Windows-mounted filesystem can take
+		// several minutes. Interrupting Git midway leaves a prunable checkout.
+		return 10 * time.Minute
+	}
+	return 45 * time.Second
 }
 
 func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
