@@ -35,6 +35,9 @@ func TestDeleteWorkspaceDiscardsActiveWorkspaceAndReplaysAfterRemoval(t *testing
 	if _, err := s.StartSession(ctx, created.Workspace.ID, SessionOptions{Agent: agent.ID, Worktree: worktree.ID}); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Remove(filepath.Join(worktree.Path, ".git")); err != nil {
+		t.Fatal(err)
+	}
 	status, err = s.Status(ctx, created.Workspace.ID)
 	if err != nil {
 		t.Fatal(err)

@@ -37,7 +37,11 @@ func git(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	b, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fail("git_error", "%s: %s", strings.Join(args, " "), strings.TrimSpace(string(b)))
+		message := strings.TrimSpace(string(b))
+		if message == "" {
+			message = err.Error()
+		}
+		return "", fail("git_error", "%s: %s", strings.Join(args, " "), message)
 	}
 	return strings.TrimSpace(string(b)), nil
 }

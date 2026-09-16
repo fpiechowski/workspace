@@ -70,9 +70,6 @@ func (s *Service) DeleteWorkspace(ctx context.Context, selector, key string, exp
 				return false, err
 			}
 		}
-		if _, err := git(ctx, s.Root, "worktree", "prune"); err != nil {
-			return false, err
-		}
 		if err := os.RemoveAll(cleanDir); err != nil {
 			return false, err
 		}
@@ -102,8 +99,19 @@ func (s *Service) discardWorkspaceWorktree(ctx context.Context, d *Document, wor
 		return err
 	}
 	if registered {
-		if _, err := git(ctx, s.Root, "worktree", "remove", "--force", "--force", "--", cleanPath); err != nil {
-			return err
+		candidate := worktree
+		candidate.Path = cleanPath
+		if verifyWorktree(ctx, &candidate) == nil {
+			if _, err := git(ctx, s.Root, "worktree", "remove", "--force", "--force", "--", cleanPath); err != nil {
+				return err
+			}
+		} else {
+			if err := os.RemoveAll(cleanPath); err != nil {
+				return err
+			}
+			if err := s.removeBrokenWorktreeRegistration(ctx, cleanPath); err != nil {
+				return err
+			}
 		}
 	} else if err := os.RemoveAll(cleanPath); err != nil {
 		return err
@@ -131,6 +139,56 @@ func (s *Service) registeredWorktree(ctx context.Context, target string) (bool, 
 		}
 	}
 	return false, nil
+}
+
+func (s *Service) removeBrokenWorktreeRegistration(ctx context.Context, target string) error {
+	common, err := git(ctx, s.Root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return err
+	}
+	metadataRoot := filepath.Join(common, "worktrees")
+	entries, err := os.ReadDir(metadataRoot)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	targetGitDir := filepath.Clean(filepath.Join(target, ".git"))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		metadataDir := filepath.Join(metadataRoot, entry.Name())
+		b, err := os.ReadFile(filepath.Join(metadataDir, "gitdir"))
+		if err != nil {
+			continue
+		}
+		registeredGitDir := strings.TrimSpace(string(b))
+		if !filepath.IsAbs(registeredGitDir) {
+			registeredGitDir = filepath.Join(metadataDir, registeredGitDir)
+		}
+		registeredGitDir, err = filepath.Abs(registeredGitDir)
+		if err != nil || filepath.Clean(registeredGitDir) != targetGitDir {
+			continue
+		}
+		cleanMetadataDir, err := filepath.Abs(metadataDir)
+		if err != nil {
+			return err
+		}
+		cleanMetadataRoot, err := filepath.Abs(metadataRoot)
+		if err != nil {
+			return err
+		}
+		if cleanMetadataDir == cleanMetadataRoot || !contained(cleanMetadataRoot, cleanMetadataDir) {
+			return fail("unsafe_path", "worktree metadata is outside the Git common directory")
+		}
+		if err := os.RemoveAll(cleanMetadataDir); err != nil {
+			return err
+		}
+		return syncDirectory(cleanMetadataRoot)
+	}
+	return fail("worktree_metadata_missing", "could not locate Git metadata for broken worktree %s", target)
 }
 
 func localBranchExists(ctx context.Context, root, branch string) (bool, error) {
