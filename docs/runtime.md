@@ -56,9 +56,11 @@ not sandbox the process. Readers write reports under their own session subdirect
 in work-products. An active writer can change files during analysis, so review of a
 stable revision should use another worktree. Resume preserves reader status.
 
-Native Codex delivery is handled through its app-server bridge between turns. OpenCode
-sessions are matched automatically after launch using `opencode session list`; the
-resulting native ID is persisted as the Session binding and snapshotted on each Run.
+Native Codex delivery is handled through its app-server bridge between turns. Native
+OpenCode Runs expose a unique loopback endpoint owned by that Run. The supervisor
+checks readiness, posts the marker-bearing prompt to the active TUI session and confirms
+the marker in session history before recording delivery. A new Run gets a new endpoint;
+the logical Session may retain the same native thread ID.
 A generic client's optional
 `deliver_argv` receives `{thread_id}`, `{message_file}` and
 `{message_id}` and must return `{"accepted":true}`. It must deduplicate message IDs;

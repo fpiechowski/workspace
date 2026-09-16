@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"strings"
+	"time"
 )
 
 func normalizeClient(client Client) (Client, error) {
@@ -22,6 +23,7 @@ func normalizeClient(client Client) (Client, error) {
 	case "opencode":
 		if len(client.LaunchArgv) == 0 {
 			client.LaunchArgv = []string{"opencode", "--model", "{model}", "--prompt", "{prompt}"}
+			client.NativeDelivery = true
 		}
 		if len(client.ResumeArgv) == 0 {
 			client.ResumeArgv = []string{"opencode", "--session", "{thread_id}", "--model", "{model}", "--prompt", "{prompt}"}
@@ -45,8 +47,36 @@ func normalizeClient(client Client) (Client, error) {
 		if len(client.DeliverArgv) > 0 {
 			client.Capabilities = append(client.Capabilities, "deliver")
 		}
+		if client.Adapter == "opencode" && client.NativeDelivery {
+			client.Capabilities = append(client.Capabilities, "deliver", "observe")
+		}
 	}
 	return client, nil
+}
+
+func (s *Service) setDeliveryPhase(ctx context.Context, selector, messageID, runID, phase, deliveryErr string) error {
+	return s.With(ctx, selector, func(d *Document) error {
+		run, err := findRun(d, runID)
+		if err != nil {
+			return err
+		}
+		p, err := findSession(d, run.SessionID)
+		if err != nil {
+			return err
+		}
+		if p.CurrentRunID != run.ID || !run.Active() {
+			return fail("stale_run", "run no longer owns the session runtime")
+		}
+		for i := range d.Registry.Deliveries {
+			attempt := &d.Registry.Deliveries[i]
+			if attempt.MessageID == messageID && attempt.RunID == runID {
+				attempt.Phase, attempt.Error, attempt.UpdatedAt = phase, deliveryErr, nowUTC()
+				return saveDocument(d)
+			}
+		}
+		d.Registry.Deliveries = append(d.Registry.Deliveries, DeliveryAttempt{MessageID: messageID, RunID: runID, Phase: phase, Error: deliveryErr, UpdatedAt: time.Now().UTC()})
+		return saveDocument(d)
+	})
 }
 func (s *Service) BindThread(ctx context.Context, selector, id, thread string, keys ...string) (Session, error) {
 	var out Session

@@ -1,17 +1,172 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 )
+
+const openCodeDeliveryTimeout = 8 * time.Second
+
+func (s *Service) openCodeHTTP(ctx context.Context, endpoint, method, path string, body []byte) ([]byte, int, error) {
+	if endpoint == "" {
+		return nil, 0, fail("opencode_unavailable", "current Run has no OpenCode endpoint")
+	}
+	request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(endpoint, "/")+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, 0, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if password := os.Getenv("OPENCODE_SERVER_PASSWORD"); password != "" {
+		request.SetBasicAuth("opencode", password)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer response.Body.Close()
+	data, readErr := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if readErr != nil {
+		return nil, response.StatusCode, readErr
+	}
+	return data, response.StatusCode, nil
+}
+
+func (s *Service) openCodeReady(ctx context.Context, endpoint string) error {
+	deadline := time.NewTimer(openCodeDeliveryTimeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		_, status, err := s.openCodeHTTP(ctx, endpoint, http.MethodGet, "/global/health", nil)
+		if err == nil && status >= 200 && status < 300 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fail("opencode_unavailable", "OpenCode endpoint is not ready")
+		case <-ticker.C:
+		}
+	}
+}
+
+func openCodeHistoryContains(data []byte, marker string) bool {
+	return bytes.Contains(data, []byte(marker))
+}
+
+func (s *Service) openCodeHistory(ctx context.Context, endpoint, thread string) ([]byte, error) {
+	data, status, err := s.openCodeHTTP(ctx, endpoint, http.MethodGet, "/session/"+thread+"/message", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fail("opencode_rejected", "OpenCode history returned HTTP %d", status)
+	}
+	return data, nil
+}
+
+func (s *Service) deliverOpenCodeMessage(ctx context.Context, selector string, session Session, run Run, message Message) error {
+	_ = session
+	if run.OpenCodeEndpoint == "" || run.ClientThreadID == "" {
+		return fail("opencode_unavailable", "current Run has no native OpenCode endpoint or session")
+	}
+	marker := "[workspace-message-id:" + message.ID + "]"
+	if err := s.setDeliveryPhase(ctx, selector, message.ID, run.ID, "checking", ""); err != nil {
+		return err
+	}
+	if err := s.openCodeReady(ctx, run.OpenCodeEndpoint); err != nil {
+		_ = s.setDeliveryPhase(context.Background(), selector, message.ID, run.ID, "retry", err.Error())
+		return err
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	history, historyErr := s.openCodeHistory(checkCtx, run.OpenCodeEndpoint, run.ClientThreadID)
+	cancel()
+	if historyErr == nil && openCodeHistoryContains(history, marker) {
+		_ = s.setDeliveryPhase(ctx, selector, message.ID, run.ID, "confirmed", "")
+		return s.markDelivered(ctx, selector, run.ID, []string{message.ID})
+	}
+	prompt := fmt.Sprintf("%s\nType: %s\nFrom: %s\nHandoff: %s\n\n%s\n\nRead the durable inbox record before acting: message_id=%s.", marker, message.Kind, message.FromAgent, message.HandoffID, message.Body, message.ID)
+	body, _ := json.Marshal(map[string]any{"parts": []map[string]string{{"type": "text", "text": prompt}}})
+	data, status, err := s.openCodeHTTP(ctx, run.OpenCodeEndpoint, http.MethodPost, "/session/"+run.ClientThreadID+"/prompt_async", body)
+	if err != nil || status < 200 || status >= 300 {
+		if err == nil {
+			err = fail("opencode_rejected", "OpenCode prompt returned HTTP %d: %s", status, strings.TrimSpace(string(data)))
+		}
+		_ = s.setDeliveryPhase(context.Background(), selector, message.ID, run.ID, "retry", err.Error())
+		return err
+	}
+	if err := s.setDeliveryPhase(ctx, selector, message.ID, run.ID, "submitted", ""); err != nil {
+		return err
+	}
+	confirmCtx, cancel := context.WithTimeout(ctx, openCodeDeliveryTimeout)
+	defer cancel()
+	for {
+		history, err := s.openCodeHistory(confirmCtx, run.OpenCodeEndpoint, run.ClientThreadID)
+		if err == nil && openCodeHistoryContains(history, marker) {
+			if err := s.setDeliveryPhase(confirmCtx, selector, message.ID, run.ID, "confirmed", ""); err != nil {
+				return err
+			}
+			return s.markDelivered(confirmCtx, selector, run.ID, []string{message.ID})
+		}
+		select {
+		case <-confirmCtx.Done():
+			_ = s.setDeliveryPhase(context.Background(), selector, message.ID, run.ID, "uncertain", "prompt accepted but marker was not observed")
+			return fail("delivery_unconfirmed", "OpenCode prompt was not observed in session history")
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+func allocateOpenCodeEndpoint() (string, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", fail("opencode_endpoint", "cannot allocate loopback endpoint: %v", err)
+	}
+	address := listener.Addr().String()
+	_ = listener.Close()
+	return "http://" + address, nil
+}
+
+func withOpenCodeServerFlags(argv []string, endpoint string) []string {
+	result := append([]string(nil), argv...)
+	host, port, _ := strings.Cut(strings.TrimPrefix(endpoint, "http://"), ":")
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	if i := argIndex(result, "--hostname"); i >= 0 && i+1 < len(result) {
+		result[i+1] = host
+	} else {
+		result = append(result, "--hostname", host)
+	}
+	if i := argIndex(result, "--port"); i >= 0 && i+1 < len(result) {
+		result[i+1] = port
+	} else {
+		result = append(result, "--port", port)
+	}
+	return result
+}
+
+func argIndex(argv []string, value string) int {
+	for i, arg := range argv {
+		if arg == value {
+			return i
+		}
+	}
+	return -1
+}
 
 const (
 	openCodeDiscoveryTimeout  = 30 * time.Second
@@ -104,6 +259,20 @@ func (s *Service) waitForOpenCodeThread(ctx context.Context, session Session, en
 func (s *Service) listOpenCodeSessions(ctx context.Context, session Session, env []string) ([]openCodeSession, error) {
 	if s.openCodeSessionLister != nil {
 		return s.openCodeSessionLister(ctx, session)
+	}
+	if session.OpenCodeEndpoint != "" {
+		data, status, err := s.openCodeHTTP(ctx, session.OpenCodeEndpoint, http.MethodGet, "/session", nil)
+		if err != nil {
+			return nil, err
+		}
+		if status < 200 || status >= 300 {
+			return nil, fmt.Errorf("OpenCode session list returned HTTP %d", status)
+		}
+		var sessions []openCodeSession
+		if err := json.Unmarshal(data, &sessions); err != nil {
+			return nil, fmt.Errorf("invalid OpenCode session list: %w", err)
+		}
+		return sessions, nil
 	}
 	if len(session.Argv) == 0 || session.Argv[0] == "" {
 		return nil, fmt.Errorf("OpenCode executable is not recorded")

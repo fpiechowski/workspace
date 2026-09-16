@@ -6,7 +6,7 @@ The installed clients' `--help` output was checked on 2026-09-11. Launch flags:
 |---|---|---|---|
 | codex | `codex app-server --stdio` | `thread/resume` | Native app-server bridge between turns |
 | claude | `claude --model MODEL PROMPT` | `--resume THREAD` | Only with configured delivery wrapper |
-| opencode | `opencode --model PROVIDER/MODEL --prompt PROMPT` | `--session THREAD` | Configured delivery wrapper; native session ID discovered automatically |
+| opencode | interactive TUI with loopback server | `--session THREAD` with a new Run endpoint | Native delivery through active TUI, confirmed in session history |
 | command | Configured argv | Optional resume_argv | Optional deliver_argv |
 
 Codex runs through a terminal bridge that displays assistant output and tool activity.
@@ -18,14 +18,15 @@ text are displayed without requiring a JSON response.
 Project-specific native thread parameters can be supplied with `clients.NAME.thread_params`; the bridge always
 sets the selected model and workspace cwd. It does not bypass client permissions.
 
-For OpenCode, workspace invokes `opencode session list --format json` after launch and
-matches the newly created session by its working directory. The native ID is persisted
-automatically as an optional logical Session binding, so later `agent resume` creates
-a new Run, invokes `resume_argv`, and `deliver_argv` can
-wake the same conversation. `session bind-thread` remains available for recovery when
-the client CLI cannot be inspected. Other clients still require an explicit binding if
-their native thread ID is not reported by an adapter. Without that association, a new
-conversation receives the persisted bootstrap.
+For OpenCode, each Run receives a unique `127.0.0.1` endpoint and the normal TUI is
+started with server flags. The native session ID is discovered through that endpoint
+and persisted. Resuming a logical Session creates a new Run and endpoint while
+preserving the compatible `client_thread_id`. Delivery posts a visible marker-bearing
+prompt to that exact session and accepts it only after the marker appears in history;
+HTTP success or process startup alone is not delivery. A busy or unready TUI leaves the
+message in the inbox for retry. Delivery, inbox ACK and handoff acceptance are separate
+operations. Explicit non-native OpenCode configurations remain readable and keep their
+configured generic adapter behavior; they never silently start `opencode run`.
 
 `client_thread_id` is not a workspace identity or mailbox address. The binding is
 unique across active logical Sessions for the same adapter. Manual binding, Codex

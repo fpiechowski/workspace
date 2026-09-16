@@ -110,6 +110,8 @@ wyników i runtime, a następnie skoczyć do zweryfikowanego panelu tmux. TUI ko
 z tych samych zapytań i operacji core co CLI; każda mutacja ma potwierdzenie oraz
 guardy bieżącej rewizji, próby lub RunID. Nie dodaje akcji wysyłania wiadomości,
 ACK-owania inboxa ani automatycznej akceptacji wyników.
+Native OpenCode delivery is visible in the active parent TUI and is confirmed against
+the current Run; it remains distinct from inbox ACK and handoff acceptance.
 
 W pickerze projektu użytkownik może utworzyć workspace z opisem i opcjonalnym workflow
 albo świadomie odrzucić go w całości bez wymogu release/archive. Pełne usunięcie wymaga

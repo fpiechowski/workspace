@@ -181,6 +181,9 @@ blokuje cleanup. Pełny kontrakt opisuje [docs/runtime.md](docs/runtime.md).
 ## Adaptery klientów i routing
 
 Adapter klienta rozdziela pięć możliwości: launch, resume, deliver, observe i interrupt.
+Native OpenCode delivery is Run-scoped: its loopback endpoint and delivery phases are
+transport state, not an inbox ACK or handoff acceptance. Generic `deliver_argv` remains
+available to command/Claude adapters.
 Argumenty procesów są tablicami argv bez interpolacji shell. Wbudowane adaptery
 obsługują Codex, Claude i OpenCode; adapter `command` pozwala podłączyć własne wrappery.
 Natywne ID rozmowy jest opcjonalnym bindingiem Session, nigdy jej tożsamością ani

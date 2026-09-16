@@ -105,10 +105,10 @@ W trybie `per-task` przygotuj requesty w kolejności zależności zadań. Pole `
 i opis CR wskazują poprzedniki; przygotowanie zależnego CR wymaga ich aktualnych requestów.
 
 Codex używa app-server i obsługuje wybudzanie między turami oraz native resume.
-Claude/OpenCode uruchamiają interaktywny klient. OpenCode z `deliver_argv` automatycznie
-wykrywa i zapisuje swój native thread, aby supervisor mógł dostarczać wiadomości między
-agentami. `session bind-thread` pozostaje narzędziem awaryjnym. Bez `deliver_argv`
-komunikacja wymaga odczytu inboxa przez agenta. [Adaptery i ich możliwości](docs/clients.md).
+Claude/OpenCode uruchamiają interaktywny klient. Domyślny OpenCode dostaje dla każdego
+Runu prywatny endpoint loopback i dostawę przez aktywne TUI; wiadomość jest oznaczona
+`message_id` i trafia do statusu dopiero po potwierdzeniu w historii sesji. `session
+bind-thread` pozostaje narzędziem awaryjnym. [Adaptery i ich możliwości](docs/clients.md).
 
 Routing liczy uruchomienia i aktywne rezerwacje w projekcie przez ostatnie 24 h,
 uwzględnia wagi providerów, równoległość, capabilities i cooldown po błędzie startu.

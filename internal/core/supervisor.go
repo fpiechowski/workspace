@@ -27,6 +27,15 @@ type SupervisorInfo struct {
 	StartedAt  time.Time `json:"started_at" yaml:"started_at"`
 }
 
+func currentRunFromStatus(status Status, id string) (Run, error) {
+	for _, run := range status.Runs {
+		if run.ID == id && run.Active() {
+			return run, nil
+		}
+	}
+	return Run{}, fail("stale_run", "current Run is unavailable")
+}
+
 func (s *Service) supervisorFile() string {
 	return filepath.Join(s.Root, ".workspace", ".runtime", "supervisor.json")
 }
@@ -295,6 +304,21 @@ func (s *Service) tickWorkspaceAgents(ctx context.Context, status Status) error 
 		if p.Active() && p.ClientSnapshot.Adapter == "codex" {
 			continue
 		} // The bridge owns this native connection.
+		if p.Active() && p.ClientSnapshot.Adapter == "opencode" && p.ClientSnapshot.NativeDelivery {
+			if message.DeliveredRunID == p.CurrentRunID {
+				continue
+			}
+			run, err := currentRunFromStatus(status, p.CurrentRunID)
+			if err != nil {
+				continue
+			}
+			if err := s.deliverOpenCodeMessage(ctx, status.Workspace.ID, p, run, message); err != nil {
+				// Delivery is at-least-once and must not stop supervision of other
+				// sessions. The durable phase remains retryable on the next tick.
+				continue
+			}
+			continue
+		}
 		if p.Active() && len(p.ClientSnapshot.DeliverArgv) > 0 && p.ClientThreadID != "" {
 			if message.DeliveredRunID == p.CurrentRunID {
 				continue

@@ -52,12 +52,13 @@ type WorkflowConfig struct {
 	ChangeRequests   string            `yaml:"change_requests" json:"change_requests"`
 }
 type Client struct {
-	Adapter      string         `yaml:"adapter" json:"adapter"`
-	LaunchArgv   []string       `yaml:"launch_argv" json:"launch_argv"`
-	ResumeArgv   []string       `yaml:"resume_argv,omitempty" json:"resume_argv,omitempty"`
-	DeliverArgv  []string       `yaml:"deliver_argv,omitempty" json:"deliver_argv,omitempty"`
-	ThreadParams map[string]any `yaml:"thread_params,omitempty" json:"thread_params,omitempty"`
-	Capabilities []string       `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+	Adapter        string         `yaml:"adapter" json:"adapter"`
+	LaunchArgv     []string       `yaml:"launch_argv" json:"launch_argv"`
+	ResumeArgv     []string       `yaml:"resume_argv,omitempty" json:"resume_argv,omitempty"`
+	DeliverArgv    []string       `yaml:"deliver_argv,omitempty" json:"deliver_argv,omitempty"`
+	ThreadParams   map[string]any `yaml:"thread_params,omitempty" json:"thread_params,omitempty"`
+	Capabilities   []string       `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+	NativeDelivery bool           `yaml:"native_delivery,omitempty" json:"native_delivery,omitempty"`
 }
 type Profile struct {
 	RequiredCapabilities []string           `yaml:"required_capabilities,omitempty" json:"required_capabilities,omitempty"`
@@ -155,20 +156,21 @@ type Session struct {
 
 	// The fields below are a compatibility/status projection of current_run (or
 	// last_run when idle). They are never the source of runtime ownership.
-	RoutingDecision *RoutingDecision `json:"routing_decision,omitempty" yaml:"routing_decision,omitempty"`
-	Profile         string           `json:"profile" yaml:"profile"`
-	Route           Route            `json:"route" yaml:"route"`
-	Argv            []string         `json:"argv" yaml:"argv"`
-	CWD             string           `json:"cwd" yaml:"cwd"`
-	PromptFile      string           `json:"prompt_file" yaml:"prompt_file"`
-	RunState        string           `json:"run_state" yaml:"run_state"`
-	State           string           `json:"state" yaml:"state"`
-	PaneID          string           `json:"pane_id,omitempty" yaml:"pane_id,omitempty"`
-	WindowID        string           `json:"window_id,omitempty" yaml:"window_id,omitempty"`
-	FinishedAt      *time.Time       `json:"finished_at,omitempty" yaml:"finished_at,omitempty"`
-	ExitCode        *int             `json:"exit_code,omitempty" yaml:"exit_code,omitempty"`
-	Error           string           `json:"error,omitempty" yaml:"error,omitempty"`
-	ClientState     string           `json:"client_state,omitempty" yaml:"client_state,omitempty"`
+	RoutingDecision  *RoutingDecision `json:"routing_decision,omitempty" yaml:"routing_decision,omitempty"`
+	Profile          string           `json:"profile" yaml:"profile"`
+	Route            Route            `json:"route" yaml:"route"`
+	Argv             []string         `json:"argv" yaml:"argv"`
+	CWD              string           `json:"cwd" yaml:"cwd"`
+	PromptFile       string           `json:"prompt_file" yaml:"prompt_file"`
+	RunState         string           `json:"run_state" yaml:"run_state"`
+	State            string           `json:"state" yaml:"state"`
+	PaneID           string           `json:"pane_id,omitempty" yaml:"pane_id,omitempty"`
+	WindowID         string           `json:"window_id,omitempty" yaml:"window_id,omitempty"`
+	FinishedAt       *time.Time       `json:"finished_at,omitempty" yaml:"finished_at,omitempty"`
+	ExitCode         *int             `json:"exit_code,omitempty" yaml:"exit_code,omitempty"`
+	Error            string           `json:"error,omitempty" yaml:"error,omitempty"`
+	ClientState      string           `json:"client_state,omitempty" yaml:"client_state,omitempty"`
+	OpenCodeEndpoint string           `json:"opencode_endpoint,omitempty" yaml:"opencode_endpoint,omitempty"`
 }
 
 func (s Session) Active() bool {
@@ -180,24 +182,33 @@ func (s Session) Active() bool {
 }
 
 type Run struct {
-	ID              string           `json:"id" yaml:"id"`
-	SessionID       string           `json:"session_id" yaml:"session_id"`
-	Generation      int              `json:"generation" yaml:"generation"`
-	Profile         string           `json:"profile" yaml:"profile"`
-	Route           Route            `json:"route" yaml:"route"`
-	RoutingDecision *RoutingDecision `json:"routing_decision,omitempty" yaml:"routing_decision,omitempty"`
-	Argv            []string         `json:"argv" yaml:"argv"`
-	CWD             string           `json:"cwd" yaml:"cwd"`
-	PromptFile      string           `json:"prompt_file" yaml:"prompt_file"`
-	State           string           `json:"state" yaml:"state"`
-	PaneID          string           `json:"pane_id,omitempty" yaml:"pane_id,omitempty"`
-	WindowID        string           `json:"window_id,omitempty" yaml:"window_id,omitempty"`
-	ClientState     string           `json:"client_state,omitempty" yaml:"client_state,omitempty"`
-	ClientThreadID  string           `json:"client_thread_id,omitempty" yaml:"client_thread_id,omitempty"`
-	CreatedAt       time.Time        `json:"created_at" yaml:"created_at"`
-	FinishedAt      *time.Time       `json:"finished_at,omitempty" yaml:"finished_at,omitempty"`
-	ExitCode        *int             `json:"exit_code,omitempty" yaml:"exit_code,omitempty"`
-	Error           string           `json:"error,omitempty" yaml:"error,omitempty"`
+	ID               string           `json:"id" yaml:"id"`
+	SessionID        string           `json:"session_id" yaml:"session_id"`
+	Generation       int              `json:"generation" yaml:"generation"`
+	Profile          string           `json:"profile" yaml:"profile"`
+	Route            Route            `json:"route" yaml:"route"`
+	RoutingDecision  *RoutingDecision `json:"routing_decision,omitempty" yaml:"routing_decision,omitempty"`
+	Argv             []string         `json:"argv" yaml:"argv"`
+	CWD              string           `json:"cwd" yaml:"cwd"`
+	PromptFile       string           `json:"prompt_file" yaml:"prompt_file"`
+	State            string           `json:"state" yaml:"state"`
+	PaneID           string           `json:"pane_id,omitempty" yaml:"pane_id,omitempty"`
+	WindowID         string           `json:"window_id,omitempty" yaml:"window_id,omitempty"`
+	ClientState      string           `json:"client_state,omitempty" yaml:"client_state,omitempty"`
+	ClientThreadID   string           `json:"client_thread_id,omitempty" yaml:"client_thread_id,omitempty"`
+	CreatedAt        time.Time        `json:"created_at" yaml:"created_at"`
+	FinishedAt       *time.Time       `json:"finished_at,omitempty" yaml:"finished_at,omitempty"`
+	ExitCode         *int             `json:"exit_code,omitempty" yaml:"exit_code,omitempty"`
+	Error            string           `json:"error,omitempty" yaml:"error,omitempty"`
+	OpenCodeEndpoint string           `json:"opencode_endpoint,omitempty" yaml:"opencode_endpoint,omitempty"`
+}
+
+type DeliveryAttempt struct {
+	MessageID string    `json:"message_id" yaml:"message_id"`
+	RunID     string    `json:"run_id" yaml:"run_id"`
+	Phase     string    `json:"phase" yaml:"phase"`
+	Error     string    `json:"error,omitempty" yaml:"error,omitempty"`
+	UpdatedAt time.Time `json:"updated_at" yaml:"updated_at"`
 }
 
 func (r Run) Active() bool { return r.State == "starting" || r.State == "running" }
@@ -221,6 +232,7 @@ type Registry struct {
 	Runs            []Run                      `json:"runs"`
 	Operations      map[string]Operation       `json:"operations"`
 	Messages        []Message                  `json:"messages"`
+	Deliveries      []DeliveryAttempt          `json:"deliveries,omitempty"`
 	Handoffs        []Handoff                  `json:"handoffs"`
 }
 type Document struct {

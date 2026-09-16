@@ -7,7 +7,7 @@ import (
 	"sort"
 )
 
-const registrySchemaVersion = 2
+const registrySchemaVersion = 3
 
 func migratedSessionID(key string) string {
 	sum := sha256.Sum256([]byte("workspace/logical-session/v2\x00" + key))
@@ -58,7 +58,7 @@ func migrateRegistryV2(d *Document) bool {
 			r := Run{ID: old.ID, SessionID: sid, Profile: old.Profile, Route: old.Route,
 				RoutingDecision: old.RoutingDecision, Argv: append([]string(nil), old.Argv...), CWD: old.CWD,
 				PromptFile: old.PromptFile, State: old.State, PaneID: old.PaneID, WindowID: old.WindowID,
-				ClientState: old.ClientState, ClientThreadID: old.ClientThreadID, CreatedAt: old.CreatedAt,
+				ClientState: old.ClientState, ClientThreadID: old.ClientThreadID, OpenCodeEndpoint: old.OpenCodeEndpoint, CreatedAt: old.CreatedAt,
 				FinishedAt: old.FinishedAt, ExitCode: old.ExitCode, Error: old.Error}
 			d.Registry.Runs = append(d.Registry.Runs, r)
 		}

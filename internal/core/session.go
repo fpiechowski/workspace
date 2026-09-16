@@ -332,6 +332,14 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		for i, arg := range launchArgv {
 			argv[i] = replace.Replace(arg)
 		}
+		openCodeEndpoint := ""
+		if client.Adapter == "opencode" && client.NativeDelivery {
+			openCodeEndpoint, err = allocateOpenCodeEndpoint()
+			if err != nil {
+				return err
+			}
+			argv = withOpenCodeServerFlags(argv, openCodeEndpoint)
+		}
 		argv[0], err = exec.LookPath(argv[0])
 		if err != nil {
 			return err
@@ -349,11 +357,11 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		// bindTask validates the checkout before the Run is appended; expose the
 		// pending run snapshot through the compatibility projection for that gate.
 		out.Profile, out.Route, out.RoutingDecision = profile, route, &decision
-		out.Argv, out.CWD, out.PromptFile, out.State = argv, cwd, promptFile, "starting"
+		out.Argv, out.CWD, out.PromptFile, out.State, out.OpenCodeEndpoint = argv, cwd, promptFile, "starting", openCodeEndpoint
 		if err := bindTask(ctx, d, &out, opt.Task); err != nil {
 			return err
 		}
-		run := Run{ID: runID, SessionID: out.ID, Generation: out.RunCount + 1, Profile: profile, Route: route, RoutingDecision: &decision, Argv: argv, CWD: cwd, PromptFile: promptFile, State: "starting", ClientThreadID: thread, CreatedAt: created}
+		run := Run{ID: runID, SessionID: out.ID, Generation: out.RunCount + 1, Profile: profile, Route: route, RoutingDecision: &decision, Argv: argv, CWD: cwd, PromptFile: promptFile, State: "starting", ClientThreadID: thread, OpenCodeEndpoint: openCodeEndpoint, CreatedAt: created}
 		out.CurrentRunID, out.LastRunID = run.ID, run.ID
 		if logical == &out {
 			d.Registry.Sessions = append(d.Registry.Sessions, out)
@@ -505,7 +513,7 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 	var runErr error
 	if session.ClientSnapshot.Adapter == "codex" {
 		runErr = s.runCodex(ctx, selector, session, cmd, in, out, errOut)
-	} else if session.ClientSnapshot.Adapter == "opencode" && run.ClientThreadID == "" {
+	} else if session.ClientSnapshot.Adapter == "opencode" && (session.ClientSnapshot.NativeDelivery || run.ClientThreadID == "") {
 		runErr = s.runOpenCode(ctx, selector, session, cmd, out, errOut)
 	} else {
 		runErr = cmd.Run()

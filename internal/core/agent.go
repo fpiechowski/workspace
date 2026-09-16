@@ -172,6 +172,7 @@ func (d *Document) syncSession(p *Session) {
 	p.Argv, p.CWD, p.PromptFile = append([]string(nil), selected.Argv...), selected.CWD, selected.PromptFile
 	p.RunState, p.State, p.PaneID, p.WindowID = selected.State, selected.State, selected.PaneID, selected.WindowID
 	p.FinishedAt, p.ExitCode, p.Error, p.ClientState = selected.FinishedAt, selected.ExitCode, selected.Error, selected.ClientState
+	p.OpenCodeEndpoint = selected.OpenCodeEndpoint
 	if selected.ClientThreadID != "" {
 		p.ClientThreadID = selected.ClientThreadID
 	}
