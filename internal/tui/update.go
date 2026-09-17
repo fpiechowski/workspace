@@ -11,14 +11,31 @@ import (
 	"workspace/internal/core"
 )
 
+// Update processes one message and then rearms the animation loop if, and only
+// if, pending work or a visible live run still needs it. An idle model never
+// schedules another animation tick. While a modal form owns input the loop is
+// left untouched so form commands are returned unwrapped.
 func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.update(message)
+	if m.form != nil {
+		return model, cmd
+	}
+	if animation := m.ensureAnimation(); animation != nil {
+		cmd = tea.Batch(cmd, animation)
+	}
+	return model, cmd
+}
+
+func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
 	case animationMsg:
-		if m.quit || m.closed {
+		m.animating = false
+		if m.quit || m.closed || !m.animationNeeded() {
 			return m, nil
 		}
-		m.animationFrame = (m.animationFrame + 1) % 10
-		return m, animationTick()
+		updated, _ := m.spinner.Update(m.spinner.Tick())
+		m.spinner = updated
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = max(1, msg.Width), max(1, msg.Height)
 		m.filterInput.Width = max(8, min(40, m.width-10))
@@ -36,6 +53,7 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.project = msg.value
 			m.loadError = ""
 			m.lastSuccess = time.Now()
+			m.completeAction()
 			m.validateSelection()
 		}
 		m.rebuildViewport()
@@ -52,6 +70,7 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.snapshot = msg.value
 			m.loadError = ""
 			m.lastSuccess = time.Now()
+			m.completeAction()
 			m.validateSelection()
 		}
 		m.rebuildViewport()
@@ -110,7 +129,7 @@ func (m *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.formMode = "workflow"
 		m.form = huh.NewForm(huh.NewGroup(
 			huh.NewSelect[string]().Key("workflow").Title("Choose a workflow").Options(options...).Value(&m.formWorkflow),
-		)).WithWidth(max(20, m.width-8)).WithHeight(max(4, m.height-8)).WithTheme(huhTheme(m.palette))
+		)).WithWidth(m.dialogWidth()).WithHeight(m.formHeight(4)).WithTheme(huhTheme(m.palette))
 		return m, m.form.Init()
 	case worktreeMsg:
 		if msg.generation != m.generation {

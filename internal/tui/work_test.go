@@ -151,8 +151,11 @@ func TestEnterSubmitsConfirmationSelection(t *testing.T) {
 			t.Fatal("confirmation field did not advance to form submission")
 		}
 		_, cmd = m.Update(cmd())
-		if m.actionPending || m.form != nil || cmd != nil || m.notice != "Action cancelled." {
-			t.Fatalf("Enter did not submit Cancel: pending=%t form=%v cmd=%v notice=%q", m.actionPending, m.form, cmd, m.notice)
+		// The returned command may still carry an animation tick while a live
+		// run is on screen; cancellation is proven by the absence of a mutation.
+		_ = cmd
+		if m.actionPending || m.form != nil || m.notice != "Action cancelled." {
+			t.Fatalf("Enter did not submit Cancel: pending=%t form=%v notice=%q", m.actionPending, m.form, m.notice)
 		}
 		if len(backend.calls) != 0 {
 			t.Fatal("Cancel invoked an action")

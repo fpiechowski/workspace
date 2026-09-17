@@ -18,7 +18,7 @@ import (
 
 type workDemo struct{ *Model }
 
-func (m workDemo) Init() tea.Cmd { return animationTick() }
+func (m workDemo) Init() tea.Cmd { return m.Model.ensureAnimation() }
 
 // The helper runs the real Bubble Tea input decoder and renderer inside a PTY.
 func TestWorkPTYHelper(t *testing.T) {

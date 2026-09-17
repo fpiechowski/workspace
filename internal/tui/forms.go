@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"workspace/internal/core"
 )
 
@@ -32,7 +33,7 @@ func (m *Model) openActionMenu() tea.Cmd {
 	m.formMode = "select"
 	m.form = huh.NewForm(huh.NewGroup(
 		huh.NewSelect[string]().Key("action").Title("Choose an action").Options(options...).Value(&m.formChoice),
-	)).WithWidth(max(20, m.width-8)).WithHeight(max(4, m.height-8)).WithTheme(huhTheme(m.palette))
+	)).WithWidth(m.dialogWidth()).WithHeight(m.formHeight(4)).WithTheme(huhTheme(m.palette))
 	return m.form.Init()
 }
 
@@ -257,7 +258,7 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 				}
 				return nil
 			}),
-		)).WithWidth(max(20, m.width-8)).WithHeight(max(4, m.height-8)).WithTheme(huhTheme(m.palette))
+		)).WithWidth(m.dialogWidth()).WithHeight(m.formHeight(4)).WithTheme(huhTheme(m.palette))
 		return m.form.Init()
 	}
 	return m.openConfirm(action)
@@ -284,7 +285,7 @@ func (m *Model) openCreateWorkspaceForm(names []string) tea.Cmd {
 			return nil
 		}),
 		huh.NewSelect[string]().Key("workflow").Title("Workflow").Options(options...).Value(&m.formWorkflow),
-	)).WithWidth(max(20, m.width-8)).WithHeight(max(7, m.height-8)).WithTheme(huhTheme(m.palette))
+	)).WithWidth(m.dialogWidth()).WithHeight(m.formHeight(7)).WithTheme(huhTheme(m.palette))
 	return m.form.Init()
 }
 
@@ -299,7 +300,7 @@ func (m *Model) openDestructiveConfirm(action string) tea.Cmd {
 			}
 			return nil
 		}),
-	)).WithWidth(max(20, m.width-8)).WithHeight(max(5, m.height-8)).WithTheme(huhTheme(m.palette))
+	)).WithWidth(m.dialogWidth()).WithHeight(m.formHeight(5)).WithTheme(huhTheme(m.palette))
 	return m.form.Init()
 }
 
@@ -309,7 +310,7 @@ func (m *Model) openConfirm(action string) tea.Cmd {
 	m.formMode = "confirm"
 	m.form = huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().Key("confirm").Title(caption).Description(actionDescription(action, m.formAction)).Affirmative("Confirm").Negative("Cancel").Value(&m.formConfirm),
-	)).WithWidth(max(20, m.width-8)).WithHeight(max(4, m.height-8)).WithTheme(huhTheme(m.palette))
+	)).WithWidth(m.dialogWidth()).WithHeight(m.formHeight(4)).WithTheme(huhTheme(m.palette))
 	return m.form.Init()
 }
 
@@ -391,6 +392,7 @@ func (m *Model) runAction(call ActionCall) tea.Cmd {
 	}
 	m.actionPending, m.mutationPending = true, true
 	m.actionFailure = false
+	m.actionCompleted = false
 	m.lastAction = &call
 	m.notice = "Working… " + actionCaption(call)
 	backend, workspace, gen := backend, m.workspaceID, m.generation
@@ -417,6 +419,7 @@ func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
 	m.actionPending, m.mutationPending = false, false
 	if message.err != nil {
 		m.actionFailure = true
+		m.actionCompleted = false
 		m.lastAction = &message.call
 		m.loadError = sanitizeLine(message.err.Error())
 		m.notice = "Operation failed: " + m.loadError + " · y retry · a new action"
@@ -424,9 +427,10 @@ func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
 		return nil
 	}
 	m.actionFailure = false
+	m.actionCompleted = true
 	m.lastAction = nil
 	m.loadError = ""
-	m.notice = "Action completed. Refreshing workspace…"
+	m.notice = actionCompletedNotice
 	m.generation++
 	m.projectPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false
 	if message.call.Action == "delete_workspace" {
@@ -554,13 +558,159 @@ func (m *Model) retryImpact(task core.Task) string {
 	return fmt.Sprintf("Attempt %d → %d. This resets affected tasks and their accepted results: %s. Reason: %s", task.Attempt, task.Attempt+1, strings.Join(names, ", "), sanitizeLine(m.formReason))
 }
 
+// dialogSeverity classifies the guarded action shown in a modal form.
+type dialogSeverity int
+
+const (
+	severityNeutral dialogSeverity = iota
+	severityWarning
+	severityDanger
+)
+
+const (
+	// dialogMaxWidth bounds the form block on large terminals.
+	dialogMaxWidth = 76
+	// dialogMaxHeight keeps the form, dialog header and border inside the
+	// content region at the 100x24 wide breakpoint.
+	dialogMaxHeight = 14
+)
+
+// dialogWidth is the bounded content width shared by every Huh form. It never
+// exceeds the terminal and never drops below the minimum usable width.
+func (m *Model) dialogWidth() int {
+	return clamp(m.width-8, 20, dialogMaxWidth)
+}
+
+// formHeight bounds a form to the dialog maximum while preserving the minimum
+// height each field group needs.
+func (m *Model) formHeight(minHeight int) int {
+	return clamp(m.height-8, minHeight, dialogMaxHeight)
+}
+
+// dialogSeverityKind derives the severity from the form mode and the guarded
+// action. Destructive confirmations always render with danger emphasis, while
+// selection and creation forms stay neutral even after a previous action.
+func (m *Model) dialogSeverityKind() dialogSeverity {
+	switch m.formMode {
+	case "destructive":
+		return severityDanger
+	case "select", "workflow", "create_workspace":
+		return severityNeutral
+	default:
+		return actionSeverity(m.formAction.Action)
+	}
+}
+
+func actionSeverity(action string) dialogSeverity {
+	switch action {
+	case "delete_workspace", "delete_task", "delete_session", "pause_interrupt":
+		return severityDanger
+	case "archive_workspace", "stop_run", "stop_service", "retry_task", "pause":
+		return severityWarning
+	default:
+		return severityNeutral
+	}
+}
+
+// dialogTitle names the form's purpose above the fields.
+func (m *Model) dialogTitle() string {
+	switch m.formMode {
+	case "select":
+		return "Choose an action"
+	case "reason":
+		return "Confirm with a reason"
+	case "workflow":
+		return "Select workflow"
+	case "create_workspace":
+		return "Create workspace"
+	case "destructive":
+		return "Destructive confirmation"
+	case "confirm":
+		return "Confirm action"
+	default:
+		return "Action"
+	}
+}
+
+// dialogTarget summarizes what the form acts on without replacing the exact ID
+// shown by destructive validation.
+func (m *Model) dialogTarget() string {
+	switch m.formMode {
+	case "create_workspace":
+		return "New workspace"
+	case "workflow":
+		return m.workspaceID
+	case "select":
+		return firstNonempty(firstNonempty(m.formTargetID, m.route.SelectedID), m.route.EntityID)
+	}
+	if name, id := m.formAction.TargetName, m.formAction.TargetID; name != "" && id != "" && name != id {
+		return name + " · " + id
+	}
+	return firstNonempty(firstNonempty(m.formAction.TargetName, m.formAction.TargetID), m.workspaceID)
+}
+
+// dialogSeverityText is the text marker for the severity. The bracketed marker
+// keeps the meaning readable without color.
+func (m *Model) dialogSeverityText() string {
+	switch m.dialogSeverityKind() {
+	case severityDanger:
+		return "[!] Destructive · requires explicit confirmation"
+	case severityWarning:
+		return "[!] Review the impact before continuing"
+	default:
+		switch m.formMode {
+		case "select":
+			return "· Choose an action to continue"
+		case "workflow":
+			return "· Choose a configured workflow"
+		case "create_workspace":
+			return "· New workspace"
+		default:
+			return "· Confirmation required"
+		}
+	}
+}
+
+// dialogHeader describes the form before its fields: title, severity, target and
+// the fixed Esc cancellation affordance.
+func (m *Model) dialogHeader() []string {
+	width := m.dialogWidth()
+	truncate := func(value string) string {
+		return ansi.TruncateWc(sanitizeLine(value), width, "…")
+	}
+	lines := []string{m.palette.headingStyle().Render(truncate(m.dialogTitle()))}
+	lines = append(lines, m.palette.severityStyle(m.dialogSeverityKind()).Render(truncate(m.dialogSeverityText())))
+	if target := sanitizeLine(m.dialogTarget()); target != "" {
+		line := m.palette.labelStyle().Render("Target ") + m.palette.valueStyle().Render(target)
+		lines = append(lines, ansi.TruncateWc(line, width, "…"))
+	}
+	lines = append(lines, m.palette.metaStyle().Render(truncate("Esc cancels without applying the action.")))
+	return lines
+}
+
+// dialogView renders the modal form. Large terminals get a centered, bounded
+// dialog with a severity border; compact terminals use the full body so no field
+// is hidden behind a boundary.
+func (m *Model) dialogView(mode layoutMode) []string {
+	content := append(m.dialogHeader(), strings.Split(m.form.View(), "\n")...)
+	if mode != layoutWide {
+		return content
+	}
+	box := m.palette.dialogStyle(m.dialogSeverityKind()).Width(m.dialogWidth()).Render(strings.Join(content, "\n"))
+	return centerBlock(strings.Split(box, "\n"), m.width, m.contentHeight())
+}
+
 func huhTheme(p palette) *huh.Theme {
 	theme := huh.ThemeBase()
 	if p.noColor {
-		theme.Focused.FocusedButton = lipgloss.NewStyle().SetString("[ Confirm ]")
-		theme.Focused.BlurredButton = lipgloss.NewStyle().SetString("[ Cancel ]")
-		theme.Blurred.FocusedButton = theme.Focused.BlurredButton
-		theme.Blurred.BlurredButton = lipgloss.NewStyle().SetString("[ Cancel ]")
+		// The selected button carries an explicit text marker so the primary
+		// choice stays visible without color. Transform keeps the real label.
+		selected := lipgloss.NewStyle().Transform(func(label string) string { return "> " + label }).Bold(true)
+		unselected := lipgloss.NewStyle()
+		theme.Focused.FocusedButton = selected
+		theme.Focused.BlurredButton = unselected
+		theme.Blurred.FocusedButton = selected
+		theme.Blurred.BlurredButton = unselected
 		return theme
 	}
 	theme.Focused.SelectSelector = lipgloss.NewStyle().Foreground(p.accent).Bold(true).SetString("> ")

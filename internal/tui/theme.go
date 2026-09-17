@@ -144,6 +144,41 @@ func (p palette) noticeStyle() lipgloss.Style {
 	return s
 }
 
+// spinnerStyle renders the pending spinner. It is empty in no-color mode so the
+// frame stays a plain text marker.
+func (p palette) spinnerStyle() lipgloss.Style { return p.style(p.accent, false) }
+
+// severityStyle renders the dialog severity line. The text marker is supplied by
+// the caller so the meaning survives no-color mode.
+func (p palette) severityStyle(severity dialogSeverity) lipgloss.Style {
+	switch severity {
+	case severityDanger:
+		return p.style(p.danger, true)
+	case severityWarning:
+		return p.style(p.warning, true)
+	default:
+		return p.style(p.accent, true)
+	}
+}
+
+// dialogStyle renders the modal form boundary. Destructive and warning actions
+// get danger and warning borders so the severity is visible before reading the
+// text; no-color mode keeps only the glyph border.
+func (p palette) dialogStyle(severity dialogSeverity) lipgloss.Style {
+	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
+	if p.noColor {
+		return style
+	}
+	switch severity {
+	case severityDanger:
+		return style.BorderForeground(p.danger)
+	case severityWarning:
+		return style.BorderForeground(p.warning)
+	default:
+		return style.BorderForeground(p.focusedBorder)
+	}
+}
+
 // selectedStyle renders a focused collection row. Width pads the background so
 // the selection spans the row.
 func (p palette) selectedStyle(width int) lipgloss.Style {

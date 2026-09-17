@@ -4,6 +4,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -75,6 +76,7 @@ type Model struct {
 	formTargetID    string
 	actionPending   bool
 	actionFailure   bool
+	actionCompleted bool
 	lastAction      *ActionCall
 	notice          string
 	quit            bool
@@ -108,7 +110,8 @@ type Model struct {
 	worktreePending    bool
 	mutationPending    bool
 	closed             bool
-	animationFrame     int
+	spinner            spinner.Model
+	animating          bool
 	externalProcess    *ExternalProcessRequest
 	resumeCmd          tea.Cmd
 }
@@ -212,6 +215,10 @@ func New(config Config) *Model {
 	}
 	m.viewport = viewport.New(76, 16)
 	m.helpViewport = viewport.New(76, 16)
+	m.spinner = spinner.New(
+		spinner.WithSpinner(spinner.MiniDot),
+		spinner.WithStyle(m.palette.spinnerStyle()),
+	)
 	if m.workspaceID == "" {
 		m.route = route{Page: "project"}
 	} else {
@@ -229,7 +236,9 @@ func (m *Model) Init() tea.Cmd {
 	}
 	resume := m.resumeCmd
 	m.resumeCmd = nil
-	return tea.Batch(m.beginRefresh(), animationTick(), resume)
+	// beginRefresh marks the first load as pending; only then does the spinner
+	// animation loop arm, so an idle interface issues no ticks.
+	return tea.Batch(m.beginRefresh(), m.ensureAnimation(), resume)
 }
 
 // TakeExternalProcessRequest transfers a prepared process to the CLI runner.

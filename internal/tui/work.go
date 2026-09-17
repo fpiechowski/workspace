@@ -12,10 +12,6 @@ import (
 	"workspace/internal/core"
 )
 
-func animationTick() tea.Cmd {
-	return tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg { return animationMsg{} })
-}
-
 // Only a session's current run represents live work; history never supplies a
 // replacement terminal target or contributes to the active count.
 func (m *Model) currentRun(session core.Session) (core.Run, bool) {
@@ -275,10 +271,8 @@ func (m *Model) workDashboard(mode layoutMode) []string {
 }
 
 func (m *Model) liveGlyph() string {
-	for _, session := range m.snapshot.Status.Sessions {
-		if _, ok := m.currentRun(session); ok {
-			return []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}[m.animationFrame%10]
-		}
+	if m.hasLiveRun() {
+		return m.spinnerGlyph()
 	}
 	return "○"
 }
@@ -288,8 +282,7 @@ func (m *Model) stateLabel(state string) string {
 	color := m.palette.secondary
 	switch state {
 	case "running", "starting":
-		label = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}[m.animationFrame%10] + " " + state
-		color = m.palette.accent
+		return m.runningGlyph() + " " + m.palette.style(m.palette.accent, false).Render(state)
 	case "accepted", "completed", "ready":
 		color = m.palette.success
 	case "failed", "error":

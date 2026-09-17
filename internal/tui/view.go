@@ -247,34 +247,32 @@ func (m *Model) parentTitle(id string) string {
 	return id
 }
 
-// statusRow is the status/notice region. It surfaces an explicit notice or the
-// current pending state, and stays reserved even when idle.
+// statusRow is the status/notice region. It presents refresh, blocking
+// mutation, failure, success and stale data distinctly, with text markers so the
+// meaning survives no-color mode. It stays reserved even when idle.
 func (m *Model) statusRow() string {
 	if m.showHelp {
 		return m.helpPosition()
 	}
-	text := sanitizeLine(m.notice)
-	switch {
-	case text == "" && m.actionPending:
-		text = "Working… keep this panel open."
-	case text == "" && (m.snapshotPending || m.projectPending):
-		text = "Refreshing…"
-	case text == "" && m.isDetailPage():
-		text = m.scrollPosition()
-	}
+	text, marker := m.statusLine()
 	if text == "" {
 		return ""
+	}
+	if m.pendingWork() {
+		// The spinner is rendered only for active work; combining it with the
+		// explicit wording separates pending reads from pending writes.
+		marker = m.spinnerGlyph() + marker
 	}
 	style := m.palette.noticeStyle()
 	if !m.palette.noColor {
 		style = style.Width(m.width)
 	}
-	return style.Render(ansi.TruncateWc(text, m.width, "…"))
+	return style.Render(ansi.TruncateWc(marker+text, m.width, "…"))
 }
 
 func (m *Model) bodyView(mode layoutMode) []string {
 	if m.form != nil {
-		return []string{m.form.View()}
+		return m.dialogView(mode)
 	}
 	if m.initialError != "" {
 		return []string{"Workspace scope could not be resolved:", sanitizeLine(m.initialError), "Use an explicit --workspace ID or repair the workspace document."}
@@ -658,6 +656,46 @@ func clipLines(lines []string, height, width int) []string {
 		}
 	}
 	return out
+}
+
+// centerBlock centers a rendered block horizontally and vertically inside the
+// given region. Lines wider than the region are left for the frame clipper.
+func centerBlock(lines []string, width, height int) []string {
+	if width < 1 {
+		return lines
+	}
+	maxWidth := 0
+	for _, line := range lines {
+		if w := ansi.StringWidth(line); w > maxWidth {
+			maxWidth = w
+		}
+	}
+	left := max(0, (width-maxWidth)/2)
+	top := max(0, (height-len(lines))/2)
+	out := make([]string, 0, top+len(lines))
+	for i := 0; i < top; i++ {
+		out = append(out, "")
+	}
+	pad := strings.Repeat(" ", left)
+	for _, line := range lines {
+		if left == 0 {
+			out = append(out, line)
+			continue
+		}
+		out = append(out, pad+line)
+	}
+	return out
+}
+
+// clamp bounds a value to the inclusive [low, high] range.
+func clamp(value, low, high int) int {
+	if value < low {
+		return low
+	}
+	if value > high {
+		return high
+	}
+	return value
 }
 
 func truncateLines(lines []string, width int) []string {
