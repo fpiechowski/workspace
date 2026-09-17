@@ -56,7 +56,7 @@ zewnętrznych adapterów.
 | Obiekt | Odpowiedzialność |
 |---|---|
 | Project | Repozytorium Git, konfiguracja klientów, profili, forge, trackera i workflow. |
-| Workspace | Trwały kontekst jednej inicjatywy od wejścia do potwierdzonego release'u. |
+| Workspace | Trwały kontekst jednej inicjatywy od wejścia do potwierdzonego release'u (workflow) albo potwierdzonego ukończenia (tryb manualny). |
 | Worktree | Izolowany checkout i branch do planowania, implementacji, integracji lub testów. |
 | Task | Delegowana jednostka pracy z próbą, zależnościami i kryteriami akceptacji. |
 | Agent | Stabilna definicja persony: rola, instrukcje, prompt i profil. |
@@ -103,8 +103,8 @@ W każdym workspace:
 
 ```text
 ws_ID/
-├── WORKSPACE.md          # kanoniczny stan workflow i narracja
-├── WORKFLOW.md           # zamrożony snapshot wybranego workflow
+├── WORKSPACE.md          # kanoniczny stan trybu, workflow i narracja
+├── WORKFLOW.md           # snapshot wybranego workflow albo notatka trybu manualnego
 ├── AGENTS.md             # instrukcje roli orkiestratora
 ├── inputs/               # snapshot wejścia
 ├── prompts/              # zamrożone prompty i instrukcje wykonawców
@@ -119,7 +119,8 @@ ws_ID/
 ```
 
 `WORKSPACE.md` ma walidowany frontmatter i opisową treść dla kolejnego orkiestratora.
-Jest źródłem prawdy dla fazy workflow, zadań, decyzji i zaakceptowanych wyników.
+Jest źródłem prawdy dla trybu, fazy workflow (jeśli wybrano), zadań, decyzji
+i zaakceptowanych wyników.
 `.runtime/index.json` jest indeksem operacyjnym, a nie konkurencyjną wersją workflow.
 Publiczny `status --json` ma własny jawny numer schematu. TUI korzysta z prywatnego
 `WorkspaceSnapshot`; nie dodaje encji do `index.json`, nie zmienia schematu publicznego
@@ -171,8 +172,9 @@ identyfikator tmux nie daje staremu procesowi prawa do mutacji.
 
 Supervisor porównuje aktywne rezerwacje z rzeczywistymi panelami, dostarcza wiadomości
 i wykrywa utracone procesy. Może wznowić utraconego orkiestratora w kompatybilnej
-Session, ale nie restartuje w ciemno jawnie zatrzymanych lub zakończonych błędem
-wykonawców. Szczegółowe stany i procedury opisuje [docs/runtime.md](docs/runtime.md).
+Session — także w aktywnym trybie manualnym — ale nie restartuje w ciemno jawnie
+zatrzymanych lub zakończonych błędem wykonawców. Szczegółowe stany i procedury opisuje
+[docs/runtime.md](docs/runtime.md).
 
 Zarządzany TUI jest odrębnym typem runtime ownership zapisanym w workspace
 `.runtime/ui.json`. Po wykryciu historii orkiestratora supervisor uruchamia najwyżej
@@ -228,6 +230,30 @@ dozwolone także podczas `awaiting_review`: tworzy nowy Run, ale nie otwiera pon
 Taska ani nie zastępuje `RunID` wskazującego oczekujący handoff. Retry Taska pozostaje
 osobną operacją. Dopiero odrzucenie handoffu może przepiąć `RunID` na nowszy zgodny,
 aktywny Run tej Session, aby ten Run mógł złożyć wynik zastępczy.
+
+### Tryb manualny
+
+Workspace nie musi wybierać workflow. Utworzenie przyjmuje jedną z trzech jawnych
+postaci: `--workflow NAME` (aktywny workflow), brak flagi (stan `needs_workflow`
+oczekujący na wybór) albo `--no-workflow` (aktywny tryb manualny). Łączenie
+`--workflow` z `--no-workflow` jest odrzucane jako `invalid_option`. Tryb manualny
+przechowuje `status: active` z pustym `workflow`, co odróżnia go od `needs_workflow`;
+`WORKFLOW.md` pozostaje jako jawnie oznaczona notatka o manualnej orkiestracji, bez
+fazy i digestu szablonu workflow.
+
+W trybie manualnym orkiestrator może tworzyć agentów, zadania i worktrees oraz
+uruchamiać sesje workerów z tymi samymi bramkami zadania, worktree, aktora
+i pochodzenia co w workflow. Obowiązuje stały limit 3 równoległych
+workerów (wspólny fallback `defaultMaxParallelTasks`), więc delegowanie nigdy nie
+staje się nieograniczone. Operacje zarezerwowane dla workflow — `workflow advance`,
+`workflow select`, `workflow migrate`, potwierdzenie release'u, decyzje, integracja,
+change requesty i live testing — zwracają w trybie manualnym `operation_not_applicable`
+i nie pojawiają się w menu; nie istnieje też konwersja manualnego workspace'u na
+workflow. Ukończenie jest osobną, idempotentną mutacją `workspace complete`, dostępną
+po potwierdzeniu użytkownika i przy braku aktywnych sesji, usług oraz niezaakceptowanych
+zadań; dopiero ona pozwala zarchiwizować manualny workspace bez release'u. Samo
+zaakceptowanie wszystkich zadań, wyjście procesu ani akceptacja handoffu nie kończą
+manualnego workspace'u.
 
 ## Komunikacja, artefakty i dowody
 

@@ -6,6 +6,7 @@
 przez jednego orkiestratora i wielu wyspecjalizowanych agentów. Utrwala kontekst pracy,
 oddziela planowanie od implementacji, izoluje zmiany w Git worktrees i pozostawia
 człowiekowi kontrolę nad decyzjami produktowymi, publikacją oraz zakończeniem pracy.
+Praca może korzystać z nazwanego workflow albo być prowadzona manualnie bez workflow.
 
 Produkt rozwiązuje problem sesji agentowych, które są łatwe do uruchomienia, ale trudne
 do bezpiecznego wznowienia i skoordynowania. Sam terminal lub historia czatu nie mówi,
@@ -28,10 +29,13 @@ Narzędzie jest szczególnie przydatne, gdy zadanie:
 
 ## Obietnica produktu
 
-Użytkownik przekazuje ticket albo opis problemu, wybiera workflow i może obserwować
-pracę w tmux. Orkiestrator deleguje planowanie, implementację, integrację i testy.
-Każdy wynik ma wskazane zadanie, wykonanie, commit i dowody weryfikacji. Po przerwaniu
-pracy system odtwarza stan z plików, zamiast polegać wyłącznie na pamięci rozmowy.
+Użytkownik przekazuje ticket albo opis problemu i wybiera jedną z trzech jawnych dróg:
+nazwany workflow, świadome odroczenie wyboru (`needs_workflow`) albo pracę manualną bez
+workflow (`--no-workflow`). Pracę można obserwować w tmux. Orkiestrator deleguje
+planowanie, implementację, integrację i testy w workflow, a w trybie manualnym sam
+tworzy jawne zadania i worktrees, bez faz i release'u. Każdy wynik ma wskazane zadanie,
+wykonanie, commit i dowody weryfikacji. Po przerwaniu pracy system odtwarza stan
+z plików, zamiast polegać wyłącznie na pamięci rozmowy.
 
 Sukces oznacza, że użytkownik może:
 
@@ -39,7 +43,8 @@ Sukces oznacza, że użytkownik może:
 2. bezpiecznie delegować pracę do izolowanych worktrees;
 3. sprawdzić aktualny stan, decyzje, artefakty i historię wykonań;
 4. wznowić przerwaną pracę bez duplikowania niepewnych operacji;
-5. świadomie zatwierdzić publikację, live testing i zakończenie workflow.
+5. świadomie zatwierdzić publikację i live testing w workflow oraz potwierdzić
+   zakończenie workflow albo manualnego workspace'u.
 
 ## Zasady produktu
 
@@ -53,14 +58,16 @@ artefaktów ani identyfikatorów operacji.
 
 Zadanie ma cel, rolę, kryteria akceptacji, zależności i wymagane produkty. Zakończenie
 procesu nie oznacza przyjęcia wyniku, a odebranie wiadomości nie oznacza akceptacji
-handoffu. Orkiestrator ocenia wynik przed przesunięciem workflow.
+handoffu. Orkiestrator ocenia wynik przed akceptacją zadania, a w workflow także przed
+przesunięciem fazy.
 
 ### Człowiek zachowuje decyzje o skutkach zewnętrznych
 
 Agent może przygotować change request i przedstawić diff, ale publikacja zależy od
 polityki skonfigurowanej przez użytkownika. Workflow kończy się dopiero po otrzymanym
-od użytkownika potwierdzeniu wdrożenia albo release'u. Treść ticketa nie rozszerza
-uprawnień agenta.
+od użytkownika potwierdzeniu wdrożenia albo release'u; manualny workspace zamyka się
+wyłącznie jawną, potwierdzoną przez użytkownika operacją `complete`. Treść ticketa nie
+rozszerza uprawnień agenta.
 
 ### Ponowienie nie może duplikować pracy
 
@@ -85,6 +92,8 @@ ale pełna autonomiczna komunikacja wymaga klienta obsługującego dostarczenie.
 Aktualny zakres obejmuje:
 
 - pojedynczy lokalny projekt Git i wiele workspace'ów;
+- trzy jawne tryby utworzenia workspace'u: nazwany workflow, odroczony wybór
+  (`needs_workflow`) i manualna orkiestracja bez workflow (`--no-workflow`);
 - planowanie i implementację w oddzielnych worktrees;
 - tmux jako widoczny runtime procesów;
 - persony agentów, logiczne sesje oraz historię konkretnych uruchomień;
@@ -94,6 +103,9 @@ Aktualny zakres obejmuje:
 - integrację zmian oraz przygotowanie/publikację change requests;
 - kontrolowane wznowienie, uzgadnianie awarii, archiwizację i sprzątanie;
 - workflow `plan-first` oraz rozbudowany, zgodny wstecznie `issue-resolution`.
+- manualny tryb bez workflow: delegowanie zadań i worktrees, handoffy, checks i
+  akceptacja z ustalonym limitem 3 równoległych workerów, bez faz, advance, release'u
+  ani konwersji na workflow;
 - interaktywny TUI do przeglądania tego samego stanu, nawigacji po taskach i
   uruchamiania jawnie dozwolonych operacji core.
 
@@ -116,14 +128,20 @@ submits it through the active TUI control API. Delivery is confirmed against the
 current Run only after the marker appears in session history; it remains distinct from
 inbox ACK and handoff acceptance.
 
-W pickerze projektu użytkownik może utworzyć workspace z opisem i opcjonalnym workflow
-albo świadomie odrzucić go w całości bez wymogu release/archive. Pełne usunięcie wymaga
-przepisania ID, zatrzymuje runtime i usuwa stan, worktrees, niezacommitowane pliki oraz
-lokalne gałęzie workspace'u. Wewnątrz zakończonego workspace'u TUI udostępnia archive,
-które zachowuje historię i respektuje bramki release oraz aktywnego runtime. Można też
-usunąć task bez zależności i utrwalonych wyników oraz nieaktywną sesję bez referencji
-wynikowych. Taski i sesje otrzymują audytowalny tombstone i znikają z normalnych widoków;
-operacja nie przepisuje ani nie kasuje historii, na której opierają się inne rekordy.
+W pickerze projektu użytkownik może utworzyć workspace, wybierając nazwany workflow,
+świadomie odkładając wybór (`needs_workflow`) albo tworząc workspace manualny bez
+workflow. Tryby odróżnia etykieta fazy: `manual` dla orkiestracji manualnej i `-`
+dla odroczonego wyboru. Manualny workspace ukończy jawna, potwierdzona przez
+użytkownika operacja `complete`, po której archive nie wymaga release'u; workflow
+pozostaje przy potwierdzonym release. Alternatywnie użytkownik może świadomie odrzucić
+workspace w całości bez wymogu release/archive. Pełne usunięcie wymaga przepisania ID,
+zatrzymuje runtime i usuwa stan, worktrees, niezacommitowane pliki oraz lokalne gałęzie
+workspace'u. Wewnątrz zakończonego workspace'u TUI udostępnia archive, które zachowuje
+historię i respektuje bramki aktywnego runtime oraz release'u (workflow) albo
+wcześniejszego `complete` (tryb manualny). Można też usunąć task bez zależności
+i utrwalonych wyników oraz nieaktywną sesję bez referencji wynikowych. Taski i sesje
+otrzymują audytowalny tombstone i znikają z normalnych widoków; operacja nie przepisuje
+ani nie kasuje historii, na której opierają się inne rekordy.
 
 Pierwszy ekran TUI skupia się na postępie zaakceptowanych zadań i aktualnej pracy
 agentów. Łączy zadanie, sesję i bieżący Run w czytelnym wpisie, odróżnia wykonanie

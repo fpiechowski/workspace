@@ -21,7 +21,9 @@ than restarted silently.
 
 The supervisor reconciles durable state with actual pane ownership. A verified lost
 orchestrator pane is marked as an interrupted Run and resumed in the same compatible
-logical Session with a new Run. Transient
+logical Session with a new Run. Recovery also applies to an active manually orchestrated
+workspace, which is stored as `active` with no workflow, so losing its orchestrator pane
+is not treated as a reason to stop. Transient
 tmux errors preserve reservations. Explicitly stopped or failed clients are not
 automatically restarted. Captured check processes lost with their Run are marked
 interrupted. A paused workspace does not delegate or restart work automatically.
@@ -102,7 +104,10 @@ Restart the project supervisor after installing a newly built binary so the new
 delivery code is loaded. An OpenCode Session with a valid existing Run endpoint does
 not need to be stopped, recreated, or rebound.
 
-After user-confirmed release, stop remaining sessions and `archive` the workspace.
+After user-confirmed release, stop remaining sessions and `archive` the workspace. An
+intentionally manual workspace has no release: finish it with the explicit, user-confirmed
+`workspace complete` operation once no active Sessions or services remain and every
+non-deleted task is accepted, then `archive` it without a release reference.
 `clean --dry-run` reports which worktrees can be removed. Uncommitted/unpreserved files
 and unpublished commits prevent removal. `clean --backup` can preserve unpublished
 commits in a verified Git bundle; source branches remain. Only Git removes worktrees.

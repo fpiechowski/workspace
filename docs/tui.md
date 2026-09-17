@@ -28,15 +28,20 @@ i dwuwierszowe wpisy. Przy małej wysokości wpis zajmuje jeden wiersz. Wpisy s�
 rozdzielone linią o niższym nacisku, a zaznaczenie obejmuje tytuł i opis na wspólnym
 tle; bez koloru pozostaje znacznik wyboru i separator. Pasek skrótów ma zawsze zarezerwowany ostatni wiersz.
 
-`a` w pickerze projektu udostępnia utworzenie workspace'u (tytuł, opis i opcjonalny
-workflow) oraz trwałe usunięcie zaznaczonego workspace'u. Usunięcie jest dostępne dopiero
+`a` w pickerze projektu udostępnia utworzenie workspace'u (tytuł, opis oraz jawny wybór
+trybu: nazwany workflow, `Choose later` albo `No workflow (manual orchestration)`) oraz
+trwałe usunięcie zaznaczonego workspace'u. Usunięcie jest dostępne dopiero
 po wpisaniu pełnego ID i nie wymaga release ani archive. Jest pełnym discardem: zatrzymuje
 runtime i usuwa stan, wszystkie worktrees wraz z niezacommitowanymi plikami oraz lokalne
-gałęzie `workspace/<id>/…`. Tej operacji nie można cofnąć.
+gałęzie `workspace/<id>/…`. Tej operacji nie można cofnąć. Wybór workflow jest dostępny
+tylko dla stanu `needs_workflow`; workspace manualny nie proponuje później wyboru ani
+advance.
 
-Na Dashboard `a` udostępnia `Archive completed workspace`, gdy stan to `completed`.
-Archive wymaga potwierdzenia, sprawdza rewizję oraz zachowuje wszystkie dane. Core nadal
-wymaga potwierdzonego release'u i braku aktywnych Session oraz usług.
+Na Dashboard `a` udostępnia `Complete this manual workspace` dla aktywnego manualnego
+workspace'u oraz `Archive completed workspace`, gdy stan to `completed`.
+Archive wymaga potwierdzenia, sprawdza rewizję oraz zachowuje wszystkie dane. Workflow
+nadal wymaga potwierdzonego release'u, a ukończony manualny workspace — wcześniejszego
+`complete`; w obu przypadkach obowiązuje brak aktywnych Session oraz usług.
 
 More zawiera Sessions, Agents, Services, Decisions, Change requests, Runtime, Needs
 attention, Recent recorded activity i Documents. Detail Runtime renderuje topologię
@@ -125,7 +130,8 @@ propozycji reconcile.
 
 Akcje są ograniczone do istniejącego kontraktu core. Dostępne są m.in. start/resume
 orkiestratora, pause, guarded pause-and-interrupt, resume workspace, reconcile, wybór
-workflow, retry task, session resume/stop/close i stop service. Runtime udostępnia show
+workflow (tylko dla `needs_workflow`), `complete` manualnego workspace'u, retry task,
+session resume/stop/close i stop service. Runtime udostępnia show
 i hide zarządzanego TUI. Menu Task i Session udostępnia też Delete. Wymaga ono wpisania
 pełnego ID i zapisuje tombstone `deleted_at`; rekord znika z normalnych kolekcji, ale
 pozostaje w historii dla receiptów. Core odrzuca aktywną sesję, sesję z referencjami

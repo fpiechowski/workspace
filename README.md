@@ -2,7 +2,8 @@
 
 CLI do zarządzania trwałym kontekstem zadania, agentami, Git worktrees i tmux.
 Orkiestrator realizuje prosty workflow `plan-first`: planowanie w osobnym worktree
-i delegowanie implementacji do kolejnych worktree’ów.
+i delegowanie implementacji do kolejnych worktree’ów. Workspace może też działać
+manualnie, bez workflow: z jawnymi zadaniami, worktrees, handoffami i checks.
 
 - **Agent**: persona z rolą, instrukcjami, szablonem promptu i profilem modelu.
 - **Session**: trwały logiczny kontekst rozmowy w danym agent/task/worktree lineage.
@@ -134,14 +135,20 @@ workspace create --issue https://github.com/OWNER/REPO/issues/142 \
 # Opis można też podać bezpośrednio jako argument albo przez --input-file issue.md.
 workspace create "Improve workspace creation" --workflow plan-first
 # --input-file można opcjonalnie połączyć z --issue URL, aby zachować źródło.
+# Manualna orkiestracja bez workflow:
+workspace create "Ad-hoc analysis" --no-workflow
 workspace start --workspace ws_ID_Z_ODPOWIEDZI --operation-key orchestrator-1
 workspace attach --workspace ws_ID_Z_ODPOWIEDZI
 ```
 
 `create` utrwala opis; `start` uruchamia supervisora i orkiestratora bez zmiany widoku.
-`attach` przełącza istniejącego klienta tmux lub dołącza z zewnątrz. Bez `--workflow`
-powstaje stan `needs_workflow`; orkiestrator pyta o wybór przed delegowaniem.
-[Trackery i snapshoty](docs/trackers.md).
+`attach` przełącza istniejącego klienta tmux lub dołącza z zewnątrz. Wybór trybu jest
+jawny: `--workflow NAME` wybiera workflow, brak flagi tworzy stan `needs_workflow`
+(orkiestrator pyta o wybór przed delegowaniem), a `--no-workflow` tworzy aktywny
+workspace manualny — bez faz, advance i release'u, z delegowaniem zadań, handoffami
+i checks oraz ustalonym limitem 3 równoległych workerów. Nie można łączyć `--workflow`
+z `--no-workflow`, a workspace manualny nie
+konwertuje się później na workflow. [Trackery i snapshoty](docs/trackers.md).
 
 Powrót do istniejącego workspace nie wymaga pamiętania ID:
 
@@ -212,8 +219,10 @@ Operacje usuwania wymagają wpisania pełnego ID. Taski i sesje są ukrywane prz
 audytowalny tombstone, a core odrzuca usunięcie danych aktywnych, zależnych lub mających
 utrwalone wyniki. Delete Workspace jest odrębnym, nieodwracalnym discardem: po wpisaniu
 pełnego ID zatrzymuje runtime i usuwa stan, worktrees, niezacommitowane pliki oraz lokalne
-gałęzie workspace'u bez wymagania release lub archive. Archive zachowuje historię i nadal
-wymaga zakończonego workflow, potwierdzonego release'u i braku aktywnych sesji/usług.
+gałęzie workspace'u bez wymagania release lub archive. Archive zachowuje historię;
+workflow nadal wymaga potwierdzonego release'u, a manualny workspace wcześniejszego
+`complete`, i w obu przypadkach braku aktywnych sesji/usług. TUI udostępnia też
+`Complete this manual workspace` jako potwierdzoną operację core.
 Przed downgrade binarium ukryj zarządzany panel przez `workspace tui hide`: starszy
 launcher nie rozpoznaje jeszcze własności nowego panelu.
 Szczegóły ekranów i skrótów: [docs/tui.md](docs/tui.md).
@@ -264,6 +273,8 @@ workspace workflow advance
 
 `check run` zwraca receipt; odczytaj jego `exit_code`. Rejestrowanie receipt nie oznacza
 sukcesu testu. Akceptacja sprawdza kryteria workflow, wymagane artefakty i wyniki.
+`workspace workflow advance` dotyczy wyłącznie workspace'u z wybranym workflow; tryb
+manualny używa tych samych zadań, handoffów i checks bez advance.
 [Dowody testów](docs/checks.md).
 
 Orkiestrator deleguje integrację do osobnego wykonawcy po `integration prepare`.
@@ -272,7 +283,16 @@ menu proponuje live testing z osobnym profilem i sesją w zintegrowanym worktree
 Test albo jawne pominięcie prowadzi do oczekiwania na release. Sam merge nie kończy
 workflow; `release confirm --reference REF` zapisuje potwierdzenie użytkownika.
 `--user-confirmed` w sesji orkiestratora oznacza przekazanie rzeczywiście otrzymanej
-odpowiedzi, nie samodzielne udzielenie zgody przez model.
+odpowiedzi, nie samodzielne udzielenie zgody przez model. Integracja, change requesty,
+live testing i `release confirm` są operacjami wyłącznie workflow; w trybie manualnym
+zwracają `operation_not_applicable`, a kończy go jawna operacja `complete`.
+
+Manualny workspace ukończysz potwierdzoną operacją, która nie wymaga release'u:
+
+```sh
+workspace complete --reason "Analysis delivered" --user-confirmed --operation-key complete-1
+workspace archive
+```
 
 ## Wznowienia i stan
 
@@ -283,10 +303,12 @@ na rozmowę; `session history sess_ID` i `run list` pokazują wszystkie uruchomi
 `session close sess_ID --reason ...` zamyka idle context i blokuje dalsze resume.
 `pause` wstrzymuje delegowanie, `pause --interrupt` zatrzymuje aktywne runy,
 `resume` odblokowuje pracę. `reconcile` uzgadnia utracone panele i przerwane operacje.
-`archive` i `clean --dry-run` są osobne od potwierdzenia release’u.
+`archive` i `clean --dry-run` są osobne od potwierdzenia release’u; manualny workspace
+archiwizuje się po wcześniejszym `complete`.
 [Runtime, komunikacja i sprzątanie](docs/runtime.md).
 
-WORKSPACE.md jest kanonicznym stanem workflow; `.runtime/index.json` zawiera prywatny
+WORKSPACE.md jest kanonicznym stanem trybu i workflow; w workspace manualnym ma pusty
+workflow i etykietę fazy `manual`. `.runtime/index.json` zawiera prywatny
 rejestr operacyjny w wersji `schema_version: 4`, z osobnymi tablicami `sessions` i `runs`.
 `status --json` publikuje ten sam jawny kontrakt wersji. Starszy indeks jest migrowany
 atomowo przy pierwszym otwarciu; dawne `sess_*` pozostają trwałymi aliasami Run, więc

@@ -7,7 +7,8 @@ lub kolejna próba pracy wymagają nowego klucza.
 
 Mutacje workspace obejmują tworzenie zasobów i zadań, start/resume/stop sesji,
 wiadomości i ACK, handoffy i ich ocenę, workflow, aktualizacje stanu, migracje,
-integrację, CR, decyzje, release, pause/resume, reconcile, archive i clean.
+integrację, CR, decyzje, release, `complete` manualnego workspace'u, pause/resume,
+reconcile, archive i clean.
 `project init`, `skill install` i `server stop` zapisują receipts w zakresie projektu.
 Odczyty, `clean --dry-run`, interaktywne attach oraz stale działający `serve` nie
 są jednorazowymi mutacjami wymagającymi receipt.
@@ -61,3 +62,6 @@ bezpiecznie ponowić po usunięciu katalogu. Nie wymaga archive/release: zatrzym
 wymusza usunięcie worktrees (także brudnych) i lokalnych gałęzi `workspace/<id>/…`, po
 czym usuwa cały stan. Zmiana rewizji albo targetu kończy się konfliktem. Archive z TUI
 jest niedestrukcyjne, ma własny guard rewizji i zachowuje dotychczasowe bramki lifecycle.
+`complete` manualnego workspace'u jest osobną, idempotentną mutacją z guardem rewizji
+i kluczem operacji; archive respektuje potwierdzony release dla workflow albo wcześniejsze
+`complete` dla trybu manualnego.

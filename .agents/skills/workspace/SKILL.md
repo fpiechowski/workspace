@@ -1,6 +1,6 @@
 ---
 name: workspace
-description: Start or resume delegated plan-first work in a Git project using the workspace CLI, persistent agent personas, worktrees and tmux sessions.
+description: Start or resume delegated plan-first or explicit manual workspace work in a Git project using the workspace CLI, persistent agent personas, worktrees and tmux sessions.
 ---
 
 # Workspace
@@ -18,12 +18,15 @@ For a new issue or work description:
 2. Run `workspace workflow list --json`. Select a clearly matching workflow from
    the user's input; ask with the available choices if intent is ambiguous. A
    workspace without `--workflow` starts in `needs_workflow` for interactive selection.
+   Use `--no-workflow` instead when the user asks for manual orchestration: the
+   workspace is active with no workflow, so do not select one for it.
 3. For a ticket URL, `create --issue URL` retrieves supported/configured trackers.
    Otherwise save the supplied description or retrieved ticket text as an input file. Preserve
    the source URL, relevant acceptance criteria and retrieval date. If tracker access
    is unavailable, ask for the description instead of inventing issue contents.
 4. Use `workspace create --title <title> --input-file <file> --workflow plan-first
    --operation-key <stable-key> --json`; include `--issue <url>` when applicable.
+   Replace `--workflow plan-first` with `--no-workflow` for an explicit manual workspace.
    Retain the returned workspace ID; repeat the same operation key on transport retry.
 5. Run `workspace start --workspace <id> --operation-key <start-key> --json`.
    Return its workspace ID and `workspace attach --workspace <id>` to the user.
@@ -35,7 +38,10 @@ For existing work, inspect `workspace status --workspace <id> --json` and
 Do not start a second execution because a busy agent has not answered yet.
 
 Inside an orchestrator Session, read WORKFLOW.md and WORKSPACE.md and use the CLI's
-task, worktree, agent, session, inbox and handoff commands. Durable messages address
+task, worktree, agent, session, inbox and handoff commands. In a manual workspace,
+WORKFLOW.md is a labeled manual-orchestration note: create explicit tasks and worktrees
+and finish only with the user-confirmed `workspace complete` command instead of a
+release. Durable messages address
 Agent IDs; native thread IDs and tmux pane IDs are not workspace mailbox addresses.
 Use `--json --non-interactive` for machine-readable operations. On `decision_required`,
 present the actual choices to the user and record their answer. Preserve existing
@@ -44,4 +50,7 @@ authorization; invoking this skill alone does not authorize external publication
 Workers persist outputs in their worktrees and submit explicit files through handoff.
 The orchestrator reviews the plan and implementation artifacts before acceptance.
 The example `plan-first` workflow completes after all implementation tasks are accepted;
-it has no integration, publication, live-testing or release gate.
+it has no integration, publication, live-testing or release gate. A manual workspace
+never selects or advances a workflow; it uses the same task/worktree/handoff flow with
+a fixed limit of three parallel workers and is closed only by the explicit `complete`
+operation.
