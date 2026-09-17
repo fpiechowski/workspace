@@ -44,6 +44,178 @@ func submitPlan(t *testing.T, s *Service, ws string, p Session, w Worktree) Hand
 	}
 	return h
 }
+
+func TestReviewSafeResumePreservesPendingHandoffProvenance(t *testing.T) {
+	s, ws := fixture(t)
+	ctx := context.Background()
+	task := plannedTask(t, s, ws, "review-resume", "planner", nil)
+	p, w := startTask(t, s, ws, task)
+	h := submitPlan(t, s, ws, p, w)
+	if _, err := s.StopSession(ctx, ws, p.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	resumed, err := s.ResumeSession(ctx, ws, p.ID, "resume-review-once")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumed.ID != p.ID || resumed.CurrentRunID == h.FromRun {
+		t.Fatalf("resume did not reuse the logical Session with a new Run: %+v", resumed)
+	}
+	status, err := s.Status(ctx, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Sessions) != 1 || len(status.Runs) != 2 {
+		t.Fatalf("unexpected Session/Run history after resume: sessions=%d runs=%d", len(status.Sessions), len(status.Runs))
+	}
+
+	var storedTask Task
+	var storedHandoff Handoff
+	if err := s.With(ctx, ws, func(d *Document) error {
+		foundTask, err := findTask(d, task.ID)
+		if err != nil {
+			return err
+		}
+		storedTask = *foundTask
+		foundHandoff, err := findHandoff(d, h.ID)
+		if err != nil {
+			return err
+		}
+		storedHandoff = *foundHandoff
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if storedTask.State != "awaiting_review" || storedTask.RunID != h.FromRun || storedTask.SessionID != p.ID || storedTask.WorktreeID != w.ID || storedTask.AcceptedHandoff != "" {
+		t.Fatalf("review-safe resume changed task binding/provenance: %+v", storedTask)
+	}
+	if storedHandoff.State != "submitted" || storedHandoff.FromRun != h.FromRun || storedHandoff.Stale {
+		t.Fatalf("reviewable handoff was changed by resume: %+v", storedHandoff)
+	}
+
+	replayed, err := s.ResumeSession(ctx, ws, p.ID, "resume-review-once")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err = s.Status(ctx, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed.CurrentRunID != resumed.CurrentRunID || len(status.Runs) != 2 {
+		t.Fatalf("resume operation replay created another Run: replay=%+v runs=%d", replayed, len(status.Runs))
+	}
+
+	accepted, err := s.ReviewHandoff(ctx, ws, h.ID, true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accepted.State != "accepted" {
+		t.Fatalf("original handoff could not be accepted after resume: %+v", accepted)
+	}
+	if err := s.With(ctx, ws, func(d *Document) error {
+		current, err := findTask(d, task.ID)
+		if err != nil {
+			return err
+		}
+		if current.State != "accepted" || current.AcceptedHandoff != h.ID || current.RunID != h.FromRun {
+			return fail("test", "accepted task lost original handoff provenance: %+v", *current)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAwaitingReviewRejectsFreshTaskAssignment(t *testing.T) {
+	s, ws := fixture(t)
+	ctx := context.Background()
+	task := plannedTask(t, s, ws, "review-assignment", "planner", nil)
+	first, firstWorktree := startTask(t, s, ws, task)
+	_ = submitPlan(t, s, ws, first, firstWorktree)
+	secondAgent, err := s.CreateAgent(ctx, ws, AgentOptions{Name: "fresh-review-worker", Role: "planner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondWorktree, err := s.CreateWorktree(ctx, ws, WorktreeOptions{Name: "fresh-review-worker", Purpose: "planning"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.StartSession(ctx, ws, SessionOptions{Agent: secondAgent.ID, Worktree: secondWorktree.ID, Task: task.ID})
+	expectCode(t, err, "task_not_ready")
+}
+
+func TestReviewResumeRejectsChangedInputLineage(t *testing.T) {
+	s, ws := fixture(t)
+	ctx := context.Background()
+	task := plannedTask(t, s, ws, "review-input-lineage", "planner", nil)
+	p, w := startTask(t, s, ws, task)
+	_ = submitPlan(t, s, ws, p, w)
+	if _, err := s.StopSession(ctx, ws, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	status, err := s.Status(ctx, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicWrite(filepath.Join(status.Directory, status.Workspace.Input.Snapshot), []byte("changed input lineage")); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.ResumeSession(ctx, ws, p.ID, "resume-changed-input")
+	expectCode(t, err, "invalid_resume")
+}
+
+func TestRejectedReviewSafeResumePromotesActiveSuccessor(t *testing.T) {
+	s, ws := fixture(t)
+	ctx := context.Background()
+	task := plannedTask(t, s, ws, "review-rejection", "planner", nil)
+	p, w := startTask(t, s, ws, task)
+	original := submitPlan(t, s, ws, p, w)
+	if _, err := s.StopSession(ctx, ws, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := s.ResumeSession(ctx, ws, p.ID, "resume-before-rejection")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rejected, err := s.ReviewHandoff(ctx, ws, original.ID, false, "Add the missing edge cases")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rejected.State != "rejected" {
+		t.Fatalf("handoff was not rejected: %+v", rejected)
+	}
+	var afterRejection Task
+	if err := s.With(ctx, ws, func(d *Document) error {
+		found, err := findTask(d, task.ID)
+		if err != nil {
+			return err
+		}
+		afterRejection = *found
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if afterRejection.State != "needs_changes" || afterRejection.RunID != resumed.CurrentRunID {
+		t.Fatalf("rejection did not promote the compatible active Run: %+v", afterRejection)
+	}
+
+	if err := atomicWrite(filepath.Join(w.Path, "work-products", "PLAN.md"), []byte("Replacement plan with edge cases")); err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := s.SubmitHandoff(ctx, ws, HandoffOptions{Session: resumed.ID, Summary: "Replacement plan", Artifacts: []string{"work-products/PLAN.md"}, OperationKey: "replacement:" + resumed.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement.Stale || replacement.FromRun != resumed.CurrentRunID {
+		t.Fatalf("active successor could not submit a fresh handoff: %+v", replacement)
+	}
+	if _, err := s.ReviewHandoff(ctx, ws, replacement.ID, true, ""); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestHandoffPreservesArtifactBeforeInboxAndRequiresAcceptance(t *testing.T) {
 	s, ws := fixture(t)
 	ctx := context.Background()

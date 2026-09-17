@@ -297,6 +297,30 @@ func validateHandoff(d *Document, h *Handoff, t *Task) error {
 	}
 	return nil
 }
+
+// promoteRejectedHandoffProvenance makes a successor Run the new source of
+// truth only after the pending handoff has been rejected. While the handoff is
+// still reviewable, its original Run must remain in Task.RunID so acceptance
+// can validate the submitted result.
+func promoteRejectedHandoffProvenance(d *Document, h *Handoff, t *Task) {
+	if t.RunID == "" || t.RunID != h.FromRun || t.SessionID != h.FromSession || t.State != "needs_changes" {
+		return
+	}
+	p, err := findSession(d, h.FromSession)
+	if err != nil || p.DeletedAt != nil || p.ClosedAt != nil || p.AgentSnapshot.Role != t.Role || p.TaskID != t.ID || p.TaskAttempt != t.Attempt || p.InputDigest != t.InputDigest || p.WorktreeID != t.WorktreeID {
+		return
+	}
+	r, err := currentRun(d, p)
+	if err != nil || r.ID == h.FromRun {
+		return
+	}
+	prior, err := findRun(d, h.FromRun)
+	if err != nil || r.Generation <= prior.Generation {
+		return
+	}
+	t.RunID = r.ID
+}
+
 func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept bool, feedback string, keys ...string) (Handoff, error) {
 	var out Handoff
 	err := mutate(s, ctx, selector, keys, []any{"handoff.review", id, accept, feedback}, &out, s.requireOrchestrator, func(d *Document) error {
@@ -360,6 +384,7 @@ func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept
 			h.State = "rejected"
 			t.State = "needs_changes"
 			t.Reason = feedback
+			promoteRejectedHandoffProvenance(d, h, t)
 		}
 		h.Feedback = feedback
 		out = *h

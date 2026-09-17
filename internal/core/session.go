@@ -365,7 +365,12 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		// pending run snapshot through the compatibility projection for that gate.
 		out.Profile, out.Route, out.RoutingDecision = profile, route, &decision
 		out.Argv, out.CWD, out.PromptFile, out.State, out.OpenCodeEndpoint = argv, cwd, promptFile, "starting", openCodeEndpoint
-		if err := bindTask(ctx, d, &out, opt.Task); err != nil {
+		bindingMode := taskClaim
+		if resumePrior != nil {
+			bindingMode = taskResume
+		}
+		binding, err := bindTask(ctx, d, &out, opt.Task, bindingMode)
+		if err != nil {
 			return err
 		}
 		run := Run{ID: runID, SessionID: out.ID, Generation: out.RunCount + 1, Profile: profile, Route: route, RoutingDecision: &decision, Argv: argv, CWD: cwd, PromptFile: promptFile, State: "starting", ClientThreadID: thread, OpenCodeEndpoint: openCodeEndpoint, CreatedAt: created}
@@ -376,7 +381,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			*logical = out
 		}
 		d.Registry.Runs = append(d.Registry.Runs, run)
-		if out.TaskID != "" {
+		if out.TaskID != "" && !binding.preserveRunProvenance {
 			task, _ := findTask(d, out.TaskID)
 			task.RunID = run.ID
 		}
@@ -396,7 +401,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				run.State = "starting"
 			}
 			run.Error = launchErr.Error()
-			if out.TaskID != "" && run.State == "failed" {
+			if out.TaskID != "" && run.State == "failed" && !binding.preserveRunProvenance {
 				task, _ := findTask(d, out.TaskID)
 				task.State = "blocked"
 				task.Reason = launchErr.Error()

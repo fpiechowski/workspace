@@ -173,10 +173,7 @@ func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec
 	})
 	return out, err
 }
-func taskReady(d *Document, t *Task) error {
-	if t.State != "pending" && t.State != "needs_changes" && t.State != "blocked" {
-		return fail("task_not_ready", "task is %s", t.State)
-	}
+func taskDependenciesReady(d *Document, t *Task) error {
 	for _, id := range t.DependsOn {
 		dep, err := findTask(d, id)
 		if err != nil {
@@ -187,6 +184,12 @@ func taskReady(d *Document, t *Task) error {
 		}
 	}
 	return nil
+}
+func taskReady(d *Document, t *Task) error {
+	if t.State != "pending" && t.State != "needs_changes" && t.State != "blocked" {
+		return fail("task_not_ready", "task is %s", t.State)
+	}
+	return taskDependenciesReady(d, t)
 }
 func (s *Service) RetryTask(ctx context.Context, selector, id, reason, key string) (Task, error) {
 	return s.retryTask(ctx, selector, id, reason, key, MutationGuard{})
@@ -308,29 +311,59 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, key strin
 	return out, err
 }
 
+type taskBindingMode uint8
+
+const (
+	taskClaim taskBindingMode = iota
+	taskResume
+)
+
+// taskBinding makes the provenance decision explicit to the caller that
+// appends the concrete Run. A review-safe resume must not replace the Run that
+// identifies the pending handoff.
+type taskBinding struct {
+	preserveRunProvenance bool
+}
+
 // bindTask validates a current attempt, then records its logical Session. The
-// caller records the concrete Run after reserving it.
-func bindTask(ctx context.Context, d *Document, p *Session, taskID string) error {
+// caller records the concrete Run after reserving it. A resume of an idle
+// logical Session whose task is awaiting review validates the existing binding
+// but deliberately leaves the task state and result provenance unchanged.
+func bindTask(ctx context.Context, d *Document, p *Session, taskID string, mode taskBindingMode) (taskBinding, error) {
+	var binding taskBinding
 	if taskID == "" {
-		return nil
+		return binding, nil
 	}
 	t, err := findTask(d, taskID)
 	if err != nil {
-		return err
+		return binding, err
 	}
 	if t.Role != p.AgentSnapshot.Role {
-		return fail("role_mismatch", "task and agent roles differ")
+		return binding, fail("role_mismatch", "task and agent roles differ")
 	}
-	if err := taskReady(d, t); err != nil {
-		return err
+	reviewResume := mode == taskResume && t.State == "awaiting_review"
+	if reviewResume {
+		if t.SessionID != p.ID || t.WorktreeID != p.WorktreeID || t.Attempt != p.TaskAttempt || t.InputDigest != p.InputDigest || t.RunID == "" {
+			return binding, fail("invalid_resume", "task binding differs from the logical session")
+		}
+		run, runErr := findRun(d, t.RunID)
+		if runErr != nil || run.SessionID != p.ID {
+			return binding, fail("invalid_resume", "pending review provenance is missing or inconsistent")
+		}
+		if err := taskDependenciesReady(d, t); err != nil {
+			return binding, err
+		}
+		binding.preserveRunProvenance = true
+	} else if err := taskReady(d, t); err != nil {
+		return binding, err
 	}
 	if t.BaseCommit != "" {
 		head, err := git(ctx, p.CWD, "rev-parse", "HEAD")
 		if err != nil {
-			return err
+			return binding, err
 		}
 		if _, err := git(ctx, p.CWD, "merge-base", "--is-ancestor", t.BaseCommit, head); err != nil {
-			return fail("base_mismatch", "worktree does not contain task base")
+			return binding, fail("base_mismatch", "worktree does not contain task base")
 		}
 	}
 	for _, depID := range t.DependsOn {
@@ -340,16 +373,22 @@ func bindTask(ctx context.Context, d *Document, p *Session, taskID string) error
 		}
 		h, err := findHandoff(d, dep.AcceptedHandoff)
 		if err != nil {
-			return err
+			return binding, err
 		}
 		if _, err := git(ctx, p.CWD, "merge-base", "--is-ancestor", h.HeadCommit, "HEAD"); err != nil {
 			head, _ := git(ctx, p.CWD, "rev-parse", "HEAD")
-			return fail("base_mismatch", "worktree at %s is missing accepted dependency %s head %s", head, depID, h.HeadCommit)
+			return binding, fail("base_mismatch", "worktree at %s is missing accepted dependency %s head %s", head, depID, h.HeadCommit)
 		}
 	}
 	input, err := taskInputDigest(d, t)
 	if err != nil {
-		return err
+		return binding, err
+	}
+	if reviewResume {
+		if input != t.InputDigest {
+			return binding, fail("invalid_resume", "task attempt or input lineage changed; start a new logical session")
+		}
+		return binding, nil
 	}
 	p.TaskID = t.ID
 	p.TaskAttempt = t.Attempt
@@ -358,5 +397,5 @@ func bindTask(ctx context.Context, d *Document, p *Session, taskID string) error
 	t.SessionID = p.ID
 	t.WorktreeID = p.WorktreeID
 	t.State = "running"
-	return nil
+	return binding, nil
 }

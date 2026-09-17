@@ -30,6 +30,12 @@ interrupted. A paused workspace does not delegate or restart work automatically.
 their worktrees. `resume` permits delegation again; `agent resume NAME` starts the
 chosen persona using its prior assignment. Generic clients receive a fresh bootstrap;
 adapters with native thread support can reuse the conversation.
+An exact resume of the same idle logical Session is also allowed while its Task is
+`awaiting_review` when the attempt, input lineage and binding are unchanged. It creates
+a new Run without reopening the Task or replacing the Run provenance of the submitted
+handoff, so that handoff remains reviewable. If that handoff is rejected while the
+successor Run is active, the Task can adopt that compatible Run for a non-stale
+replacement; retrying the Task remains a separate operation.
 
 | Logical Session state | Meaning |
 |---|---|

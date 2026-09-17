@@ -217,6 +217,11 @@ planning → plan review → implementation → integration → change requests
 `paused`, `blocked` i `needs_attention` są stanami operacyjnymi niezależnymi od fazy.
 Zmiana wejścia lub retry zwiększa próbę i unieważnia wyniki zależne bez kasowania
 historii. Integracja odbywa się w dedykowanym worktree z manifestem wejściowych SHA.
+Dokładne wznowienie tej samej idle Session dla niezmienionej próby i input lineage jest
+dozwolone także podczas `awaiting_review`: tworzy nowy Run, ale nie otwiera ponownie
+Taska ani nie zastępuje `RunID` wskazującego oczekujący handoff. Retry Taska pozostaje
+osobną operacją. Dopiero odrzucenie handoffu może przepiąć `RunID` na nowszy zgodny,
+aktywny Run tej Session, aby ten Run mógł złożyć wynik zastępczy.
 
 ## Komunikacja, artefakty i dowody
 

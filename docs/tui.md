@@ -73,7 +73,10 @@ klawisze, więc `q`, `g` i cyfry nie uruchomią skrótów aplikacji.
 
 `t` na aktywnej sesji otwiera jej dokładny bieżący Run po weryfikacji ownership.
 Na nieaktywnej sesji prosi o potwierdzenie wznowienia, tworzy nowy Run przez core
-i po sukcesie otwiera jego terminal. `o`, a następnie `t`, otwiera orkiestratora
+i po sukcesie otwiera jego terminal. Jest to wznowienie tej konkretnej Session, a nie
+retry Taska. Gdy Task tej Session oczekuje na review, niezmienione wznowienie nadal
+tworzy Run, ale zachowuje stan `awaiting_review` i pochodzenie oczekującego handoffu.
+`o`, a następnie `t`, otwiera orkiestratora
 lub potwierdzenie jego uruchomienia. Zadanie z wieloma sesjami otwiera ich listę do
 jawnego wyboru; zadanie bez sesji wskazuje potrzebę delegacji przez orkiestratora.
 Historyczny Run pozostaje dokładnym celem i nie jest automatycznie wznawiany.
