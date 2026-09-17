@@ -10,20 +10,20 @@ Picker projektu pokazuje tytuł, status, fazę, aktywne Runy, problemy, pełny I
 źródło wejścia i datę utworzenia. Gdy lista jest pusta, pokazuje tytuł, jednozdaniowe
 wyjaśnienie i jedną prawidłową akcję (`a` tworzy workspace), więc nie zaprzecza już
 akcji Create workspace. W trybie szerokim obok listy pokazuje szczegóły zaznaczenia
-(ID, ścieżkę, źródło wejścia, datę utworzenia i stan) bez ramki panelu. Wybór workspace'u otwiera Work: pasek postępu (bubbles/progress)
-z tekstowym `accepted/total` i procentem oraz pasek statusu z osobnymi licznikami
-live, review, blocked i attention. Podsumowanie pozostaje widoczne przy przełączaniu sekcji Agents & runs, Tasks,
-Needs attention i Recent recorded activity. Agents & runs pokazuje orkiestratora,
-aktywne wykonania oraz niezamknięte sesje bieżących prób niezaakceptowanych zadań.
-Każdy wiersz łączy agenta z zadaniem, stanem i modelem. Tasks pokazuje stan zadania
-oraz liczbę aktywnych wykonań, sesji i runów jego bieżącej próby. Zakończenie runu
-nie oznacza akceptacji zadania; procent postępu liczy wyłącznie zadania accepted.
+(ID, ścieżkę, źródło wejścia, datę utworzenia i stan) bez ramki panelu. Wybór workspace'u
+otwiera Tasks: każdy wiersz pokazuje stan zadania oraz liczbę aktywnych wykonań, sesji
+i runów jego bieżącej próby, a zaznaczenie pozostaje przypięte do ID także po sortowaniu.
+Zakończenie runu nie oznacza akceptacji zadania; stan zadania, sesji i procesu są
+rozróżnione. Główna nawigacja to kolejno `1 Tasks`, `2 Sessions`, `3 Worktrees`,
+`4 Results` i `5 More`. Sessions to zwykła kolekcja bez wtórnych zakładek: `f` przełącza
+widok bieżący/historię, `Enter` otwiera szczegóły sesji, a `t` otwiera albo wznawia jej
+terminal.
 
 Stan ma symbol i podpis; running/starting mają animowany wskaźnik, także bez koloru.
 `s` zmienia sortowanie (priorytet pracy, nazwa, ostatnie wykonanie); zaznaczenie
 pozostaje przypięte do ID. Widok szeroki pokazuje nazwane panele listy i `Preview`
 z jedną wyraźną krawędzią fokusu, a linia akcji podglądu reklamuje tylko komendy
-obsługiwane przez zaznaczony rodzaj (`t`, `g`, `Enter`). Wąski widok zachowuje postęp
+obsługiwane przez zaznaczony rodzaj (`t`, `g`, `Enter`). Wąski widok zachowuje listę
 i dwuwierszowe wpisy. Przy małej wysokości wpis zajmuje jeden wiersz. Wpisy są
 rozdzielone linią o niższym nacisku, a zaznaczenie obejmuje tytuł i opis na wspólnym
 tle; bez koloru pozostaje znacznik wyboru i separator. Pasek skrótów ma zawsze zarezerwowany ostatni wiersz.
@@ -37,13 +37,14 @@ gałęzie `workspace/<id>/…`. Tej operacji nie można cofnąć. Wybór workflo
 tylko dla stanu `needs_workflow`; workspace manualny nie proponuje później wyboru ani
 advance.
 
-Na Dashboard `a` udostępnia `Complete this manual workspace` dla aktywnego manualnego
-workspace'u oraz `Archive completed workspace`, gdy stan to `completed`.
+Na Orchestratorze (`o`) oraz na stronie Runtime w More `a` udostępnia
+`Complete this manual workspace` dla aktywnego manualnego workspace'u oraz
+`Archive completed workspace`, gdy stan to `completed`.
 Archive wymaga potwierdzenia, sprawdza rewizję oraz zachowuje wszystkie dane. Workflow
 nadal wymaga potwierdzonego release'u, a ukończony manualny workspace — wcześniejszego
 `complete`; w obu przypadkach obowiązuje brak aktywnych Session oraz usług.
 
-More zawiera Sessions, Agents, Services, Decisions, Change requests, Runtime, Needs
+More zawiera Agents, Services, Decisions, Change requests, Runtime, Needs
 attention, Recent recorded activity i Documents. Detail Runtime renderuje topologię
 tmux jako tabelę (bubbles/table) z kolumnami window, pane, kind, owner, run i state
 w trybie szerokim oraz równoważny układ wierszy w trybie compact; błędy i stan
@@ -68,17 +69,16 @@ innej trasy.
 `Enter` otwiera zaznaczenie, a `Esc` wraca lub czyści filtr. Na kolekcjach `/` edytuje
 filtr substring po nazwie, ID i podtytule; porównanie nie rozróżnia wielkości liter.
 `Esc` podczas edycji przywraca poprzednią wartość i zaznaczenie. Poza edycją czyści najpierw filtr tekstowy, następnie statusowy, zanim wróci do poprzedniej strony. `f` przełącza aktywny/archiwalny
-widok workspace'ów i statusowe lub historyczne filtry odpowiednich kolekcji. Na Dashboard
-`Tab`/`Shift+Tab` zmienia fokus między Agents & runs, Tasks, Needs attention i Recent
-recorded activity. Na Results zmienia typ wyniku: artifacts, handoffs lub checks; aktywny
+widok workspace'ów i statusowe lub historyczne filtry odpowiednich kolekcji. Na Results
+`Tab`/`Shift+Tab` zmienia typ wyniku: artifacts, handoffs lub checks; aktywny
 typ jest nazwany w linii pomocniczej. Trasy szczegółów i kolekcji zależnych pokazują
 breadcrumb, a na szczegółach zadania `1`–`3` są skrótami do powiązanych zasobów
 (Sessions, Worktrees, Results), nie do stron głównych. Użyj
-`1`–`5`, aby przejść do głównych stron.
+`1`–`5`, aby przejść kolejno do Tasks, Sessions, Worktrees, Results i More.
 
 | Klawisz | Działanie |
 |---|---|
-| `1`–`5` | Work, Tasks, Worktrees, Results, More |
+| `1`–`5` | Tasks, Sessions, Worktrees, Results, More |
 | `Up`/`Down`, `j`/`k` | Zmiana zaznaczenia lub przewijanie szczegółów |
 | `PgUp`/`PgDn` | Przewiń dokument albo przesuń zaznaczenie o stronę na kolekcji |
 | `Home`/`End` | Początek lub koniec dokumentu albo kolekcji |
@@ -86,10 +86,8 @@ breadcrumb, a na szczegółach zadania `1`–`3` są skrótami do powiązanych z
 | `Esc` | Anuluj formularz, wyjdź z edycji filtra, wyczyść filtr albo wróć |
 | `/` | Edytuj filtr kolekcji |
 | `f` | Przełącz status albo historię na wspieranych listach |
-| `Tab` / `Shift+Tab` | Zmień fokus panelu Dashboard albo typ wyników |
+| `Tab` / `Shift+Tab` | Zmień typ wyników na Results (Artifacts, Handoffs, Checks) |
 | `s` | Sortuj według priorytetu, nazwy lub ostatniego wykonania |
-| `l` | Wróć do Agents & runs |
-| `v` | Otwórz Needs attention z Dashboardu |
 | `t` | Otwórz terminal agenta albo potwierdź start/wznowienie |
 | `a` | Otwórz dostępne akcje zaznaczenia lub workspace'u |
 | `g` | Skocz do zweryfikowanego celu tmux |
@@ -122,9 +120,9 @@ w formularzu potwierdzenia. Esc i Cancel pozostawiają runtime bez zmian.
 Po potwierdzeniu wykonuje jedną operację reconcile i ponawia nawigację do tego
 samego celu. Reconcile może odtworzyć kwalifikującego się orkiestratora; nie
 restartuje automatycznie zatrzymanych workerów. Gdy cel nadal jest niedostępny,
-TUI wskazuje Agents & runs i `t` do otwarcia lub wznowienia sesji, bez pętli
-potwierdzeń. Niejednoznaczny cel, niezgodne ownership lub socket nie wywołują
-propozycji reconcile.
+TUI wskazuje Sessions (`2`) albo Orchestrator (`o`) i `t` do otwarcia lub wznowienia
+sesji, bez pętli potwierdzeń. Niejednoznaczny cel, niezgodne ownership lub socket nie
+wywołują propozycji reconcile.
 
 ## Akcje i synchronizacja
 

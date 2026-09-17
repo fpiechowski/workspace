@@ -189,14 +189,18 @@ workspace tui status --workspace ws_ID
 workspace tui hide --workspace ws_ID
 ```
 
-`1`–`5` otwierają Work, Tasks, Worktrees, Results i More; na Dashboardzie
-`Tab`/`Shift+Tab` przełącza sekcje Agents & runs, zadań, uwag i aktywności, a w Results typ wyniku
+Otwarcie albo wybór workspace'u ląduje na Tasks. `1`–`5` otwierają Tasks, Sessions,
+Worktrees, Results i More; przy szerokości poniżej 60 kolumn zakładki skracają się do
+`1 Tasks`, `2 Sess`, `3 Trees`, `4 Out` i `5 More`. Sessions to zwykła kolekcja bez wtórnych
+zakładek: `f` przełącza widok bieżący/historię, `Enter` otwiera szczegóły sesji, a `t`
+otwiera albo wznawia jej terminal. `Tab`/`Shift+Tab` zmienia typ wyniku tylko na Results
 (aktywny typ jest nazwany w linii pomocniczej). `Up`/`Down` lub
 `j`/`k` zmienia zaznaczenie, `Enter` otwiera element, `Esc` wraca, `/` filtruje
 kolekcję, a `f` przełącza widok statusu lub historii. `s` sortuje listę.
 `t` otwiera terminal zaznaczonego agenta lub potwierdzenie wznowienia;
-`o`, potem `t`, pozwala szybko otworzyć albo uruchomić orkiestratora; `l`
-wraca do Agents & runs, a `v` otwiera Needs attention z Dashboardu. `a`
+`o`, potem `t`, pozwala szybko otworzyć albo uruchomić orkiestratora. More grupuje
+m.in. Agents, Services, Decisions, Change requests, Runtime, Needs attention, Recent
+recorded activity i Documents, więc uwagi i zapisana aktywność są osiągalne z `5`. `a`
 otwiera tylko operacje dostępne dla zaznaczenia, w tym tworzenie i pełne usuwanie
 workspace'ów w pickerze projektu, archiwizację zakończonego workspace'u oraz usuwanie
 niepowiązanych tasków i nieaktywnych sesji. `g` przechodzi do zweryfikowanego

@@ -3,9 +3,10 @@
 ## Overview
 
 Tryb **Operate**: natywny interfejs terminalowy do obserwowania pracy agentów,
-przeglądania wyników i wykonywania jawnych operacji. Pierwszy ekran Work pokazuje
-postęp zaakceptowanych zadań oraz aktualną pracę. Zakończenie procesu nie oznacza
-akceptacji wyniku: licznik i procent postępu uwzględniają wyłącznie zadania `accepted`.
+przeglądania wyników i wykonywania jawnych operacji. Pierwszy ekran to Tasks: lista
+łączy zadanie, stan oraz liczbę aktywnych wykonań, sesji i runów jego bieżącej próby.
+Zakończenie procesu nie oznacza akceptacji wyniku: stan zadania, sesji i procesu są
+rozróżnione, a każdy wynik pozostaje przypisany do swojej próby.
 
 Źródłami kontraktu są [PRODUCT.md](PRODUCT.md) i [docs/tui.md](docs/tui.md).
 Implementacja wyglądu znajduje się w `internal/tui/theme.go`, `status.go`, `view.go`
@@ -58,14 +59,13 @@ opcjonalny breadcrumb/ nawigacja wtórna, treść, wiersz statusu/komunikatu ora
 kontekstowa legenda klawiszy. Wiersz statusu i legenda są rezerwowane zawsze,
 więc pozostają widoczne przy każdym wspieranym rozmiarze. Breadcrumb pojawia się
 na trasach szczegółów i kolekcjach zależnych, a Results używa tej linii jako
-nawigacji wtórnej typu wyniku; Work i picker projektu jej nie pokazują.
+nawigacji wtórnej typu wyniku; picker projektu i główne kolekcje Tasks, Sessions,
+Worktrees oraz More jej nie pokazują.
 
 - Minimum to **40×12**; mniejszy terminal pokazuje komunikat o rozmiarze.
 - Jedna decyzja `layoutFor` steruje wszystkimi stronami: **tiny** poniżej 40×12,
   **compact** dla średnich terminali (jedna kolumna) oraz **wide** od 100×24
-  (lista i szczegóły obok siebie). Work korzysta z tej samej decyzji zamiast
-  własnego progu szerokości; w trybie wide lista Work zajmuje trzy piąte
-  szerokości.
+  (lista i szczegóły obok siebie).
 - Kolekcje w trybie wide pokazują dwa nazwane, obramowane panele (lista oraz
   `Preview`) obok siebie, z jedną wyraźną krawędzią fokusu; szerokość listy jest
   oparta na dwóch piątych szerokości terminala. Picker projektu w trybie wide
@@ -76,8 +76,8 @@ nawigacji wtórnej typu wyniku; Work i picker projektu jej nie pokazują.
   rozmiarach sąsiednie wpisy oddziela linia o niższym nacisku (`subtle`).
   Zaznaczenie pozostaje widoczne, a linia akcji podglądu reklamuje tylko komendy
   wspierane przez zaznaczony rodzaj.
-- Etykiety sekcji Work skracają się poniżej 75 kolumn, a główne zakładki,
-  podsumowanie i skróty używają krótszej wersji poniżej 60 kolumn.
+- Główne zakładki i skróty używają krótszej wersji poniżej 60 kolumn; zakładki
+  przyjmują wtedy `1 Tasks`, `2 Sess`, `3 Trees`, `4 Out` i `5 More`.
 
 ## Elevation & Depth
 
@@ -87,24 +87,20 @@ terminalowe. Fokus wyróżnia barwa i pogrubienie, bez cieni.
 ## Shapes
 
 Renderer paneli używa zaokrąglonych ramek znakowych Lip Gloss. Aktywne zakładki
-otrzymują nawiasy `[ ]`, zaznaczony wpis znacznik `›`, a pasek postępu znaki `━` i `─`.
+otrzymują nawiasy `[ ]`, a zaznaczony wpis znacznik `›`.
 
 ## Components
 
-**Agents & runs.** Wybieralny wpis łączy agenta, zadanie, stan wykonania i model.
-Lista obejmuje orkiestratora, aktywne wykonania i niezamknięte sesje bieżących prób
-niezaakceptowanych zadań. Zaznaczenie jest związane z ID także po sortowaniu. Sekcja
-jest pierwszą z czterech sekcji Dashboardu (Agents & runs, Tasks, Needs attention,
-Recent recorded activity); aktywna sekcja ma znaczniki tekstowe `[ ]`, dzięki czemu
-fokus pozostaje widoczny bez koloru.
-
-**Postęp i status.** Pasek postępu używa `bubbles/progress` z tokenem `accent`
-i zawsze towarzyszy mu tekst `accepted/total` oraz procent; liczone są wyłącznie
-zadania `accepted`. Poniżej osobny pasek statusu pokazuje live, review, blocked
-i attention, więc podsumowanie nie opiera się na kolorze ani na jednej liczbie.
+**Tasks.** Wybieralny wpis łączy zadanie, jego stan oraz liczbę aktywnych wykonań,
+sesji i runów bieżącej próby. Zaznaczenie jest związane z ID także po sortowaniu.
 Puste kolekcje pokazują tytuł, jednozdaniowe wyjaśnienie i jedną prawidłową akcję;
 picker projektu reklamuje `a` (Create workspace) zamiast twierdzić, że TUI nigdy
 nie tworzy workspace'u.
+
+**Sessions.** Wybieralny wpis łączy agenta, stan logicznej sesji i jej bieżący Run.
+Lista pomija usunięte sesje, obsługuje filtr bieżące/historia (`f`) i nie ma
+wtórnych zakładek ani własnego cyklu `Tab`. Otwarcie wpisu pokazuje szczegóły sesji,
+a `t` otwiera albo wznawia jej zweryfikowany terminal.
 
 **Runtime.** Topologia tmux jest tabelą `bubbles/table` (window, pane, kind,
 owner, run, state) w trybie wide, a w trybie compact tym samym danym w układzie
@@ -126,11 +122,13 @@ na trasę.
 
 **Status.** Symbolowi zawsze towarzyszy podpis: `✓` sukces, `×` błąd, `!` blokada,
 `◈` review, `○` oczekiwanie, `■` zatrzymanie lub zamknięcie, `◇` przerwanie lub wyjście.
-`running` i `starting` używają animacji brajlowskiej co 120 ms. Podsumowanie żywych
-agentów animuje się tylko przy aktywnym bieżącym Runie; inaczej pokazuje `○`.
+`running` i `starting` używają animacji brajlowskiej co 120 ms, ale wskaźnik animuje
+się tylko przy aktywnej bieżącej pracy; w bezczynności degraduje się do statycznego
+znaku, więc stan pozostaje rozpoznawalny bez koloru.
 
 **Nawigacja i terminal.** Strzałki lub `j`/`k` wybierają wpis; `Enter` otwiera
-szczegóły. `Tab` zmienia listę Work lub typ wyników. `t` otwiera zweryfikowany
+szczegóły, a `1`–`5` przechodzą między Tasks, Sessions, Worktrees, Results i More.
+`Tab` zmienia typ wyników na Results. `t` otwiera zweryfikowany
 bieżący terminal, a start lub wznowienie wymaga jawnego potwierdzenia formularza.
 Wiele sesji zadania wymaga wyboru konkretnej sesji. Historyczny Run zachowuje
 dokładny cel i nie przekierowuje automatycznie do nowszego wykonania.

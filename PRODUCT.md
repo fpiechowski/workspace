@@ -143,11 +143,15 @@ i utrwalonych wyników oraz nieaktywną sesję bez referencji wynikowych. Taski 
 otrzymują audytowalny tombstone i znikają z normalnych widoków; operacja nie przepisuje
 ani nie kasuje historii, na której opierają się inne rekordy.
 
-Pierwszy ekran TUI skupia się na postępie zaakceptowanych zadań i aktualnej pracy
-agentów. Łączy zadanie, sesję i bieżący Run w czytelnym wpisie, odróżnia wykonanie
-procesu od akceptacji wyniku oraz umożliwia otwarcie lub jawne wznowienie terminala.
-Brak panelu podczas nawigacji prowadzi do propozycji reconcile wymagającej
-potwierdzenia użytkownika, a następnie ponownej próby otwarcia tego samego celu.
+Pierwszy ekran TUI to Tasks: lista łączy zadanie, stan oraz liczbę aktywnych
+wykonań, sesji i runów jego bieżącej próby. Główna nawigacja to kolejno Tasks,
+Sessions, Worktrees, Results i More. Sessions jest zwykłą kolekcją bez wtórnych
+zakładek, z filtrem bieżące/historia oraz wejściem w szczegóły sesji i jej terminal,
+a More udostępnia m.in. Needs attention i Recent recorded activity. Otwarcie zadania
+pokazuje powiązane sesje, worktrees i wyniki, odróżnia wykonanie procesu od akceptacji
+wyniku oraz umożliwia otwarcie lub jawne wznowienie terminala. Brak panelu podczas
+nawigacji prowadzi do propozycji reconcile wymagającej potwierdzenia użytkownika,
+a następnie ponownej próby otwarcia tego samego celu.
 
 TUI może działać ręcznie jako przeglądarka albo jako zarządzany panel obok orkiestratora.
 Supervisor odtwarza wyłącznie panel o zapisanej, zweryfikowanej tożsamości; q w tym
