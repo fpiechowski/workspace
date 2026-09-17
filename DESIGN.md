@@ -63,11 +63,14 @@ na trasach szczegółów i kolekcjach zależnych; trasy główne go nie pokazuj�
   **compact** dla średnich terminali (jedna kolumna) oraz **wide** od 100×24
   (lista i szczegóły obok siebie). Work korzysta z tej samej decyzji zamiast
   własnego progu szerokości. Lista w trybie wide zajmuje trzy piąte szerokości.
-- Kolekcje i picker projektu w trybie wide pokazują listę i szczegóły obok
-  siebie; szerokość listy jest oparta na dwóch piątych szerokości terminala.
-- Wpis ma dwa wiersze: stan i tytuł, następnie kontekst. Gdy na listę pozostają
-  mniej niż cztery wiersze, wpis zwija się do jednego. W pozostałych rozmiarach
-  sąsiednie wpisy oddziela pozioma linia. Zaznaczenie pozostaje widoczne.
+- Kolekcje i picker projektu w trybie wide pokazują dwa nazwane, obramowane
+  panele (lista oraz `Preview`) obok siebie, z jedną wyraźną krawędzią fokusu;
+  szerokość listy jest oparta na dwóch piątych szerokości terminala.
+- Wpis ma dwa wiersze: znacznik, status i tytuł, następnie kontekst. Gdy na listę
+  pozostają mniej niż cztery wiersze, wpis zwija się do jednego. W pozostałych
+  rozmiarach sąsiednie wpisy oddziela linia o niższym nacisku (`subtle`).
+  Zaznaczenie pozostaje widoczne, a linia akcji podglądu reklamuje tylko komendy
+  wspierane przez zaznaczony rodzaj.
 - Etykiety sekcji Work skracają się poniżej 75 kolumn, a główne zakładki,
   podsumowanie i skróty używają krótszej wersji poniżej 60 kolumn.
 
@@ -89,6 +92,18 @@ niezaakceptowanych zadań. Zaznaczenie jest związane z ID także po sortowaniu.
 jest pierwszą z czterech sekcji Dashboardu (Agents & runs, Tasks, Needs attention,
 Recent recorded activity); aktywna sekcja ma znaczniki tekstowe `[ ]`, dzięki czemu
 fokus pozostaje widoczny bez koloru.
+
+**Postęp i status.** Pasek postępu używa `bubbles/progress` z tokenem `accent`
+i zawsze towarzyszy mu tekst `accepted/total` oraz procent; liczone są wyłącznie
+zadania `accepted`. Poniżej osobny pasek statusu pokazuje live, review, blocked
+i attention, więc podsumowanie nie opiera się na kolorze ani na jednej liczbie.
+Puste kolekcje pokazują tytuł, jednozdaniowe wyjaśnienie i jedną prawidłową akcję;
+picker projektu reklamuje `a` (Create workspace) zamiast twierdzić, że TUI nigdy
+nie tworzy workspace'u.
+
+**Runtime.** Topologia tmux jest tabelą `bubbles/table` (window, pane, kind,
+owner, run, state) w trybie wide, a w trybie compact tym samym danym w układzie
+wierszy. Błędy runtime i stan zarządzanego interfejsu pozostają nad topologią.
 
 **Status.** Symbolowi zawsze towarzyszy podpis: `✓` sukces, `×` błąd, `!` blokada,
 `◈` review, `○` oczekiwanie, `■` zatrzymanie lub zamknięcie, `◇` przerwanie lub wyjście.

@@ -7,9 +7,11 @@ i nie uruchamia orkiestratora ani supervisora; jawna akcja w pickerze może utwo
 ## Ekrany i nawigacja
 
 Picker projektu pokazuje tytuł, status, fazę, aktywne Runy, problemy, pełny ID, ścieżkę,
-źródło wejścia i datę utworzenia. Wybór workspace'u otwiera Work: postęp zaakceptowanych zadań,
-liczbę zadań w toku, oczekujących na review i zablokowanych oraz liczbę aktywnych
-agentów. Podsumowanie pozostaje widoczne przy przełączaniu sekcji Agents & runs, Tasks,
+źródło wejścia i datę utworzenia. Gdy lista jest pusta, pokazuje tytuł, jednozdaniowe
+wyjaśnienie i jedną prawidłową akcję (`a` tworzy workspace), więc nie zaprzecza już
+akcji Create workspace. Wybór workspace'u otwiera Work: pasek postępu (bubbles/progress)
+z tekstowym `accepted/total` i procentem oraz pasek statusu z osobnymi licznikami
+live, review, blocked i attention. Podsumowanie pozostaje widoczne przy przełączaniu sekcji Agents & runs, Tasks,
 Needs attention i Recent recorded activity. Agents & runs pokazuje orkiestratora,
 aktywne wykonania oraz niezamknięte sesje bieżących prób niezaakceptowanych zadań.
 Każdy wiersz łączy agenta z zadaniem, stanem i modelem. Tasks pokazuje stan zadania
@@ -18,10 +20,12 @@ nie oznacza akceptacji zadania; procent postępu liczy wyłącznie zadania accep
 
 Stan ma symbol i podpis; running/starting mają animowany wskaźnik, także bez koloru.
 `s` zmienia sortowanie (priorytet pracy, nazwa, ostatnie wykonanie); zaznaczenie
-pozostaje przypięte do ID. Widok szeroki dodaje szczegóły zaznaczenia obok listy,
-a wąski zachowuje postęp i dwuwierszowe wpisy. Przy małej wysokości wpis zajmuje
-jeden wiersz. Wpisy są rozdzielone linią, a zaznaczenie obejmuje tytuł i opis
-na wspólnym tle; bez koloru pozostaje znacznik wyboru i separator. Pasek skrótów ma zawsze zarezerwowany ostatni wiersz.
+pozostaje przypięte do ID. Widok szeroki pokazuje nazwane panele listy i `Preview`
+z jedną wyraźną krawędzią fokusu, a linia akcji podglądu reklamuje tylko komendy
+obsługiwane przez zaznaczony rodzaj (`t`, `g`, `Enter`). Wąski widok zachowuje postęp
+i dwuwierszowe wpisy. Przy małej wysokości wpis zajmuje jeden wiersz. Wpisy są
+rozdzielone linią o niższym nacisku, a zaznaczenie obejmuje tytuł i opis na wspólnym
+tle; bez koloru pozostaje znacznik wyboru i separator. Pasek skrótów ma zawsze zarezerwowany ostatni wiersz.
 
 `a` w pickerze projektu udostępnia utworzenie workspace'u (tytuł, opis i opcjonalny
 workflow) oraz trwałe usunięcie zaznaczonego workspace'u. Usunięcie jest dostępne dopiero
@@ -34,7 +38,10 @@ Archive wymaga potwierdzenia, sprawdza rewizję oraz zachowuje wszystkie dane. C
 wymaga potwierdzonego release'u i braku aktywnych Session oraz usług.
 
 More zawiera Sessions, Agents, Services, Decisions, Change requests, Runtime, Needs
-attention, Recent recorded activity i Documents. Task prowadzi do bieżących sesji,
+attention, Recent recorded activity i Documents. Detail Runtime renderuje topologię
+tmux jako tabelę (bubbles/table) z kolumnami window, pane, kind, owner, run i state
+w trybie szerokim oraz równoważny układ wierszy w trybie compact; błędy i stan
+zarządzanego interfejsu pozostają nad topologią. Task prowadzi do bieżących sesji,
 powiązanych worktrees i wyników; `f` przełącza widok bieżącej próby i historii.
 Artefakt bez możliwego do ustalenia lineage jest oznaczony jako unknown i widoczny
 w historii. Detail Worktree pokazuje powiązane zadania/sesje/usługi, aktywnych writerów

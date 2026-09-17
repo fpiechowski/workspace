@@ -312,9 +312,9 @@ func (m *Model) projectView(mode layoutMode) []string {
 	}
 	if len(items) == 0 {
 		if m.route.Query != "" {
-			return appendFilterLine(filterLine, []string{"No workspaces match “" + sanitizeLine(m.route.Query) + "”.", "Esc clears the filter."})
+			return appendFilterLine(filterLine, []string{"No matching workspaces", "Nothing matches “" + sanitizeLine(m.route.Query) + "”.", "Esc clears the filter."})
 		}
-		return appendFilterLine(filterLine, []string{"No workspaces yet.", "Create one with `workspace create`; the TUI never creates it automatically."})
+		return appendFilterLine(filterLine, []string{"No workspaces in this project", "No workspace has been created here yet.", "Press a to create a workspace."})
 	}
 	if mode == layoutWide {
 		leftWidth := max(32, m.width*2/5)
@@ -372,21 +372,23 @@ func (m *Model) collectionView(mode layoutMode) []string {
 	}
 	if len(items) == 0 {
 		if m.route.Query != "" {
-			return []string{count, "No results match this filter.", "Esc clears the filter."}
+			return []string{count, "No matches", "Nothing here matches “" + sanitizeLine(m.route.Query) + "”.", "Esc clears the filter."}
 		}
-		return []string{count, emptyMessage(m.route.Page)}
+		return append([]string{count}, emptyState(m.route.Page)...)
 	}
-	listHeight := max(1, m.height-7)
+	available := max(3, m.contentHeight()-1)
 	if mode == layoutWide {
-		leftWidth := max(34, m.width*2/5)
-		left := strings.Join(m.renderItems(items, leftWidth, listHeight), "\n")
-		detail := m.itemSummary(items)
-		right := strings.Join(truncateLines(detail, m.width-leftWidth-4), "\n")
-		return []string{count, lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", right)}
+		leftWidth, rightWidth := m.panelWidths(2, 34)
+		left := m.renderItems(items, max(1, leftWidth-2), available-2)
+		right := truncateLines(m.itemSummary(items, max(1, rightWidth-2)), max(1, rightWidth-2))
+		return append([]string{count}, m.twoPanels(collectionHeading(m.route.Page), left, "Preview", right, leftWidth, rightWidth, available, true)...)
 	}
-	return append([]string{count}, m.renderItems(items, m.width-2, listHeight)...)
+	return append([]string{count}, m.renderItems(items, m.width-2, available)...)
 }
 
+// renderItems keeps the custom two-line domain rows but regularizes the marker,
+// badge, title, and subtitle columns. Selection stays keyed by item ID so
+// sorting, filtering, and refresh never move it to a different entity.
 func (m *Model) renderItems(items []collectionItem, width, height int) []string {
 	if width < 1 || height < 1 {
 		return nil
@@ -414,75 +416,134 @@ func (m *Model) renderItems(items []collectionItem, width, height int) []string 
 	end := min(len(items), start+capacity)
 	rows := make([]string, 0, height)
 	for i := start; i < end; i++ {
-		item := items[i]
-		marker := "  "
-		if item.ID == selectedID {
-			marker = "› "
-		}
-		badge := m.stateLabel(item.State)
-		if item.State == "" {
-			badge = ""
-		}
-		title := rowText(item.Title, width-ansi.StringWidth(badge)-4)
-		chosen := item.ID == selectedID
-		if chosen {
-			rows = append(rows, m.palette.selectedStyle(width).Render(marker+badge+"  "+title))
-		} else {
-			rows = append(rows, marker+badge+"  "+title)
-		}
-		if rowHeight > 1 {
-			subtitle := "  " + rowText(item.Subtitle, width-2)
-			if chosen {
-				rows = append(rows, m.palette.selectedStyle(width).Render(subtitle))
-			} else {
-				rows = append(rows, m.palette.metaStyle().Render(subtitle))
-			}
-			if i+1 < end {
-				rows = append(rows, m.palette.style(m.palette.border, false).Render(strings.Repeat("─", width)))
-			}
+		rows = append(rows, m.collectionRow(items[i], width, items[i].ID == selectedID, rowHeight)...)
+		if rowHeight > 1 && i+1 < end {
+			rows = append(rows, m.rowSeparator(width))
 		}
 	}
 	return rows
 }
 
-func (m *Model) itemSummary(items []collectionItem) []string {
-	for _, item := range items {
-		if item.ID == m.route.SelectedID {
-			lines := []string{item.Title, statusBadge(item.State), "t terminal · Enter details", "", item.Subtitle, "", "ID: " + item.ID}
-			if item.Kind == "session" {
-				if session, ok := findSession(m.snapshot.Status.Sessions, item.ID); ok {
-					if run, live := m.currentRun(session); live {
-						lines = append(lines, "Run: "+run.ID, "Model: "+run.Route.Model, "Pane: "+firstNonempty(run.PaneID, "launching"))
-					} else {
-						lines = append(lines, "No live run · t asks to resume")
-					}
-					if task, ok := m.task(session.TaskID); ok {
-						lines = append(lines, "Task: "+task.Title, statusBadge(task.State))
-					}
-					return truncateLines(lines, m.width*3/5)
-				}
-			}
-			lines = append(lines, m.quickDetails(item.Kind, item.ID)...)
-			return truncateLines(lines, m.width*3/5)
+// collectionRow renders one regularized entry: a fixed marker column, a state
+// badge, a truncated title, and an optional metadata line. The selected row
+// keeps its text marker in no-color mode and adds the selection background when
+// colors are available.
+func (m *Model) collectionRow(item collectionItem, width int, selected bool, rowHeight int) []string {
+	marker := "  "
+	if selected {
+		marker = "› "
+	}
+	badge := ""
+	badgeWidth := 0
+	if item.State != "" {
+		badge = m.stateLabel(item.State)
+		badgeWidth = ansi.StringWidth(badge)
+	}
+	title := rowText(item.Title, max(1, width-2-badgeWidth-2))
+	head := ansi.TruncateWc(marker+badge+"  "+title, width, "…")
+	if selected {
+		head = m.palette.selectedStyle(width).Render(head)
+	}
+	rows := []string{head}
+	if rowHeight > 1 {
+		subtitle := ansi.TruncateWc("  "+rowText(item.Subtitle, max(1, width-2)), width, "…")
+		if selected {
+			subtitle = m.palette.selectedStyle(width).Render(subtitle)
+		} else {
+			subtitle = m.palette.metaStyle().Render(subtitle)
 		}
+		rows = append(rows, subtitle)
+	}
+	return rows
+}
+
+// rowSeparator is a lower-emphasis divider between entries.
+func (m *Model) rowSeparator(width int) string {
+	return m.palette.subtleStyle().Render(strings.Repeat("─", max(1, width)))
+}
+
+func (m *Model) itemSummary(items []collectionItem, width int) []string {
+	selectedID := m.route.SelectedID
+	if selectedID == "" && len(items) > 0 {
+		selectedID = items[0].ID
+	}
+	for _, item := range items {
+		if item.ID != selectedID {
+			continue
+		}
+		lines := []string{item.Title, statusBadge(item.State), m.previewActions(item.Kind), "", item.Subtitle, "", "ID: " + item.ID}
+		if item.Kind == "session" {
+			if session, ok := findSession(m.snapshot.Status.Sessions, item.ID); ok {
+				if run, live := m.currentRun(session); live {
+					lines = append(lines, "Run: "+run.ID, "Model: "+run.Route.Model, "Pane: "+firstNonempty(run.PaneID, "launching"))
+				} else {
+					lines = append(lines, "No live run · t asks to resume")
+				}
+				if task, ok := m.task(session.TaskID); ok {
+					lines = append(lines, "Task: "+task.Title, statusBadge(task.State))
+				}
+				return truncateLines(lines, max(1, width))
+			}
+		}
+		lines = append(lines, m.quickDetails(item.Kind, item.ID)...)
+		return truncateLines(lines, max(1, width))
 	}
 	return []string{"Select a row to see its details."}
 }
 
-func (m *Model) panel(title string, lines []string, width, height int, focused bool) string {
+// previewActions advertises only the commands the selected kind can honor.
+func (m *Model) previewActions(kind string) string {
+	actions := make([]string, 0, 3)
+	if terminalCapable(kind) {
+		actions = append(actions, "t terminal")
+	}
+	if jumpCapable(kind) {
+		actions = append(actions, "g jump")
+	}
+	actions = append(actions, "Enter details")
+	return strings.Join(actions, " · ")
+}
+
+// panelWidths splits the terminal width into a list panel and a preview panel
+// with a two-column gutter. It keeps both panels usable at the wide breakpoint.
+func (m *Model) panelWidths(leftRatio, leftMin int) (int, int) {
+	const gap = 2
+	left := max(leftMin, m.width*leftRatio/5)
+	right := m.width - left - gap
+	if right < 20 {
+		right = 20
+		left = max(10, m.width-gap-right)
+	}
+	return max(10, left), max(10, right)
+}
+
+// twoPanels renders a named list panel and a named preview panel side by side
+// with one clear focused edge.
+func (m *Model) twoPanels(leftTitle string, leftLines []string, rightTitle string, rightLines []string, leftWidth, rightWidth, height int, leftFocused bool) []string {
+	left := m.panelBlock(leftTitle, leftLines, leftWidth, height, leftFocused)
+	right := m.panelBlock(rightTitle, rightLines, rightWidth, height, !leftFocused)
+	return strings.Split(lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", right), "\n")
+}
+
+// panelBlock renders a named, bordered panel. Content lines are expected to be
+// sanitized already; the title is sanitized here so no external text is styled.
+func (m *Model) panelBlock(title string, lines []string, width, height int, focused bool) string {
 	if height < 3 {
 		height = 3
 	}
-	inside := max(1, width-4)
+	if width < 6 {
+		width = 6
+	}
+	inside := max(1, width-2)
 	body := make([]string, 0, height-2)
 	body = append(body, m.palette.headingStyle().Render(ansi.TruncateWc(sanitizeLine(title), inside, "…")))
 	for _, line := range lines {
 		if len(body) >= height-2 {
 			break
 		}
-		body = append(body, ansi.TruncateWc(sanitizeLine(line), inside, "…"))
+		body = append(body, ansi.TruncateWc(line, inside, "…"))
 	}
-	return m.palette.panelStyle(focused).Width(max(1, width-2)).Height(max(1, height-2)).Render(strings.Join(body, "\n"))
+	return m.palette.panelStyle(focused).Width(inside).Height(max(1, height-2)).Render(strings.Join(body, "\n"))
 }
 
 // footer derives the contextual key legend from the enabled bindings. Special
@@ -639,27 +700,55 @@ func firstNonempty(value, fallback string) string {
 	return value
 }
 
-func emptyMessage(page string) string {
+// emptyState gives every collection a title, a one-sentence explanation, and
+// one valid next action instead of only naming the absence.
+func emptyState(page string) []string {
 	switch page {
 	case "tasks":
-		return "No tasks are recorded in this workspace."
+		return []string{"No tasks yet", "This workspace has no recorded tasks.", "Press o to start the orchestrator, then t to open its terminal."}
 	case "worktrees":
-		return "No worktrees are recorded in this workspace."
+		return []string{"No worktrees yet", "No worktree has been recorded for this workspace.", "Press r to refresh, or 1 to return to Work."}
 	case "results":
-		return "No records in this results view."
+		return []string{"No results in this view", "No artifacts, handoffs, or checks are recorded here.", "Press Tab to change the results type or r to refresh."}
 	case "sessions":
-		return "No logical sessions are recorded."
+		return []string{"No sessions yet", "This workspace has no logical sessions.", "Press o to open the orchestrator."}
 	case "runs":
-		return "No runs are recorded for this session."
+		return []string{"No runs yet", "This session has no recorded runs.", "Press Esc to return to the session."}
 	case "agents":
-		return "No agent definitions are recorded."
+		return []string{"No agents defined", "No agent definitions are recorded.", "Press r to refresh."}
 	case "services":
-		return "No background services are recorded."
+		return []string{"No services", "No background services are recorded.", "Press r to refresh."}
 	case "decisions":
-		return "No decisions are recorded."
+		return []string{"No decisions", "No decisions are recorded.", "Press r to refresh."}
 	case "change_requests":
-		return "No change requests are recorded."
+		return []string{"No change requests", "No change requests are recorded.", "Press r to refresh."}
+	case "attention":
+		return []string{"Nothing needs attention", "No durable issues or failures are recorded.", "Press 1 to return to Work."}
+	case "activity":
+		return []string{"No recorded activity", "No runs, handoffs, artifacts, or decisions are recorded.", "Press r to refresh."}
+	case "documents":
+		return []string{"No documents", "No workspace or workflow snapshots are available.", "Press r to refresh."}
 	default:
-		return "No records are available."
+		return []string{"No records", "Nothing is recorded for this view.", "Press r to refresh."}
 	}
+}
+
+// collectionHeading names a collection panel in wide mode.
+func collectionHeading(page string) string {
+	switch page {
+	case "results":
+		return "Results"
+	case "change_requests":
+		return "Change requests"
+	case "more":
+		return "More"
+	}
+	words := strings.Split(strings.ReplaceAll(page, "_", " "), " ")
+	for i, word := range words {
+		if word == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
 }

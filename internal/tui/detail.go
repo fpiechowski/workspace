@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/lipgloss"
 	"workspace/internal/core"
 )
 
@@ -260,6 +262,123 @@ func (m *Model) previewContent() string {
 	return safeContent(lines)
 }
 
+// runtimeRow is one comparison row shared by the wide table and the compact
+// stacked fallback so both presentations show the same topology.
+type runtimeRow struct {
+	Window, Pane, Kind, Owner, Run, State string
+}
+
+func (m *Model) runtimeRows() []runtimeRow {
+	topology := m.runtime.Topology
+	seen := make(map[string]bool, len(topology.Panes))
+	rows := make([]runtimeRow, 0, len(topology.Panes))
+	for _, window := range topology.Windows {
+		panes := make([]core.Pane, 0, 2)
+		for _, pane := range topology.Panes {
+			if pane.WindowID == window.ID {
+				panes = append(panes, pane)
+			}
+		}
+		if len(panes) == 0 {
+			rows = append(rows, runtimeRow{
+				Window: sanitizeLine(window.ID),
+				Pane:   "-",
+				Kind:   sanitizeLine(firstNonempty(window.Kind, "window")),
+				Owner:  "-",
+				Run:    "-",
+				State:  windowState(window),
+			})
+			continue
+		}
+		for _, pane := range panes {
+			seen[pane.ID] = true
+			rows = append(rows, m.runtimePaneRow(window, pane))
+		}
+	}
+	for _, pane := range topology.Panes {
+		if seen[pane.ID] {
+			continue
+		}
+		rows = append(rows, m.runtimePaneRow(core.TmuxWindow{}, pane))
+	}
+	return rows
+}
+
+func (m *Model) runtimePaneRow(window core.TmuxWindow, pane core.Pane) runtimeRow {
+	state := paneState(pane.Dead)
+	if pane.RunID != "" {
+		if run, ok := m.run(pane.RunID); ok && run.State != "" {
+			state = run.State
+		}
+	}
+	return runtimeRow{
+		Window: sanitizeLine(firstNonempty(firstNonempty(window.ID, pane.WindowID), "-")),
+		Pane:   sanitizeLine(firstNonempty(pane.ID, "-")),
+		Kind:   sanitizeLine(firstNonempty(firstNonempty(pane.Kind, window.Kind), "-")),
+		Owner:  sanitizeLine(firstNonempty(shortID(pane.SessionID), "-")),
+		Run:    sanitizeLine(firstNonempty(shortID(pane.RunID), "-")),
+		State:  sanitizeLine(firstNonempty(state, "-")),
+	}
+}
+
+func windowState(window core.TmuxWindow) string {
+	if window.Active {
+		return "active"
+	}
+	return "idle"
+}
+
+func (m *Model) runtimeTableStyles() table.Styles {
+	if m.palette.noColor {
+		plain := lipgloss.NewStyle()
+		return table.Styles{Header: plain, Cell: plain, Selected: plain}
+	}
+	return table.Styles{
+		Header:   m.palette.labelStyle(),
+		Cell:     m.palette.metaStyle(),
+		Selected: m.palette.selectedStyle(1),
+	}
+}
+
+// runtimeTable renders the wide topology comparison. Column widths stay within
+// the supported wide breakpoint so the viewport never wraps a row.
+func (m *Model) runtimeTable(rows []runtimeRow) []string {
+	columns := []table.Column{
+		{Title: "Window", Width: 10},
+		{Title: "Pane", Width: 8},
+		{Title: "Kind", Width: 10},
+		{Title: "Owner", Width: 12},
+		{Title: "Run", Width: 12},
+		{Title: "State", Width: 12},
+	}
+	values := make([]table.Row, len(rows))
+	for i, row := range rows {
+		values[i] = table.Row{row.Window, row.Pane, row.Kind, row.Owner, row.Run, row.State}
+	}
+	view := table.New(
+		table.WithColumns(columns),
+		table.WithRows(values),
+		table.WithStyles(m.runtimeTableStyles()),
+		table.WithFocused(false),
+		table.WithWidth(max(66, m.width-4)),
+		table.WithHeight(len(rows)+1),
+	)
+	return strings.Split(view.View(), "\n")
+}
+
+// runtimeStacked is the compact, color-independent equivalent of the table.
+func runtimeStacked(rows []runtimeRow) []string {
+	if len(rows) == 0 {
+		return []string{"No tmux windows were observed."}
+	}
+	lines := make([]string, 0, len(rows)*2)
+	for _, row := range rows {
+		lines = append(lines, fmt.Sprintf("Window %s · pane %s · %s", row.Window, row.Pane, row.Kind))
+		lines = append(lines, fmt.Sprintf("  owner %s · run %s · %s", row.Owner, row.Run, row.State))
+	}
+	return lines
+}
+
 func (m *Model) runtimeContent() string {
 	lines := []string{"Runtime", "Workspace tmux: " + statusBadge(m.runtime.State), "Supervisor: " + statusBadge(m.runtime.SupervisorState)}
 	if m.uiError != "" {
@@ -283,18 +402,15 @@ func (m *Model) runtimeContent() string {
 		lines = append(lines, "Supervisor error: "+m.runtime.SupervisorError)
 	}
 	lines = append(lines, "Observed: "+formatTime(m.runtime.ObservedAt), "Session: "+m.runtime.Topology.SessionName)
-	for _, window := range m.runtime.Topology.Windows {
-		lines = append(lines, "", "Window "+window.ID+" · "+window.Name+" · "+window.Kind+" · "+fmt.Sprintf("%dx%d", window.Width, window.Height))
-		for _, pane := range m.runtime.Topology.Panes {
-			if pane.WindowID == window.ID {
-				lines = append(lines, "  "+pane.ID+" · "+pane.Kind+" · session "+shortID(pane.SessionID)+" · run "+shortID(pane.RunID)+" · "+paneState(pane.Dead))
-			}
-		}
+	header := safeContent(lines)
+	rows := m.runtimeRows()
+	if len(rows) == 0 {
+		return header + "\nNo tmux windows were observed."
 	}
-	if len(m.runtime.Topology.Windows) == 0 {
-		lines = append(lines, "No tmux windows were observed.")
+	if layoutFor(m.width, m.height) == layoutWide {
+		return header + "\n" + strings.Join(m.runtimeTable(rows), "\n")
 	}
-	return safeContent(lines)
+	return header + "\n" + strings.Join(runtimeStacked(rows), "\n")
 }
 
 func (m *Model) orchestratorContent() string {

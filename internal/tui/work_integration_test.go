@@ -33,6 +33,77 @@ func TestWorkPTYHelper(t *testing.T) {
 	}
 }
 
+type runtimeDemo struct{ *Model }
+
+func (m runtimeDemo) Init() tea.Cmd { return nil }
+
+// TestRuntimePTYHelper drives the real renderer for the Runtime detail route so
+// the tmux test can exercise the wide table and compact stack.
+func TestRuntimePTYHelper(t *testing.T) {
+	if os.Getenv("WORKSPACE_TUI_HELPER") != "1" {
+		t.Skip("PTY helper")
+	}
+	lipgloss.SetColorProfile(termenv.Ascii)
+	lipgloss.SetHasDarkBackground(true)
+	m := runtimeFixture()
+	if _, err := tea.NewProgram(runtimeDemo{m}, tea.WithAltScreen()).Run(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRuntimeTableInTmux captures the Runtime route at wide and compact sizes
+// and asserts the table/stacked equivalence in a real terminal.
+func TestRuntimeTableInTmux(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Getenv("WORKSPACE_TMUX_TEST") != "1" {
+		t.Skip("requires opt-in Linux/tmux")
+	}
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux unavailable")
+	}
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket := fmt.Sprintf("workspace-runtime-%d-%d", os.Getpid(), time.Now().UnixNano())
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", socket}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("tmux %v: %v %s", args, err, out)
+		}
+		return string(out)
+	}
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", socket, "kill-server").Run() })
+	command := "env WORKSPACE_TUI_HELPER=1 " + "'" + strings.ReplaceAll(binary, "'", "'\\''") + "' -test.run '^TestRuntimePTYHelper$'"
+	pane := strings.TrimSpace(tmux("new-session", "-d", "-P", "-F", "#{pane_id}", "-s", "runtime", "-x", "120", "-y", "32", command))
+	waitFor := func(needle string) string {
+		t.Helper()
+		var capture string
+		deadline := time.Now().Add(4 * time.Second)
+		for time.Now().Before(deadline) {
+			capture = tmux("capture-pane", "-p", "-t", pane)
+			if strings.Contains(capture, needle) {
+				return capture
+			}
+			time.Sleep(40 * time.Millisecond)
+		}
+		t.Fatalf("missing %q in PTY:\n%s", needle, capture)
+		return ""
+	}
+	wide := waitFor("Owner")
+	if !strings.Contains(wide, "Pane") || !strings.Contains(wide, "%1") {
+		t.Fatalf("wide runtime table is incomplete:\n%s", wide)
+	}
+	tmux("resize-window", "-t", pane, "-x", "60", "-y", "24")
+	compact := waitFor("owner sess_a")
+	if strings.Contains(compact, "Owner") {
+		t.Fatalf("compact runtime still renders the table header:\n%s", compact)
+	}
+	if !strings.Contains(compact, "Window @1 · pane %1 · agent") {
+		t.Fatalf("compact runtime stack is incomplete:\n%s", compact)
+	}
+}
+
 func TestWorkFilterEscapeInTmux(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Getenv("WORKSPACE_TMUX_TEST") != "1" {
 		t.Skip("requires opt-in Linux/tmux")
@@ -89,6 +160,15 @@ func TestWorkFilterEscapeInTmux(t *testing.T) {
 		}
 	}
 	tmux("resize-window", "-t", pane, "-x", "120", "-y", "32")
+	tmux("send-keys", "-t", pane, "2")
+	tasks := waitFor("Persist payment receipts")
+	if dir := os.Getenv("WORKSPACE_TUI_CAPTURES"); dir != "" {
+		if err := os.WriteFile(filepath.Join(dir, "tasks-120x32.txt"), []byte(tasks), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tmux("send-keys", "-t", pane, "1")
+	waitFor("Payments worker")
 	tmux("send-keys", "-t", pane, "/")
 	waitFor("Esc cancel")
 	tmux("send-keys", "-t", pane, "-l", "no-match")

@@ -42,7 +42,7 @@ func TestWorkViewShowsProgressAndCurrentAssignments(t *testing.T) {
 	for _, size := range [][2]int{{60, 24}, {120, 32}, {160, 40}} {
 		m.width, m.height = size[0], size[1]
 		view := m.View()
-		for _, text := range []string{"1/4 accepted", "25%", "2 live agents", "Orchestrator", "Payments worker", "Retry failed payments", "t terminal"} {
+		for _, text := range []string{"1/4 accepted", "25%", "2 live · 1 review · 1 blocked · 2 attention", "Orchestrator", "Payments worker", "Retry failed payments", "t terminal"} {
 			if !strings.Contains(view, text) {
 				t.Errorf("%v missing %q:\n%s", size, text, view)
 			}

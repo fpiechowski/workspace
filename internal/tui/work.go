@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"workspace/internal/core"
 )
@@ -143,52 +143,95 @@ func (m *Model) sortItems(items []collectionItem) {
 	})
 }
 
-func (m *Model) progressLines() []string {
-	total, done, working, review, blocked := 0, 0, 0, 0, 0
+// workMetrics is the single source for the dashboard counters. Task completion
+// is derived only from the accepted state: a finished process is not an
+// accepted result.
+type workMetrics struct {
+	total     int
+	accepted  int
+	working   int
+	review    int
+	blocked   int
+	live      int
+	attention int
+}
+
+func (m *Model) workMetrics() workMetrics {
+	metrics := workMetrics{attention: len(m.attentionItems())}
 	for _, task := range m.snapshot.Status.Workspace.Tasks {
 		if task.DeletedAt != nil {
 			continue
 		}
-		total++
+		metrics.total++
 		switch task.State {
 		case "accepted":
-			done++
+			metrics.accepted++
 		case "running":
-			working++
+			metrics.working++
 		case "submitted", "awaiting_review", "pending_review":
-			review++
+			metrics.review++
 		case "blocked", "needs_changes":
-			blocked++
+			metrics.blocked++
 		}
 	}
-	if total == 0 {
+	for _, session := range m.snapshot.Status.Sessions {
+		if _, ok := m.currentRun(session); ok {
+			metrics.live++
+		}
+	}
+	return metrics
+}
+
+// progressBar renders the accepted-task ratio through bubbles/progress with the
+// semantic accent token. No-color mode strips the escape sequences so the bar
+// stays readable; the textual accepted/total and percent always accompany it.
+func (m *Model) progressBar(ratio float64) string {
+	bar := progress.New(
+		progress.WithWidth(min(24, max(8, m.width/5))),
+		progress.WithFillCharacters('━', '─'),
+		progress.WithoutPercentage(),
+	)
+	bar.FullColor = string(m.palette.accent)
+	bar.EmptyColor = string(m.palette.subtle)
+	out := bar.ViewAs(ratio)
+	if m.palette.noColor {
+		out = ansi.Strip(out)
+	}
+	return out
+}
+
+func (m *Model) progressLines() []string {
+	metrics := m.workMetrics()
+	if metrics.total == 0 {
 		return []string{"No tasks yet · start the orchestrator with t", "Progress appears when the orchestrator creates tasks."}
 	}
-	width := min(24, max(8, m.width/5))
-	filled := width * done / total
-	bar := strings.Repeat("━", filled) + strings.Repeat("─", width-filled)
-	detail := fmt.Sprintf("%d in progress · %d awaiting review · %d blocked / changes", working, review, blocked)
-	if m.width < 60 {
-		detail = fmt.Sprintf("%d work · %d review · %d blocked", working, review, blocked)
-	}
-	return []string{fmt.Sprintf("%s  %d/%d accepted · %d%%", bar, done, total, 100*done/total), detail}
+	ratio := float64(metrics.accepted) / float64(metrics.total)
+	return []string{fmt.Sprintf("%s  %d/%d accepted · %d%%", m.progressBar(ratio), metrics.accepted, metrics.total, 100*metrics.accepted/metrics.total)}
+}
+
+// workStatusBar keeps live, review, blocked, and attention counts separate so
+// the dashboard summary does not rely on color or a single blended number.
+func (m *Model) workStatusBar(metrics workMetrics) string {
+	text := fmt.Sprintf("%s %d live · %d review · %d blocked · %d attention",
+		m.liveGlyph(), metrics.live, metrics.review, metrics.blocked, metrics.attention)
+	return m.palette.metaStyle().Render(text)
 }
 
 var workSections = []string{"Agents & runs", "Tasks", "Needs attention", "Recent recorded activity"}
 
-func (m *Model) workDashboard(mode layoutMode) []string {
-	if m.snapshot.ObservedAt.IsZero() {
-		return []string{m.dashboardContent()}
+func (m *Model) workSectionName() string {
+	index := m.focusedPanel
+	if index < 0 || index >= len(workSections) {
+		index = 0
 	}
-	lines := m.progressLines()
-	active := 0
-	for _, session := range m.snapshot.Status.Sessions {
-		if _, ok := m.currentRun(session); ok {
-			active++
-		}
+	if m.width < 75 {
+		return []string{"Agents", "Tasks", "Attention", "Activity"}[index]
 	}
-	lines = append(lines, fmt.Sprintf("%s %d live agents · %d need attention", m.liveGlyph(), active, len(m.attentionItems())))
-	var sections []string
+	return workSections[index]
+}
+
+func (m *Model) workSectionHeading() string {
+	sections := make([]string, 0, len(workSections))
 	for i, title := range workSections {
 		if m.width < 75 {
 			title = []string{"Agents", "Tasks", "Attention", "Activity"}[i]
@@ -198,7 +241,17 @@ func (m *Model) workDashboard(mode layoutMode) []string {
 		}
 		sections = append(sections, title)
 	}
-	lines = append(lines, "", m.palette.headingStyle().Render(strings.Join(sections, "  ")))
+	return m.palette.headingStyle().Render(strings.Join(sections, "  "))
+}
+
+func (m *Model) workDashboard(mode layoutMode) []string {
+	if m.snapshot.ObservedAt.IsZero() {
+		return []string{m.dashboardContent()}
+	}
+	metrics := m.workMetrics()
+	lines := m.progressLines()
+	lines = append(lines, m.workStatusBar(metrics))
+	lines = append(lines, "", m.workSectionHeading())
 	items := m.filteredItems()
 	filter := ""
 	if m.route.StatusFilter != "" {
@@ -208,21 +261,15 @@ func (m *Model) workDashboard(mode layoutMode) []string {
 		filter += " · /" + m.route.Query
 	}
 	lines = append(lines, fmt.Sprintf("%s%s · %d shown · sort: %s", workSections[m.focusedPanel], filter, len(items), firstNonempty(m.route.Sort, "priority")))
-	available := max(1, m.contentHeight()-len(lines))
-	if m.notice != "" {
-		available = max(1, available-1)
-	}
 	if len(items) == 0 {
-		return append(lines, "No records in this view. / search · f status · Esc clear")
+		return append(lines, "No records in this view", "Nothing here matches this section and its filters.", "Esc clears the filter · / searches · f filters by state.")
 	}
+	available := max(3, m.contentHeight()-len(lines))
 	if mode == layoutWide {
-		leftWidth := m.width * 3 / 5
-		left := strings.Join(m.renderItems(items, leftWidth, available), "\n")
-		right := truncateLines(m.itemSummary(items), m.width-leftWidth-3)
-		if len(right) > available {
-			right = right[:available]
-		}
-		return append(lines, lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", strings.Join(right, "\n")))
+		leftWidth, rightWidth := m.panelWidths(3, 28)
+		left := m.renderItems(items, max(1, leftWidth-2), available-2)
+		right := truncateLines(m.itemSummary(items, max(1, rightWidth-2)), max(1, rightWidth-2))
+		return append(lines, m.twoPanels(m.workSectionName(), left, "Preview", right, leftWidth, rightWidth, available, true)...)
 	}
 	return append(lines, m.renderItems(items, m.width, available)...)
 }
