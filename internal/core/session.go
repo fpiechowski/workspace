@@ -19,6 +19,21 @@ type SessionOptions struct {
 }
 type promptData struct{ WorkspaceID, WorkspaceDir, AgentID, SessionID, RunID, ParentAgentID, BaseCommit string }
 
+// defaultMaxParallelTasks is the bounded worker fallback. It applies both to a
+// configured workflow without an explicit limit and to an intentionally
+// workflow-less (manual) workspace, so manual delegation is never unbounded.
+const defaultMaxParallelTasks = 3
+
+// workerParallelLimit resolves the active worker limit under the workspace lock.
+func workerParallelLimit(cfg Config, d *Document) int {
+	if d.State.Workflow != nil {
+		if limit := cfg.Workflows[d.State.Workflow.ID].MaxParallelTasks; limit > 0 {
+			return limit
+		}
+	}
+	return defaultMaxParallelTasks
+}
+
 // Selection occurs under the project lock, including all workspace reservations.
 func (s *Service) chooseRoute(cfg Config, profile string) (Route, error) {
 	decision, err := s.assessRoutes(cfg, profile)
@@ -98,7 +113,10 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		if d.State.Status == "paused" {
 			return fail("workspace_paused", "resume workspace before starting sessions")
 		}
-		if a.Role != "orchestrator" && d.State.Workflow == nil {
+		// Delegation is blocked only while the creation choice is still pending.
+		// An intentional manual workspace (nil workflow plus an operational
+		// status) permits the same task-bound worker sessions as a workflow.
+		if a.Role != "orchestrator" && d.State.Workflow == nil && !d.State.Manual() {
 			return decisionRequired("select a workflow before delegation", "plan-first")
 		}
 		parent := opt.Parent
@@ -146,11 +164,8 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		if err != nil {
 			return err
 		}
-		if a.Role != "orchestrator" && d.State.Workflow != nil {
-			limit := cfg.Workflows[d.State.Workflow.ID].MaxParallelTasks
-			if limit == 0 {
-				limit = 3
-			}
+		if a.Role != "orchestrator" {
+			limit := workerParallelLimit(cfg, d)
 			active := 0
 			for _, p := range d.Registry.Sessions {
 				if p.Active() && p.AgentSnapshot.Role != "orchestrator" {
@@ -158,7 +173,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				}
 			}
 			if active >= limit {
-				return fail("parallel_limit", "workflow already has %d active workers", active)
+				return fail("parallel_limit", "there are already %d active workers; limit is %d", active, limit)
 			}
 		}
 		profile := opt.Profile
