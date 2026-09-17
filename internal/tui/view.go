@@ -346,6 +346,9 @@ func (m *Model) dashboardView(mode layoutMode) []string {
 }
 
 func (m *Model) collectionView(mode layoutMode) []string {
+	if m.isBoardPage() {
+		return m.boardView(mode)
+	}
 	items := m.filteredItems()
 	pending := m.projectPending || m.snapshotPending
 	if pending && len(m.allItems()) == 0 {

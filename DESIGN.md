@@ -106,6 +106,19 @@ Puste kolekcje pokazują tytuł, jednozdaniowe wyjaśnienie i jedną prawidłow�
 picker projektu reklamuje `a` (Create workspace) zamiast twierdzić, że TUI nigdy
 nie tworzy workspace'u.
 
+**Board.** Tasks mają dwa widoki: domyślny **List** i **Board** przełączany klawiszem
+`b` (stopka pokazuje `b board`/`b list`). Board to jedna kolumna na stan zadania w
+stałej kolejności pending, running, blocked, needs_changes, awaiting_review, accepted,
+z nierozpoznanymi stanami dopisanymi na końcu i renderowanymi jako neutralny tekst.
+Karty używają tych samych danych co lista i zachowują znacznik zaznaczenia `›`; kolumny
+pochodzą z nieusuniętych zadań strony Tasks, więc filtrowanie usuwa karty, a nie kolumny.
+Nagłówek kolumny to badge stanu z liczbą widocznych kart, a aktywna kolumna ma obramowanie
+fokusu. W trybie wide kolumny sąsiadują, a przy braku miejsca przewijają się oknem wokół
+aktywnej kolumny z pozycją w linii licznika; w trybie compact widoczna jest tylko aktywna
+kolumna z pagerem `‹ stan (n) › k/m`, dzięki czemu board pozostaje czytelny już od 40×12.
+Zaznaczenie pozostaje przypięte do `route.SelectedID`, a wybór List/Board jest pamiętany
+tylko przez czas sesji (jak `route.Sort` i filtry) i nie jest zapisywany między uruchomieniami.
+
 **Runtime.** Topologia tmux jest tabelą `bubbles/table` (window, pane, kind,
 owner, run, state) w trybie wide, a w trybie compact tym samym danym w układzie
 wierszy. Błędy runtime i stan zarządzanego interfejsu pozostają nad topologią.

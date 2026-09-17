@@ -21,6 +21,10 @@ type route struct {
 	SelectedID   string
 	StatusFilter string
 	Sort         string
+	// View selects an alternate presentation for a collection page. Empty means
+	// the default list; "board" is the Tasks kanban board. It is session-scoped
+	// through routeMemory, exactly like Sort.
+	View string
 }
 
 type routeKey struct {
@@ -32,9 +36,9 @@ type routeKey struct {
 }
 
 type routeMemory struct {
-	Query, SelectedID, StatusFilter, Sort string
-	ViewportOffset                        int
-	FocusedPanel                          int
+	Query, SelectedID, StatusFilter, Sort, View string
+	ViewportOffset                              int
+	FocusedPanel                                int
 }
 
 type collectionItem struct {
@@ -280,6 +284,7 @@ func (m *Model) activateRoute(next route) {
 		next.SelectedID = memory.SelectedID
 		next.StatusFilter = memory.StatusFilter
 		next.Sort = memory.Sort
+		next.View = memory.View
 		m.focusedPanel = memory.FocusedPanel
 	} else {
 		m.focusedPanel = 0
@@ -310,6 +315,7 @@ func (m *Model) rememberRoute() {
 		SelectedID:     m.route.SelectedID,
 		StatusFilter:   m.route.StatusFilter,
 		Sort:           m.route.Sort,
+		View:           m.route.View,
 		ViewportOffset: m.viewport.YOffset,
 		FocusedPanel:   m.focusedPanel,
 	}

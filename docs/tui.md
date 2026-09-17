@@ -18,6 +18,18 @@ aktywne wykonania oraz niezamknięte sesje bieżących prób niezaakceptowanych 
 Każdy wiersz łączy agenta z zadaniem, stanem i modelem. Tasks pokazuje stan zadania
 oraz liczbę aktywnych wykonań, sesji i runów jego bieżącej próby. Zakończenie runu
 nie oznacza akceptacji zadania; procent postępu liczy wyłącznie zadania accepted.
+`b` przełącza na zakładce Tasks widok między **List** i **Board**. Board pokazuje
+jedną kolumnę na stan zadania w stałej kolejności pending, running, blocked,
+needs_changes, awaiting_review, accepted; nierozpoznane stany dołącza na końcu i
+renderuje jako neutralny tekst. Karty używają tych samych danych co lista (tytuł i
+podtytuł zadania), a kolumny wyznacza się z nieusuniętych zadań strony Tasks, więc
+filtr i `f` usuwają karty, a nie całe kolumny. Zaznaczenie pozostaje przypięte do
+`route.SelectedID`, dlatego `Enter`, `t`, `a`, `g`, `s`, `/` i `f` działają bez zmian.
+W trybie szerokim kolumny sąsiadują, a gdy się nie mieszczą, okno zawiera aktywną
+kolumnę i pokazuje pozycję w linii licznika (np. `columns 2–5/6`); w trybie compact
+widoczna jest tylko aktywna kolumna z nagłówkiem pagera `‹ stan (n) › k/m`. Domyślnym
+widokiem jest List, a wybór List/Board jest pamiętany wyłącznie przez czas sesji TUI
+(tak jak sortowanie i filtry) i nie jest zapisywany między uruchomieniami.
 
 Stan ma symbol i podpis; running/starting mają animowany wskaźnik, także bez koloru.
 `s` zmienia sortowanie (priorytet pracy, nazwa, ostatnie wykonanie); zaznaczenie
@@ -68,7 +80,11 @@ innej trasy.
 `Enter` otwiera zaznaczenie, a `Esc` wraca lub czyści filtr. Na kolekcjach `/` edytuje
 filtr substring po nazwie, ID i podtytule; porównanie nie rozróżnia wielkości liter.
 `Esc` podczas edycji przywraca poprzednią wartość i zaznaczenie. Poza edycją czyści najpierw filtr tekstowy, następnie statusowy, zanim wróci do poprzedniej strony. `f` przełącza aktywny/archiwalny
-widok workspace'ów i statusowe lub historyczne filtry odpowiednich kolekcji. Na Dashboard
+widok workspace'ów i statusowe lub historyczne filtry odpowiednich kolekcji. Na boardzie
+`Up`/`Down` porusza w obrębie aktywnej kolumny (na końcach zatrzymuje się, bez zawijania),
+`←`/`→` przechodzi między niepustymi kolumnami i zawija na krańcach, `PgUp`/`PgDn` działa w
+obrębie kolumny, a `Home`/`End` skacze do pierwszej lub ostatniej karty skrajnej niepustej
+kolumny. Na Dashboard
 `Tab`/`Shift+Tab` zmienia fokus między Agents & runs, Tasks, Needs attention i Recent
 recorded activity. Na Results zmienia typ wyniku: artifacts, handoffs lub checks; aktywny
 typ jest nazwany w linii pomocniczej. Trasy szczegółów i kolekcji zależnych pokazują
@@ -82,6 +98,8 @@ breadcrumb, a na szczegółach zadania `1`–`3` są skrótami do powiązanych z
 | `Up`/`Down`, `j`/`k` | Zmiana zaznaczenia lub przewijanie szczegółów |
 | `PgUp`/`PgDn` | Przewiń dokument albo przesuń zaznaczenie o stronę na kolekcji |
 | `Home`/`End` | Początek lub koniec dokumentu albo kolekcji |
+| `b` | Przełącz widok Tasks między List i Board (stopka: `b board` / `b list`) |
+| `←`/`→` | Zmień aktywną kolumnę boardu (tylko w widoku Board) |
 | `Enter` | Otwórz zaznaczenie; nie uruchamia mutacji |
 | `Esc` | Anuluj formularz, wyjdź z edycji filtra, wyczyść filtr albo wróć |
 | `/` | Edytuj filtr kolekcji |
@@ -103,7 +121,9 @@ w zarządzanym panelu poza formularzem zapisuje hide. Podczas edycji tekstu filt
 klawisze, więc `q`, `g` i cyfry nie uruchomią skrótów aplikacji.
 
 Stopka pokazuje wyłącznie polecenia dostępne dla bieżącego zaznaczenia i możliwości
-backendu; nieobsługiwane terminal, skok i akcje nie są reklamowane. `?` otwiera
+backendu; nieobsługiwane terminal, skok i akcje nie są reklamowane. Na Tasks stopka
+pokazuje `b board` w widoku List i `b list` w widoku Board, a `←/→ column` tylko w
+widoku Board. `?` otwiera
 przewijalną pomoc pogrupowaną na Navigation, View, Runtime, Actions i Exit; pozycję
 przewijania widać w wierszu statusu, a `?` lub `Esc` wracają do poprzedniego widoku.
 

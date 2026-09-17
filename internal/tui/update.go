@@ -377,6 +377,16 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.rebuildViewport()
 		return m, nil
 	}
+	if keybind.Matches(msg, m.keys.Board) && m.route.Page == "tasks" {
+		if m.route.View == "board" {
+			m.route.View = "list"
+		} else {
+			m.route.View = "board"
+		}
+		m.validateSelection()
+		m.rebuildViewport()
+		return m, nil
+	}
 	if keybind.Matches(msg, m.keys.CurrentWork) && m.workspaceID != "" {
 		m.navigate(route{Page: "dashboard"})
 		m.focusedPanel = 0
@@ -466,32 +476,50 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.navigate(route{Page: "results", Tab: "artifacts"})
 	case keybind.Matches(msg, m.keys.Primary[4]):
 		m.navigate(route{Page: "more"})
+	case keybind.Matches(msg, m.keys.ColumnPrev):
+		if m.isBoardPage() {
+			m.boardMoveColumn(-1)
+		}
+	case keybind.Matches(msg, m.keys.ColumnNext):
+		if m.isBoardPage() {
+			m.boardMoveColumn(1)
+		}
 	case keybind.Matches(msg, m.keys.Up):
-		if m.isCollectionPage() {
+		if m.isBoardPage() {
+			m.boardMoveCard(-1)
+		} else if m.isCollectionPage() {
 			m.moveSelection(-1)
 		} else {
 			m.viewport.LineUp(1)
 		}
 	case keybind.Matches(msg, m.keys.Down):
-		if m.isCollectionPage() {
+		if m.isBoardPage() {
+			m.boardMoveCard(1)
+		} else if m.isCollectionPage() {
 			m.moveSelection(1)
 		} else {
 			m.viewport.LineDown(1)
 		}
 	case keybind.Matches(msg, m.keys.PageUp):
-		if m.isCollectionPage() {
+		if m.isBoardPage() {
+			m.boardMoveCard(-max(1, m.contentHeight()-2))
+		} else if m.isCollectionPage() {
 			m.moveSelection(-max(1, m.contentHeight()-2))
 		} else {
 			m.viewport.PageUp()
 		}
 	case keybind.Matches(msg, m.keys.PageDown):
-		if m.isCollectionPage() {
+		if m.isBoardPage() {
+			m.boardMoveCard(max(1, m.contentHeight()-2))
+		} else if m.isCollectionPage() {
 			m.moveSelection(max(1, m.contentHeight()-2))
 		} else {
 			m.viewport.PageDown()
 		}
 	case keybind.Matches(msg, m.keys.Top):
-		if m.isCollectionPage() {
+		if m.isBoardPage() {
+			m.boardJump(true)
+		} else if m.isCollectionPage() {
 			items := m.filteredItems()
 			if len(items) > 0 {
 				m.route.SelectedID = items[0].ID
@@ -500,7 +528,9 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoTop()
 		}
 	case keybind.Matches(msg, m.keys.Bottom):
-		if m.isCollectionPage() {
+		if m.isBoardPage() {
+			m.boardJump(false)
+		} else if m.isCollectionPage() {
 			items := m.filteredItems()
 			if len(items) > 0 {
 				m.route.SelectedID = items[len(items)-1].ID

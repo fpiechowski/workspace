@@ -27,6 +27,12 @@ type keyMap struct {
 	Focus      key.Binding
 	FocusPrev  key.Binding
 
+	// Board is the Tasks-page List/Board toggle; ColumnPrev/ColumnNext move
+	// across board columns with the horizontal arrows.
+	Board      key.Binding
+	ColumnPrev key.Binding
+	ColumnNext key.Binding
+
 	Primary [5]key.Binding
 	Related [3]key.Binding
 
@@ -71,6 +77,10 @@ func defaultKeyMap() keyMap {
 		Sort:       key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort")),
 		Focus:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("Tab", "focus")),
 		FocusPrev:  key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("Shift+Tab", "focus")),
+
+		Board:      key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "board")),
+		ColumnPrev: key.NewBinding(key.WithKeys("left"), key.WithHelp("←/→", "column")),
+		ColumnNext: key.NewBinding(key.WithKeys("right"), key.WithHelp("←/→", "column")),
 
 		Primary: [5]key.Binding{
 			key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "Work")),
@@ -156,16 +166,18 @@ func (m *Model) selectionKind() string {
 // contextFlags is the selection-aware capability snapshot shared by the
 // footer, the full help screen, and tests.
 type contextFlags struct {
-	terminal    bool
-	jump        bool
-	actions     bool
-	filter      bool
-	status      bool
-	sort        bool
-	focus       bool
-	taskRelated bool
-	dashboard   bool
-	workspace   bool
+	terminal     bool
+	jump         bool
+	actions      bool
+	filter       bool
+	status       bool
+	sort         bool
+	focus        bool
+	taskRelated  bool
+	dashboard    bool
+	workspace    bool
+	board        bool
+	boardColumns bool
 }
 
 func (m *Model) contextFlags() contextFlags {
@@ -173,17 +185,30 @@ func (m *Model) contextFlags() contextFlags {
 	collection := m.isCollectionPage()
 	options, _ := m.availableActions()
 	return contextFlags{
-		terminal:    terminalCapable(kind),
-		jump:        jumpCapable(kind),
-		actions:     len(options) > 0,
-		filter:      collection,
-		status:      collection && len(m.statusFilterOptions()) > 1,
-		sort:        collection,
-		focus:       m.route.Page == "dashboard" || m.route.Page == "results",
-		taskRelated: m.route.Page == "task",
-		dashboard:   m.route.Page == "dashboard",
-		workspace:   m.workspaceID != "",
+		terminal:     terminalCapable(kind),
+		jump:         jumpCapable(kind),
+		actions:      len(options) > 0,
+		filter:       collection,
+		status:       collection && len(m.statusFilterOptions()) > 1,
+		sort:         collection,
+		focus:        m.route.Page == "dashboard" || m.route.Page == "results",
+		taskRelated:  m.route.Page == "task",
+		dashboard:    m.route.Page == "dashboard",
+		workspace:    m.workspaceID != "",
+		board:        m.route.Page == "tasks",
+		boardColumns: m.isBoardPage(),
 	}
+}
+
+// boardBinding advertises the toggle direction that matches the current view.
+func (m *Model) boardBinding() key.Binding {
+	binding := m.keys.Board
+	if m.isBoardPage() {
+		binding.SetHelp("b", "list")
+	} else {
+		binding.SetHelp("b", "board")
+	}
+	return binding
 }
 
 // helpGroup is one named category of the full help screen.
@@ -198,7 +223,7 @@ type helpGroup struct {
 func (m *Model) keyGroups() []helpGroup {
 	flags := m.contextFlags()
 
-	navigation := []key.Binding{m.keys.Up, m.keys.Down, m.keys.Open, m.keys.Back}
+	navigation := []key.Binding{m.keys.Up, m.keys.Down, enabled(m.keys.ColumnPrev, flags.boardColumns), m.keys.Open, m.keys.Back}
 	if flags.taskRelated {
 		navigation = append(navigation,
 			enabled(m.keys.Related[0], true),
@@ -221,6 +246,7 @@ func (m *Model) keyGroups() []helpGroup {
 		enabled(m.keys.Filter, flags.filter),
 		enabled(m.keys.FilterNext, flags.status),
 		enabled(m.keys.Sort, flags.sort),
+		enabled(m.boardBinding(), flags.board),
 		enabled(m.keys.CurrentWork, flags.workspace),
 		enabled(m.keys.Help, true),
 	}
@@ -263,10 +289,12 @@ func (m *Model) shortHelp() []key.Binding {
 	add(m.exitBinding(), true)
 	add(m.keys.Open, true)
 	add(m.keys.Up, true)
+	add(m.keys.ColumnPrev, flags.boardColumns)
 	add(m.keys.Focus, flags.focus)
 	add(m.keys.Filter, flags.filter)
 	add(m.keys.FilterNext, flags.status)
 	add(m.keys.Sort, flags.sort)
+	add(m.boardBinding(), flags.board)
 	add(m.keys.Actions, flags.actions)
 	add(m.keys.Jump, flags.jump)
 	if flags.taskRelated {
