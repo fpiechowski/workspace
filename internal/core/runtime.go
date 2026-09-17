@@ -51,6 +51,13 @@ type Runtime interface {
 }
 type Tmux struct{ Socket string }
 
+// DisplayMessage shows a short pending-inbox notice without changing pane
+// input or selecting another tmux window.
+func (t Tmux) DisplayMessage(ctx context.Context, paneID, message string) error {
+	_, err := t.call(ctx, "display-message", "-t", paneID, message)
+	return err
+}
+
 func (t Tmux) args(args ...string) []string {
 	if t.Socket != "" {
 		return append([]string{"-L", t.Socket}, args...)

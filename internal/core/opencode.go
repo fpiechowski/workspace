@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,13 +19,37 @@ import (
 	"time"
 )
 
-const openCodeDeliveryTimeout = 8 * time.Second
+const (
+	// OpenCode is local, but its HTTP handler can still stop responding while
+	// the interactive TUI is busy. Keep each request and the complete delivery
+	// attempt bounded so the sequential supervisor can continue with later
+	// messages and workspaces.
+	openCodeDeliveryTimeout              = 5 * time.Second
+	openCodeRequestTimeout               = 750 * time.Millisecond
+	openCodeReadinessTimeout             = 2 * time.Second
+	openCodeRequestInterval              = 100 * time.Millisecond
+	openCodeHistoryLimit                 = 100
+	openCodePersistenceTimeout           = 1 * time.Second
+	openCodeResponseLimit                = 4 << 20
+	openCodeDeliveryPhaseChecking        = "checking"
+	openCodeDeliveryPhaseRetry           = "retry"
+	openCodeDeliveryPhaseAppended        = "appended"
+	openCodeDeliveryPhaseSubmitted       = "submitted"
+	openCodeDeliveryPhaseUncertainAppend = "uncertain_append"
+	// "uncertain" was the phase used by the previous asynchronous transport
+	// after acceptance without history confirmation. Keep it compatible and
+	// treat it as an uncertain submit on retry.
+	openCodeDeliveryPhaseUncertainSubmit = "uncertain"
+	openCodeDeliveryPhaseConfirmed       = "confirmed"
+)
 
 func (s *Service) openCodeHTTP(ctx context.Context, endpoint, method, path string, body []byte) ([]byte, int, error) {
 	if endpoint == "" {
 		return nil, 0, fail("opencode_unavailable", "current Run has no OpenCode endpoint")
 	}
-	request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(endpoint, "/")+path, bytes.NewReader(body))
+	requestCtx, cancel := context.WithTimeout(ctx, openCodeRequestTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(requestCtx, method, strings.TrimRight(endpoint, "/")+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -37,7 +62,7 @@ func (s *Service) openCodeHTTP(ctx context.Context, endpoint, method, path strin
 		return nil, 0, err
 	}
 	defer response.Body.Close()
-	data, readErr := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	data, readErr := io.ReadAll(io.LimitReader(response.Body, openCodeResponseLimit))
 	if readErr != nil {
 		return nil, response.StatusCode, readErr
 	}
@@ -45,9 +70,9 @@ func (s *Service) openCodeHTTP(ctx context.Context, endpoint, method, path strin
 }
 
 func (s *Service) openCodeReady(ctx context.Context, endpoint string) error {
-	deadline := time.NewTimer(openCodeDeliveryTimeout)
+	deadline := time.NewTimer(openCodeReadinessTimeout)
 	defer deadline.Stop()
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(openCodeRequestInterval)
 	defer ticker.Stop()
 	for {
 		_, status, err := s.openCodeHTTP(ctx, endpoint, http.MethodGet, "/global/health", nil)
@@ -69,7 +94,8 @@ func openCodeHistoryContains(data []byte, marker string) bool {
 }
 
 func (s *Service) openCodeHistory(ctx context.Context, endpoint, thread string) ([]byte, error) {
-	data, status, err := s.openCodeHTTP(ctx, endpoint, http.MethodGet, "/session/"+thread+"/message", nil)
+	path := fmt.Sprintf("/session/%s/message?limit=%d", url.PathEscape(thread), openCodeHistoryLimit)
+	data, status, err := s.openCodeHTTP(ctx, endpoint, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +103,129 @@ func (s *Service) openCodeHistory(ctx context.Context, endpoint, thread string) 
 		return nil, fail("opencode_rejected", "OpenCode history returned HTTP %d", status)
 	}
 	return data, nil
+}
+
+type openCodeMutationError struct {
+	operation string
+	uncertain bool
+	err       error
+}
+
+func (e *openCodeMutationError) Error() string {
+	if e.err == nil {
+		return "OpenCode mutation failed"
+	}
+	return e.err.Error()
+}
+
+func (e *openCodeMutationError) Unwrap() error { return e.err }
+
+// openCodeTUIMutation calls one of OpenCode's TUI control routes. A response
+// that is not a 2xx JSON boolean true is a rejected operation. A transport or
+// malformed-response error is uncertain because the TUI may have applied the
+// mutation before the response was lost.
+func (s *Service) openCodeTUIMutation(ctx context.Context, endpoint, path string, body []byte, operation string) error {
+	data, status, err := s.openCodeHTTP(ctx, endpoint, http.MethodPost, path, body)
+	if err != nil {
+		return &openCodeMutationError{operation: operation, uncertain: true, err: fmt.Errorf("OpenCode %s request failed: %w", operation, err)}
+	}
+	if status < 200 || status >= 300 {
+		return &openCodeMutationError{operation: operation, err: fail("opencode_rejected", "OpenCode %s returned HTTP %d: %s", operation, status, strings.TrimSpace(string(data)))}
+	}
+	var accepted bool
+	if err := json.Unmarshal(data, &accepted); err != nil {
+		return &openCodeMutationError{operation: operation, uncertain: true, err: fmt.Errorf("OpenCode %s returned invalid boolean response: %w", operation, err)}
+	}
+	if !accepted {
+		return &openCodeMutationError{operation: operation, err: fail("opencode_rejected", "OpenCode %s rejected the operation", operation)}
+	}
+	return nil
+}
+
+func (s *Service) openCodeDeliveryPhase(ctx context.Context, selector, messageID, runID string) (string, error) {
+	var phase string
+	err := s.With(ctx, selector, func(d *Document) error {
+		run, err := findRun(d, runID)
+		if err != nil {
+			return err
+		}
+		p, err := findSession(d, run.SessionID)
+		if err != nil {
+			return err
+		}
+		if p.CurrentRunID != run.ID || !run.Active() {
+			return fail("stale_run", "run no longer owns the session runtime")
+		}
+		for i := len(d.Registry.Deliveries) - 1; i >= 0; i-- {
+			attempt := d.Registry.Deliveries[i]
+			if attempt.MessageID == messageID && attempt.RunID == runID {
+				phase = attempt.Phase
+				break
+			}
+		}
+		return nil
+	})
+	return phase, err
+}
+
+func openCodePartialDeliveryPhase(phase string) bool {
+	switch phase {
+	case openCodeDeliveryPhaseAppended, openCodeDeliveryPhaseSubmitted,
+		openCodeDeliveryPhaseUncertainAppend, openCodeDeliveryPhaseUncertainSubmit,
+		openCodeDeliveryPhaseConfirmed, "uncertain_submit", "needs_attention":
+		return true
+	default:
+		return false
+	}
+}
+
+func openCodeAppendUncertainPhase(phase string) bool {
+	return phase == openCodeDeliveryPhaseUncertainAppend || phase == openCodeDeliveryPhaseConfirmed || phase == "needs_attention"
+}
+
+// persistOpenCodePhase retries a phase write with a short background context
+// after supervisor cancellation. The external TUI mutation already happened
+// at this point, so keeping the partial-delivery receipt is safer than
+// allowing a canceled turn to cause an unconditional duplicate append.
+func (s *Service) persistOpenCodePhase(ctx context.Context, selector, messageID, runID, phase, deliveryErr string) error {
+	err := s.setDeliveryPhase(ctx, selector, messageID, runID, phase, deliveryErr)
+	if err == nil || !isContextError(err) {
+		return err
+	}
+	persistCtx, cancel := context.WithTimeout(context.Background(), openCodePersistenceTimeout)
+	defer cancel()
+	return s.setDeliveryPhase(persistCtx, selector, messageID, runID, phase, deliveryErr)
+}
+
+func (s *Service) persistOpenCodeDelivered(ctx context.Context, selector, runID, messageID string) error {
+	err := s.markDelivered(ctx, selector, runID, []string{messageID})
+	if err == nil || !isContextError(err) {
+		return err
+	}
+	persistCtx, cancel := context.WithTimeout(context.Background(), openCodePersistenceTimeout)
+	defer cancel()
+	return s.markDelivered(persistCtx, selector, runID, []string{messageID})
+}
+
+func (s *Service) openCodeDeliveryFailure(ctx context.Context, selector, messageID, runID, phase string, err error) {
+	if err == nil {
+		return
+	}
+	failurePhase := openCodeDeliveryPhaseRetry
+	if openCodePartialDeliveryPhase(phase) {
+		failurePhase = phase
+	}
+	// A background, bounded write keeps errors visible even when the request
+	// context was canceled by supervisor shutdown. A stale Run is rejected by
+	// setDeliveryPhase and must not be resurrected.
+	persistCtx, cancel := context.WithTimeout(context.Background(), openCodePersistenceTimeout)
+	defer cancel()
+	_ = s.setDeliveryPhase(persistCtx, selector, messageID, runID, failurePhase, err.Error())
+}
+
+func openCodePrompt(message Message) string {
+	marker := "[workspace-message-id:" + message.ID + "]"
+	return fmt.Sprintf("\n\n--- workspace handoff ---\n%s\nType: %s\nFrom: %s\nHandoff: %s\n\n%s\n\nRead the durable inbox record before acting: message_id=%s.\n--- end workspace handoff ---\n\n", marker, message.Kind, message.FromAgent, message.HandoffID, message.Body, message.ID)
 }
 
 func (s *Service) deliverOpenCodeMessage(ctx context.Context, selector string, session Session, run Run, message Message) error {
@@ -88,49 +237,100 @@ func (s *Service) deliverOpenCodeMessage(ctx context.Context, selector string, s
 		}
 		return fail("restart_required", "%s", deliveryErr)
 	}
-	marker := "[workspace-message-id:" + message.ID + "]"
-	if err := s.setDeliveryPhase(ctx, selector, message.ID, run.ID, "checking", ""); err != nil {
-		return err
-	}
-	if err := s.openCodeReady(ctx, run.OpenCodeEndpoint); err != nil {
-		_ = s.setDeliveryPhase(context.Background(), selector, message.ID, run.ID, "retry", err.Error())
-		return err
-	}
-	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	history, historyErr := s.openCodeHistory(checkCtx, run.OpenCodeEndpoint, run.ClientThreadID)
-	cancel()
-	if historyErr == nil && openCodeHistoryContains(history, marker) {
-		_ = s.setDeliveryPhase(ctx, selector, message.ID, run.ID, "confirmed", "")
-		return s.markDelivered(ctx, selector, run.ID, []string{message.ID})
-	}
-	prompt := fmt.Sprintf("%s\nType: %s\nFrom: %s\nHandoff: %s\n\n%s\n\nRead the durable inbox record before acting: message_id=%s.", marker, message.Kind, message.FromAgent, message.HandoffID, message.Body, message.ID)
-	body, _ := json.Marshal(map[string]any{"parts": []map[string]string{{"type": "text", "text": prompt}}})
-	data, status, err := s.openCodeHTTP(ctx, run.OpenCodeEndpoint, http.MethodPost, "/session/"+run.ClientThreadID+"/prompt_async", body)
-	if err != nil || status < 200 || status >= 300 {
-		if err == nil {
-			err = fail("opencode_rejected", "OpenCode prompt returned HTTP %d: %s", status, strings.TrimSpace(string(data)))
-		}
-		_ = s.setDeliveryPhase(context.Background(), selector, message.ID, run.ID, "retry", err.Error())
-		return err
-	}
-	if err := s.setDeliveryPhase(ctx, selector, message.ID, run.ID, "submitted", ""); err != nil {
-		return err
-	}
-	confirmCtx, cancel := context.WithTimeout(ctx, openCodeDeliveryTimeout)
+	attemptCtx, cancel := context.WithTimeout(ctx, openCodeDeliveryTimeout)
 	defer cancel()
+	marker := "[workspace-message-id:" + message.ID + "]"
+	phase, err := s.openCodeDeliveryPhase(attemptCtx, selector, message.ID, run.ID)
+	if err != nil {
+		return err
+	}
+	if phase == "" || !openCodePartialDeliveryPhase(phase) && phase != openCodeDeliveryPhaseConfirmed {
+		if err := s.persistOpenCodePhase(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseChecking, ""); err != nil {
+			return err
+		}
+		phase = openCodeDeliveryPhaseChecking
+	}
+	if err := s.openCodeReady(attemptCtx, run.OpenCodeEndpoint); err != nil {
+		s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, phase, err)
+		return err
+	}
+	history, historyErr := s.openCodeHistory(attemptCtx, run.OpenCodeEndpoint, run.ClientThreadID)
+	if historyErr == nil && openCodeHistoryContains(history, marker) {
+		if err := s.persistOpenCodePhase(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseConfirmed, ""); err != nil {
+			s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseConfirmed, err)
+			return err
+		}
+		return s.persistOpenCodeDelivered(attemptCtx, selector, run.ID, message.ID)
+	}
+	if historyErr != nil {
+		s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, phase, historyErr)
+		return historyErr
+	}
+	if openCodeAppendUncertainPhase(phase) {
+		err := fail("delivery_uncertain", "OpenCode append outcome is uncertain; refusing to append the handoff again until history contains %s", marker)
+		s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, phase, err)
+		return err
+	}
+	selectBody, _ := json.Marshal(map[string]string{"sessionID": run.ClientThreadID})
+	if err := s.openCodeTUIMutation(attemptCtx, run.OpenCodeEndpoint, "/tui/select-session", selectBody, "select-session"); err != nil {
+		s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, phase, err)
+		return err
+	}
+
+	if !openCodePartialDeliveryPhase(phase) {
+		body, _ := json.Marshal(map[string]string{"text": openCodePrompt(message)})
+		if err := s.openCodeTUIMutation(attemptCtx, run.OpenCodeEndpoint, "/tui/append-prompt", body, "append-prompt"); err != nil {
+			var mutationErr *openCodeMutationError
+			uncertain := errors.As(err, &mutationErr) && mutationErr.uncertain
+			failurePhase := phase
+			if uncertain {
+				failurePhase = openCodeDeliveryPhaseUncertainAppend
+			}
+			s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, failurePhase, err)
+			return err
+		}
+		if err := s.persistOpenCodePhase(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseAppended, ""); err != nil {
+			// The append has succeeded but its receipt did not become durable.
+			// Never fall back to a fresh append on the next tick.
+			s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseUncertainAppend, err)
+			return err
+		}
+	}
+	if err := s.openCodeTUIMutation(attemptCtx, run.OpenCodeEndpoint, "/tui/submit-prompt", []byte("{}"), "submit-prompt"); err != nil {
+		var mutationErr *openCodeMutationError
+		if errors.As(err, &mutationErr) && mutationErr.uncertain {
+			s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseUncertainSubmit, err)
+		} else {
+			failurePhase := phase
+			if !openCodePartialDeliveryPhase(failurePhase) {
+				failurePhase = openCodeDeliveryPhaseAppended
+			}
+			s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, failurePhase, err)
+		}
+		return err
+	}
+	if err := s.persistOpenCodePhase(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseSubmitted, ""); err != nil {
+		s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseUncertainSubmit, err)
+		return err
+	}
 	for {
-		history, err := s.openCodeHistory(confirmCtx, run.OpenCodeEndpoint, run.ClientThreadID)
-		if err == nil && openCodeHistoryContains(history, marker) {
-			if err := s.setDeliveryPhase(confirmCtx, selector, message.ID, run.ID, "confirmed", ""); err != nil {
+		history, historyErr := s.openCodeHistory(attemptCtx, run.OpenCodeEndpoint, run.ClientThreadID)
+		if historyErr == nil && openCodeHistoryContains(history, marker) {
+			if err := s.persistOpenCodePhase(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseConfirmed, ""); err != nil {
+				s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseConfirmed, err)
 				return err
 			}
-			return s.markDelivered(confirmCtx, selector, run.ID, []string{message.ID})
+			return s.persistOpenCodeDelivered(attemptCtx, selector, run.ID, message.ID)
 		}
 		select {
-		case <-confirmCtx.Done():
-			_ = s.setDeliveryPhase(context.Background(), selector, message.ID, run.ID, "uncertain", "prompt accepted but marker was not observed")
-			return fail("delivery_unconfirmed", "OpenCode prompt was not observed in session history")
-		case <-time.After(100 * time.Millisecond):
+		case <-attemptCtx.Done():
+			deliveryErr := fail("delivery_unconfirmed", "OpenCode prompt was submitted but marker %s was not observed in session history", marker)
+			if historyErr != nil {
+				deliveryErr = fmt.Errorf("%w (last history check: %v)", deliveryErr, historyErr)
+			}
+			s.openCodeDeliveryFailure(attemptCtx, selector, message.ID, run.ID, openCodeDeliveryPhaseUncertainSubmit, deliveryErr)
+			return deliveryErr
+		case <-time.After(openCodeRequestInterval):
 		}
 	}
 }

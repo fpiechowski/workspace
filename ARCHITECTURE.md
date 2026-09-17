@@ -186,8 +186,14 @@ blokuje cleanup. Pełny kontrakt opisuje [docs/runtime.md](docs/runtime.md).
 
 Adapter klienta rozdziela pięć możliwości: launch, resume, deliver, observe i interrupt.
 Native OpenCode delivery is Run-scoped: its loopback endpoint and delivery phases are
-transport state, not an inbox ACK or handoff acceptance. Generic `deliver_argv` remains
-available to command/Claude adapters.
+transport state, not an inbox ACK or handoff acceptance. The supervisor uses the
+endpoint's active TUI control API (`select-session`, `append-prompt`, and
+`submit-prompt`) and confirms the marker in bounded recent-history reads; it does not
+use the external `prompt_async` route or a detached client. Append, submitted and
+uncertain phases are durable so a retry never blindly appends the same prompt. A
+transport failure remains undelivered and produces one Run-scoped tmux inbox
+notification as a fallback. Generic `deliver_argv` remains available to command/Claude
+adapters.
 Argumenty procesów są tablicami argv bez interpolacji shell. Wbudowane adaptery
 obsługują Codex, Claude i OpenCode; adapter `command` pozwala podłączyć własne wrappery.
 Natywne ID rozmowy jest opcjonalnym bindingiem Session, nigdy jej tożsamością ani
