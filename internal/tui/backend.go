@@ -32,6 +32,7 @@ type ActionCall struct {
 	Reason             string
 	Input              string
 	Workflow           string
+	NoWorkflow         bool
 	Key                string
 	ExpectedRevision   int
 	ExpectedRunID      string
@@ -82,7 +83,7 @@ func (b CoreBackend) PerformAction(ctx context.Context, selector string, call Ac
 		_, err := b.Service.StartSupervisedOrchestrator(ctx, selector, call.Key)
 		return err
 	case "create_workspace":
-		_, err := b.Service.Create(ctx, core.CreateOptions{Title: call.TargetName, Input: call.Input, Workflow: call.Workflow, OperationKey: call.Key})
+		_, err := b.Service.Create(ctx, createOptions(call))
 		return err
 	case "delete_workspace":
 		return b.Service.DeleteWorkspace(ctx, call.TargetID, call.Key, call.ExpectedRevision)
@@ -133,6 +134,12 @@ func (b CoreBackend) PerformAction(ctx context.Context, selector string, call Ac
 	default:
 		return &core.Error{Code: "invalid_action", Message: "unsupported interactive action"}
 	}
+}
+
+// createOptions translates a TUI creation action into the core creation
+// contract. NoWorkflow and Workflow are mutually exclusive by construction.
+func createOptions(call ActionCall) core.CreateOptions {
+	return core.CreateOptions{Title: call.TargetName, Input: call.Input, Workflow: call.Workflow, NoWorkflow: call.NoWorkflow, OperationKey: call.Key}
 }
 
 func (b CoreBackend) HideManagedUI(ctx context.Context, selector, key string) error {

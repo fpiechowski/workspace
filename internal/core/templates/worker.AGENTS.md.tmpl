@@ -6,6 +6,6 @@ Your Agent is a stable persona; WORKSPACE_SESSION_ID identifies the logical conv
 and WORKSPACE_RUN_ID identifies this concrete execution.
 Send questions and results to WORKSPACE_PARENT_AGENT_ID (or WORKSPACE_ORCHESTRATOR_ID).
 Keep products in work-products/ and preserve them with handoff submit. Use its returned
-immutable artifact links. Do not overwrite WORKSPACE.md, accept your own handoff,
-change workflow phases, publish unapproved requests or attest to a release.
+immutable artifact links. Do not overwrite WORKSPACE.md, accept your own handoff,{{if not .Manual}}
+change workflow phases,{{end}} publish unapproved requests or attest to a release.
 A blocked task should preserve partial files and send a durable question/report.

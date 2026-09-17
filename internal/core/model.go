@@ -98,6 +98,14 @@ type Workspace struct {
 	LiveTest            LiveTest        `yaml:"live_test" json:"live_test"`
 	Release             Release         `yaml:"release" json:"release"`
 }
+
+// Manual reports whether the workspace intentionally has no workflow. A nil
+// Workflow alone is not enough: an omitted creation choice stays in
+// needs_workflow until the user selects a workflow.
+func (w Workspace) Manual() bool {
+	return w.Workflow == nil && w.Status != "needs_workflow"
+}
+
 type Workflow struct {
 	ID             string `yaml:"id" json:"id"`
 	Version        int    `yaml:"version" json:"version"`

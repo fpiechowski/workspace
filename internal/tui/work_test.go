@@ -195,6 +195,43 @@ func TestProjectAndWorkspaceDeletionActions(t *testing.T) {
 	}
 }
 
+func TestCreateWorkspaceOffersDistinctManualChoice(t *testing.T) {
+	model := New(Config{ProjectFound: true})
+	model.backend = &actionHarness{workflows: []string{"plan-first"}}
+	model.project = core.ProjectOverview{ObservedAt: time.Now()}
+	model.route = route{Page: "project"}
+	model.validateSelection()
+
+	cmd := model.beginAction("create_workspace", "")
+	if cmd == nil {
+		t.Fatal("create workspace did not load workflows")
+	}
+	_, _ = model.Update(cmd())
+	if model.form == nil || model.formMode != "create_workspace" {
+		t.Fatalf("create workspace form was not opened: mode=%q", model.formMode)
+	}
+	view := model.form.View()
+	for _, option := range []string{"Choose later", "No workflow (manual orchestration)"} {
+		if !strings.Contains(view, option) {
+			t.Fatalf("creation form lacks %q:\n%s", option, view)
+		}
+	}
+
+	if workflow, manual := createWorkflowChoice(createManualChoice); workflow != "" || !manual {
+		t.Fatalf("manual choice decoded as workflow=%q manual=%t", workflow, manual)
+	}
+	if workflow, manual := createWorkflowChoice("plan-first"); workflow != "plan-first" || manual {
+		t.Fatalf("named choice decoded as workflow=%q manual=%t", workflow, manual)
+	}
+	if workflow, manual := createWorkflowChoice(""); workflow != "" || manual {
+		t.Fatalf("choose-later choice decoded as workflow=%q manual=%t", workflow, manual)
+	}
+	options := createOptions(ActionCall{Action: "create_workspace", TargetName: "Manual", Input: "intent", NoWorkflow: true, Key: "tui:1"})
+	if !options.NoWorkflow || options.Workflow != "" || options.Title != "Manual" || options.Input != "intent" || options.OperationKey != "tui:1" {
+		t.Fatalf("manual choice did not reach CreateOptions: %+v", options)
+	}
+}
+
 func TestCompletedWorkspaceCanBeArchivedFromTUI(t *testing.T) {
 	model := workFixture()
 	model.backend = &actionHarness{}

@@ -3,7 +3,13 @@
 Apply these orchestration instructions only when WORKSPACE_ROLE=orchestrator.
 Other agents follow their explicit role prompt and repository instructions.
 
-Read WORKSPACE.md, WORKFLOW.md and the input snapshot before deciding the next step.
+{{if .Manual}}This workspace uses manual orchestration: no workflow is selected and there is no
+phase to advance and no release gate. Create explicit tasks with acceptance criteria
+and dependencies, give each worker a task, worktree and stable parent agent ID, and
+track progress through tasks, handoffs, checks and acceptance. Do not select a
+workflow or advance phases.
+
+{{end}}Read WORKSPACE.md{{if not .Manual}}, WORKFLOW.md{{end}} and the input snapshot before deciding the next step.
 You coordinate, inspect results, decide and delegate; you do not implement code or
 resolve Git conflicts. Give each worker a task, worktree and stable parent agent ID.
 An Agent is a persona definition; a Session is one execution of that persona.
@@ -20,7 +26,9 @@ and ask when workflow selection, product behavior or scope is ambiguous. Continu
 routine authorized delegation without asking for approval at each worktree creation.
 Record actual user decisions; --user-confirmed attests to a received answer and must
 never substitute for one. Publication follows configured policy and existing user
-permission. Only the user's confirmation of deployment/release ends the workflow.
+permission.{{if not .Manual}} Only the user's confirmation of deployment/release
+ends the workflow.{{else}} No process exit or handoff acceptance completes a manual workspace;
+the orchestrator may still add tasks.{{end}}
 
 Use stable --operation-key values for each logical operation and attempt. On resume,
 inspect active sessions and unreviewed handoffs before starting another worker.

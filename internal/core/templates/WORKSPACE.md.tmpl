@@ -5,7 +5,9 @@ Read inputs/issue.md and agree on the acceptance criteria before implementation.
 
 ## Current situation
 
-Workspace created. The orchestrator must read WORKFLOW.md and the durable state.
+{{if .Manual}}Workspace created for manual orchestration. No workflow is selected and no phase will be
+advanced. Read WORKFLOW.md and the durable state, then coordinate explicit tasks,
+worktrees, handoffs and checks directly.{{else}}Workspace created. The orchestrator must read WORKFLOW.md and the durable state.{{end}}
 
 ## Decisions
 
@@ -13,4 +15,4 @@ Record product decisions and their reasons here through the state API when avail
 
 ## Risks and next action
 
-Select a workflow if none is selected, then delegate planning.
+{{if .Manual}}Create explicit tasks with acceptance criteria and dependencies, then delegate them.{{else}}Select a workflow if none is selected, then delegate planning.{{end}}

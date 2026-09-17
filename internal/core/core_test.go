@@ -189,6 +189,112 @@ func TestCreateIdempotencyAndWorkflowSelection(t *testing.T) {
 	_, err = s.Create(ctx, CreateOptions{Source: "https://tracker.example/1"})
 	expectCode(t, err, "tracker_unavailable")
 }
+
+func TestCreateExplicitManualModeSnapshotsNeutralPrompts(t *testing.T) {
+	s, _ := fixture(t)
+	ctx := context.Background()
+
+	if _, err := s.Create(ctx, CreateOptions{Title: "Conflict", Input: "Both", Workflow: "plan-first", NoWorkflow: true}); err == nil {
+		t.Fatal("conflicting creation options were accepted")
+	} else {
+		expectCode(t, err, "invalid_option")
+	}
+
+	manual, err := s.Create(ctx, CreateOptions{Title: "Manual", Input: "Coordinate manually", NoWorkflow: true, OperationKey: "manual:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manual.Workspace.Status != "active" || manual.Workspace.Workflow != nil || manual.Workspace.ChangeRequestMode != "" {
+		t.Fatalf("manual workspace state: status=%q workflow=%+v change_requests=%q", manual.Workspace.Status, manual.Workspace.Workflow, manual.Workspace.ChangeRequestMode)
+	}
+	if !manual.Workspace.Manual() {
+		t.Fatal("manual workspace was not recognized")
+	}
+
+	pending, err := s.Create(ctx, CreateOptions{Title: "Pending", Input: "Choose later", OperationKey: "pending:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending.Workspace.Status != "needs_workflow" || pending.Workspace.Workflow != nil || pending.Workspace.Manual() {
+		t.Fatalf("omitted workflow changed meaning: %+v", pending.Workspace)
+	}
+
+	replay, err := s.Create(ctx, CreateOptions{Title: "Manual", Input: "Coordinate manually", NoWorkflow: true, OperationKey: "manual:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replay.Workspace.ID != manual.Workspace.ID {
+		t.Fatal("manual creation did not replay")
+	}
+	_, err = s.Create(ctx, CreateOptions{Title: "Manual", Input: "Coordinate manually", OperationKey: "manual:1"})
+	expectCode(t, err, "operation_conflict")
+
+	note, err := os.ReadFile(filepath.Join(manual.Directory, "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(note), "# Manual orchestration") || !strings.Contains(string(note), "no selected workflow") {
+		t.Fatalf("manual WORKFLOW.md is not labeled: %s", note)
+	}
+	pendingNote, err := os.ReadFile(filepath.Join(pending.Directory, "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(pendingNote), "# Select a workflow") {
+		t.Fatalf("pending WORKFLOW.md changed: %s", pendingNote)
+	}
+
+	agents, err := os.ReadFile(filepath.Join(manual.Directory, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(agents), "manual orchestration") || strings.Contains(string(agents), "ends the workflow") {
+		t.Fatalf("manual AGENTS.md is not mode-aware: %s", agents)
+	}
+	body, err := os.ReadFile(filepath.Join(manual.Directory, "WORKSPACE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "manual orchestration") || strings.Contains(string(body), "Select a workflow if none is selected") {
+		t.Fatalf("manual WORKSPACE.md body is not mode-aware: %s", body)
+	}
+	pendingAgents, err := os.ReadFile(filepath.Join(pending.Directory, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(pendingAgents), "manual orchestration") {
+		t.Fatalf("pending AGENTS.md leaked manual wording: %s", pendingAgents)
+	}
+
+	for _, name := range []string{"orchestrator", "planning", "implementation", "integration", "live-testing"} {
+		prompt, err := os.ReadFile(filepath.Join(manual.Directory, "prompts", name+".md.tmpl"))
+		if err != nil {
+			t.Fatalf("%s neutral prompt missing: %v", name, err)
+		}
+		text := string(prompt)
+		if strings.Contains(text, "plan-first") || strings.Contains(text, "issue-resolution") {
+			t.Fatalf("%s prompt leaked a workflow name: %s", name, text)
+		}
+		if strings.Contains(text, "planner artifacts") || strings.Contains(text, "mark the workflow complete") {
+			t.Fatalf("%s prompt reused plan-first content: %s", name, text)
+		}
+		workflowPrompt, err := os.ReadFile(filepath.Join(s.Root, ".workspace", "templates", "manual", "prompts", name+".md.tmpl"))
+		if err != nil {
+			t.Fatalf("manual template not installed: %v", err)
+		}
+		if string(workflowPrompt) != text {
+			t.Fatalf("%s snapshot does not match the neutral template", name)
+		}
+	}
+	pendingPrompt, err := os.ReadFile(filepath.Join(pending.Directory, "prompts", "implementation.md.tmpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(pendingPrompt), "accepted planner artifacts") {
+		t.Fatalf("pending snapshot stopped copying plan-first prompts: %s", pendingPrompt)
+	}
+}
+
 func TestConcurrentLaunchIsIdempotentAndWorktreeExclusive(t *testing.T) {
 	s, id := fixture(t)
 	a, w := worker(t, s, id, "planner")

@@ -336,7 +336,13 @@ func (s *Service) Status(ctx context.Context, selector string) (Status, error) {
 	return out, err
 }
 
-type CreateOptions struct{ Title, Input, Source, Workflow, Base, OperationKey string }
+type CreateOptions struct {
+	Title, Input, Source, Workflow, Base, OperationKey string
+	// NoWorkflow creates an active workspace with a nil workflow for explicit
+	// manual orchestration. It cannot be combined with Workflow and is kept in
+	// the idempotency payload so retries cannot reinterpret the earlier choice.
+	NoWorkflow bool `json:",omitempty"`
+}
 
 const exampleWorkflow = "plan-first"
 
@@ -367,6 +373,9 @@ func WorkflowNames(root string, cfg Config) []string {
 }
 
 func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error) {
+	if opt.NoWorkflow && opt.Workflow != "" {
+		return Status{}, fail("invalid_option", "--workflow and --no-workflow are mutually exclusive")
+	}
 	if strings.TrimSpace(opt.Input) == "" && opt.Source == "" {
 		return Status{}, fail("input_required", "provide an issue description/snapshot as an argument or with --input-file; a URL alone is insufficient")
 	}
@@ -449,7 +458,11 @@ func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error)
 		return Status{}, err
 	}
 	defer os.RemoveAll(dir) // dir is an exclusively-created staging directory, never a worktree.
-	d := &Document{Dir: dir, State: Workspace{SchemaVersion: 1, ID: id, ProjectID: cfg.ProjectID, Title: opt.Title, Revision: 1, Status: "needs_workflow", Input: Input{opt.Source, "inputs/issue.md"}, Base: Base{baseRef, base}, CreatedAt: time.Now().UTC()}, Registry: Registry{SchemaVersion: registrySchemaVersion, Agents: []Agent{}, Worktrees: []Worktree{}, Sessions: []Session{}, Runs: []Run{}, Operations: map[string]Operation{}}}
+	status := "needs_workflow"
+	if opt.NoWorkflow {
+		status = "active"
+	}
+	d := &Document{Dir: dir, State: Workspace{SchemaVersion: 1, ID: id, ProjectID: cfg.ProjectID, Title: opt.Title, Revision: 1, Status: status, Input: Input{opt.Source, "inputs/issue.md"}, Base: Base{baseRef, base}, CreatedAt: time.Now().UTC()}, Registry: Registry{SchemaVersion: registrySchemaVersion, Agents: []Agent{}, Worktrees: []Worktree{}, Sessions: []Session{}, Runs: []Run{}, Operations: map[string]Operation{}}}
 	d.State.ProjectRoot = s.Root
 	orch := Agent{ID("agent"), "orchestrator", "orchestrator", cfg.Defaults.OrchestratorProfile, "orchestrator", "Coordinate the workflow; delegate all code changes to workers."}
 	d.State.OrchestratorAgentID = orch.ID
@@ -462,14 +475,14 @@ func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error)
 	if err := atomicWrite(filepath.Join(dir, "inputs", "issue.md"), []byte(opt.Input)); err != nil {
 		return Status{}, err
 	}
-	if err := s.snapshotTemplates(d, opt.Workflow); err != nil {
+	if err := s.snapshotTemplates(d, opt.Workflow, opt.NoWorkflow); err != nil {
 		return Status{}, err
 	}
 	if d.State.Workflow != nil {
 		orch.Profile = workflowProfile(cfg, d, "orchestrator", orch.Profile)
 		d.Registry.Agents[0] = orch
 	}
-	body, err := s.render("WORKSPACE.md.tmpl", d.State)
+	body, err := s.render("WORKSPACE.md.tmpl", agentPromptData{Workspace: d.State, Manual: opt.NoWorkflow})
 	if err != nil {
 		return Status{}, err
 	}
@@ -522,15 +535,24 @@ func (s *Service) render(name string, data any) ([]byte, error) {
 	}
 	return out.Bytes(), nil
 }
-func (s *Service) snapshotTemplates(d *Document, workflow string) error {
-	a, err := s.render("orchestrator.AGENTS.md.tmpl", d.State)
+
+// agentPromptData carries the workspace state plus the creation mode so shared
+// role instructions can avoid referencing a workflow that is intentionally absent.
+type agentPromptData struct {
+	Workspace
+	Manual bool
+}
+
+func (s *Service) snapshotTemplates(d *Document, workflow string, manual bool) error {
+	data := agentPromptData{Workspace: d.State, Manual: manual}
+	a, err := s.render("orchestrator.AGENTS.md.tmpl", data)
 	if err != nil {
 		return err
 	}
 	if err := atomicWrite(filepath.Join(d.Dir, "AGENTS.md"), a); err != nil {
 		return err
 	}
-	worker, err := s.render("worker.AGENTS.md.tmpl", d.State)
+	worker, err := s.render("worker.AGENTS.md.tmpl", data)
 	if err != nil {
 		return err
 	}
@@ -538,7 +560,15 @@ func (s *Service) snapshotTemplates(d *Document, workflow string) error {
 		return err
 	}
 	w := []byte("# Select a workflow\n\nAsk the user to select one of the available workflows before delegating work.\n")
-	if workflow != "" {
+	promptDir := filepath.Join(s.Root, ".workspace", "templates", "workflows", workflow)
+	switch {
+	case manual:
+		promptDir = filepath.Join(s.Root, ".workspace", "templates", "manual")
+		w, err = s.render("manual/WORKFLOW.md.tmpl", d.State)
+		if err != nil {
+			return err
+		}
+	case workflow != "":
 		cfg, err := s.Config()
 		if err != nil {
 			return err
@@ -553,13 +583,11 @@ func (s *Service) snapshotTemplates(d *Document, workflow string) error {
 		}
 		d.State.Workflow = &Workflow{workflow, 1, digest(w), "planning"}
 		d.State.Status = "active"
+	default:
+		promptDir = filepath.Join(s.Root, ".workspace", "templates", "workflows", exampleWorkflow)
 	}
 	if err := atomicWrite(filepath.Join(d.Dir, "WORKFLOW.md"), w); err != nil {
 		return err
-	}
-	promptDir := filepath.Join(s.Root, ".workspace", "templates", "workflows", workflow)
-	if workflow == "" {
-		promptDir = filepath.Join(s.Root, ".workspace", "templates", "workflows", exampleWorkflow)
 	}
 	entries, err := os.ReadDir(filepath.Join(promptDir, "prompts"))
 	if err != nil {
@@ -637,7 +665,7 @@ func (s *Service) selectWorkflow(ctx context.Context, selector, name string, exp
 			return nil
 		}
 		// Snapshot files first; repeating selection after interruption is safe.
-		if err := s.snapshotTemplates(d, name); err != nil {
+		if err := s.snapshotTemplates(d, name, false); err != nil {
 			return err
 		}
 		if err := saveDocument(d); err != nil {

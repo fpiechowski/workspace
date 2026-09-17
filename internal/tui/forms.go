@@ -264,9 +264,26 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 	return m.openConfirm(action)
 }
 
+// createManualChoice is the in-form sentinel for the explicit no-workflow
+// creation option. It cannot collide with a workflow name because core
+// validateName rejects names that do not start with a lowercase letter.
+const createManualChoice = "<manual>"
+
+// createWorkflowChoice splits the creation selector value into the workflow
+// name and the explicit no-workflow mode passed to core.CreateOptions.
+func createWorkflowChoice(choice string) (string, bool) {
+	if choice == createManualChoice {
+		return "", true
+	}
+	return choice, false
+}
+
 func (m *Model) openCreateWorkspaceForm(names []string) tea.Cmd {
 	m.formTitle, m.formInput, m.formWorkflow = "", "", ""
-	options := []huh.Option[string]{huh.NewOption("Choose later", "")}
+	options := []huh.Option[string]{
+		huh.NewOption("Choose later", ""),
+		huh.NewOption("No workflow (manual orchestration)", createManualChoice),
+	}
 	for _, name := range names {
 		options = append(options, huh.NewOption(sanitizeLine(name), name))
 	}
@@ -358,7 +375,7 @@ func (m *Model) updateForm(message tea.Msg) (tea.Model, tea.Cmd) {
 	if mode == "create_workspace" {
 		m.formAction.TargetName = strings.TrimSpace(m.form.GetString("title"))
 		m.formAction.Input = strings.TrimSpace(m.form.GetString("input"))
-		m.formAction.Workflow = m.form.GetString("workflow")
+		m.formAction.Workflow, m.formAction.NoWorkflow = createWorkflowChoice(m.form.GetString("workflow"))
 		m.form = nil
 		m.formMode = ""
 		return m, tea.Batch(cmd, m.runAction(m.formAction))

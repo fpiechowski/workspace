@@ -102,6 +102,50 @@ func TestCreateAcceptsIntentArgument(t *testing.T) {
 	}
 }
 
+func TestCreateSupportsExplicitNoWorkflowMode(t *testing.T) {
+	project := t.TempDir()
+	ctx := context.Background()
+	for _, args := range [][]string{
+		{"init"},
+		{"-c", "user.name=Workspace Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"},
+	} {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = project
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	if _, err := core.InitProject(ctx, project); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := Execute([]string{"--json", "--project", project, "create", "--no-workflow", "manual orchestration"}, nil, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("manual create failed: %d %s", code, errOut.String())
+	}
+	var response struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.OK || response.Data.Workspace.Status != "active" || response.Data.Workspace.Workflow != nil || !response.Data.Workspace.Manual() {
+		t.Fatalf("manual create response: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = Execute([]string{"--json", "--project", project, "create", "--workflow", "plan-first", "--no-workflow", "conflict"}, nil, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("conflicting create succeeded: %d %s", code, out.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte(`"code":"invalid_option"`)) {
+		t.Fatalf("conflicting create did not report invalid_option: %s", out.String())
+	}
+}
+
 func TestWorkspaceShortNamesAndSelector(t *testing.T) {
 	workspaces := []core.Status{
 		{Workspace: core.Workspace{ID: "ws_one", Title: "First", Status: "active"}},

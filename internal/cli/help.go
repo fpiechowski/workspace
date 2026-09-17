@@ -93,8 +93,8 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace doctor --json",
 	),
 	"workspace create": h(
-		"Create a workspace from an issue URL, a saved input file or one inline intent. One input source is required; the input and its source are snapshotted before orchestration begins.",
-		"workspace create --issue https://github.com/OWNER/REPO/issues/142 --workflow plan-first\nworkspace create \"Improve workspace creation\" --workflow plan-first",
+		"Create a workspace from an issue URL, a saved input file or one inline intent. One input source is required; the input and its source are snapshotted before orchestration begins. Omit --workflow to choose a workflow later, or pass --no-workflow for explicit manual orchestration.",
+		"workspace create --issue https://github.com/OWNER/REPO/issues/142 --workflow plan-first\nworkspace create \"Improve workspace creation\" --no-workflow",
 		optionalArgument("intent", "Issue or task description supplied inline; do not combine it with --input-file."),
 	),
 	"workspace list": h(
@@ -513,11 +513,12 @@ var flagHelpSpecs = map[string]map[string]string{
 	"workspace list":          {"map": "Alias for --short; print a compact name-to-ID map."},
 	"workspace skill install": {"client": "Client discovery target: codex, claude or opencode."},
 	"workspace create": {
-		"title":      "Workspace title shown in selectors and compact output.",
-		"input-file": "File containing the saved issue or task description.",
-		"issue":      "Issue URL; fetch it from the configured tracker unless intent or --input-file is supplied.",
-		"workflow":   "Configured workflow name; omit it to let the orchestrator ask for a choice.",
-		"base":       "Base Git revision to freeze for the workspace.",
+		"title":       "Workspace title shown in selectors and compact output.",
+		"input-file":  "File containing the saved issue or task description.",
+		"issue":       "Issue URL; fetch it from the configured tracker unless intent or --input-file is supplied.",
+		"workflow":    "Configured workflow name; omit it to choose a workflow later.",
+		"no-workflow": "Create an active workspace with no workflow for manual orchestration; cannot be combined with --workflow.",
+		"base":        "Base Git revision to freeze for the workspace.",
 	},
 	"workspace workflow advance": {"to": "Expected next phase; fail if the workflow would advance from a different phase."},
 	"workspace workflow migrate": {

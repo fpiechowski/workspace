@@ -325,7 +325,8 @@ func newRoot(o *options) *cobra.Command {
 	createCmd.Flags().StringVar(&create.Title, "title", "", "Workspace title")
 	createCmd.Flags().StringVar(&inputFile, "input-file", "", "Saved issue/description file")
 	createCmd.Flags().StringVar(&create.Source, "issue", "", "Issue URL; fetch from configured tracker unless an intent or --input-file is supplied")
-	createCmd.Flags().StringVar(&create.Workflow, "workflow", "", "Workflow name; omit to ask the orchestrator")
+	createCmd.Flags().StringVar(&create.Workflow, "workflow", "", "Workflow name; omit to choose a workflow later")
+	createCmd.Flags().BoolVar(&create.NoWorkflow, "no-workflow", false, "Create an active workspace with no workflow for manual orchestration")
 	createCmd.Flags().StringVar(&create.Base, "base", "HEAD", "Base Git revision")
 	root.AddCommand(createCmd)
 	listCmd := command("list", "List workspaces", func(c *cobra.Command, _ []string) error {
