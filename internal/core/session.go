@@ -205,6 +205,12 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				}
 			}
 			logical = prior
+			if prior.ClientSnapshot.Adapter == "opencode" && prior.ClientThreadID == "" {
+				thread, err = s.recoverOpenCodeBinding(ctx, d, prior)
+				if err != nil {
+					return err
+				}
+			}
 			// A logical Session owns its client snapshot. Keep the client identity
 			// stable across Runs even if the project config has since changed; a
 			// missing executable still fails at the normal LookPath gate.
@@ -329,6 +335,9 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		launchArgv := client.LaunchArgv
 		if thread != "" && client.Adapter != "codex" {
 			if len(client.ResumeArgv) == 0 {
+				if client.Adapter == "opencode" {
+					return fail("opencode_resume_unavailable", "OpenCode session %s has a native thread but no resume_argv; configure the client before retrying", logical.ID)
+				}
 				thread = ""
 			} else {
 				launchArgv = client.ResumeArgv

@@ -32,6 +32,18 @@ historical bundled argv `python3 {project_dir}/scripts/opencode-deliver.py {thre
 delivery; similar or custom wrappers are not changed. Explicit non-native configurations
 remain readable and keep their configured generic adapter behavior.
 
+OpenCode discovery normalizes both the run-scoped HTTP payload (`time.created` and
+`time.updated`) and the flat executable-list payload. If a Run-scoped endpoint is
+unready or expired, discovery falls back to the recorded `opencode session list`
+executable and still applies the CWD, baseline and unique-ownership filters. When an
+older idle OpenCode Session has historical Runs but no persisted native ID, resume
+correlates candidates to Runs by normalized CWD and a bounded post-start window. It
+binds the earliest unambiguous historical conversation to both the logical Session
+and its matching Run before creating the successor. Ambiguous or unavailable recovery
+fails closed with an instruction to use `workspace session bind-thread`; an empty
+successful history keeps the fresh-start path, whose new conversation is bound by
+normal discovery.
+
 `client_thread_id` is not a workspace identity or mailbox address. The binding is
 unique across active logical Sessions for the same adapter. Manual binding, Codex
 thread initialization, OpenCode discovery, and resume all enforce that rule. Delivery

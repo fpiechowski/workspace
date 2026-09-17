@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 )
@@ -175,6 +176,11 @@ func argIndex(argv []string, value string) int {
 const (
 	openCodeDiscoveryTimeout  = 30 * time.Second
 	openCodeDiscoveryInterval = 200 * time.Millisecond
+	// A native session created by a Run should appear shortly after the Run
+	// starts. The repair path is deliberately narrower than an arbitrary
+	// historical search so an old conversation cannot be attached silently.
+	openCodeRecoveryClockSkew = time.Second
+	openCodeRecoveryWindow    = 30 * time.Second
 )
 
 type openCodeSession struct {
@@ -182,6 +188,36 @@ type openCodeSession struct {
 	Directory string `json:"directory"`
 	Created   int64  `json:"created"`
 	Updated   int64  `json:"updated"`
+}
+
+// UnmarshalJSON normalizes the two OpenCode session-list shapes we need to
+// consume. The run-scoped HTTP endpoint nests timestamps under time, while
+// `opencode session list --format json` emits them at the top level.
+func (s *openCodeSession) UnmarshalJSON(data []byte) error {
+	var payload struct {
+		ID        string `json:"id"`
+		Directory string `json:"directory"`
+		Created   int64  `json:"created"`
+		Updated   int64  `json:"updated"`
+		Time      *struct {
+			Created int64 `json:"created"`
+			Updated int64 `json:"updated"`
+		} `json:"time"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	s.ID, s.Directory = payload.ID, payload.Directory
+	s.Created, s.Updated = payload.Created, payload.Updated
+	if payload.Time != nil {
+		if s.Created == 0 {
+			s.Created = payload.Time.Created
+		}
+		if s.Updated == 0 {
+			s.Updated = payload.Time.Updated
+		}
+	}
+	return nil
 }
 
 type openCodeSessionLister func(context.Context, Session) ([]openCodeSession, error)
@@ -264,20 +300,40 @@ func (s *Service) listOpenCodeSessions(ctx context.Context, session Session, env
 	if s.openCodeSessionLister != nil {
 		return s.openCodeSessionLister(ctx, session)
 	}
+	var endpointErr error
 	if session.OpenCodeEndpoint != "" {
 		data, status, err := s.openCodeHTTP(ctx, session.OpenCodeEndpoint, http.MethodGet, "/session", nil)
-		if err != nil {
-			return nil, err
+		if err == nil && status >= 200 && status < 300 {
+			var sessions []openCodeSession
+			if err := json.Unmarshal(data, &sessions); err == nil {
+				return sessions, nil
+			} else {
+				endpointErr = fmt.Errorf("invalid OpenCode session list: %w", err)
+			}
+		} else if err != nil {
+			endpointErr = fmt.Errorf("OpenCode session endpoint: %w", err)
+		} else {
+			endpointErr = fmt.Errorf("OpenCode session list returned HTTP %d", status)
 		}
-		if status < 200 || status >= 300 {
-			return nil, fmt.Errorf("OpenCode session list returned HTTP %d", status)
+		// Do not turn cancellation into an executable invocation. During normal
+		// discovery, however, an endpoint can be unready or already gone when
+		// the recorded executable can still inspect the shared session store.
+		if ctx.Err() != nil {
+			return nil, endpointErr
 		}
-		var sessions []openCodeSession
-		if err := json.Unmarshal(data, &sessions); err != nil {
-			return nil, fmt.Errorf("invalid OpenCode session list: %w", err)
-		}
+	}
+
+	sessions, executableErr := s.listOpenCodeSessionsExecutable(ctx, session, env)
+	if executableErr == nil {
 		return sessions, nil
 	}
+	if endpointErr != nil {
+		return nil, errors.Join(endpointErr, fmt.Errorf("OpenCode executable fallback: %w", executableErr))
+	}
+	return nil, executableErr
+}
+
+func (s *Service) listOpenCodeSessionsExecutable(ctx context.Context, session Session, env []string) ([]openCodeSession, error) {
 	if len(session.Argv) == 0 || session.Argv[0] == "" {
 		return nil, fmt.Errorf("OpenCode executable is not recorded")
 	}
@@ -306,6 +362,131 @@ func (s *Service) listOpenCodeSessions(ctx context.Context, session Session, env
 	return sessions, nil
 }
 
+// recoverOpenCodeBinding repairs an idle logical Session created by versions
+// that failed to persist the native ID. It runs while StartSession holds the
+// workspace lock, so the binding and its historical Run are committed before
+// a successor Run can be assembled.
+func (s *Service) recoverOpenCodeBinding(ctx context.Context, d *Document, session *Session) (string, error) {
+	if session.ClientSnapshot.Adapter != "opencode" || session.ClientThreadID != "" {
+		return "", nil
+	}
+
+	history := make([]Run, 0)
+	for _, run := range d.Registry.Runs {
+		if run.SessionID == session.ID && run.ClientThreadID == "" && !run.Active() && !run.CreatedAt.IsZero() {
+			history = append(history, run)
+		}
+	}
+	if len(history) == 0 {
+		// There is no previous execution to correlate. The next Run may start a
+		// fresh OpenCode conversation and the normal discovery loop will bind it.
+		return "", nil
+	}
+
+	items, err := s.listOpenCodeSessions(ctx, *session, os.Environ())
+	if err != nil {
+		return "", fail("opencode_thread_recovery", "cannot safely recover the OpenCode conversation for session %s: %v; use `workspace session bind-thread %s --thread-id <thread-id>` and retry", session.ID, err, session.ID)
+	}
+	thread, runID, err := chooseHistoricalOpenCodeThread(items, d, *session, history)
+	if err != nil {
+		return "", err
+	}
+	if thread == "" {
+		// A successful, empty listing means no historical OpenCode process ever
+		// created a native session (or it was outside the bounded correlation
+		// window). Preserve the documented fresh-start behavior.
+		return "", nil
+	}
+
+	r, err := findRun(d, runID)
+	if err != nil {
+		return "", err
+	}
+	if r.ClientThreadID != "" && r.ClientThreadID != thread {
+		return "", fail("opencode_thread_conflict", "historical Run %s is already bound to a different OpenCode conversation", runID)
+	}
+	if session.ClientThreadID != "" && session.ClientThreadID != thread {
+		return "", fail("opencode_thread_conflict", "session %s is already bound to a different OpenCode conversation", session.ID)
+	}
+	session.ClientThreadID = thread
+	r.ClientThreadID = thread
+	if err := saveDocument(d); err != nil {
+		return "", err
+	}
+	return thread, nil
+}
+
+func chooseHistoricalOpenCodeThread(items []openCodeSession, d *Document, session Session, history []Run) (string, string, error) {
+	sort.SliceStable(history, func(i, j int) bool {
+		if history[i].Generation != history[j].Generation {
+			return history[i].Generation < history[j].Generation
+		}
+		if !history[i].CreatedAt.Equal(history[j].CreatedAt) {
+			return history[i].CreatedAt.Before(history[j].CreatedAt)
+		}
+		return history[i].ID < history[j].ID
+	})
+
+	claimed := make(map[string]string)
+	for _, other := range d.Registry.Sessions {
+		if other.ID == session.ID || !other.Active() || other.ClientSnapshot.Adapter != "opencode" {
+			continue
+		}
+		if other.ClientThreadID != "" {
+			claimed[other.ClientThreadID] = other.ID
+		}
+		if other.CurrentRunID != "" {
+			if run, err := findRun(d, other.CurrentRunID); err == nil && run.ClientThreadID != "" {
+				claimed[run.ClientThreadID] = other.ID
+			}
+		}
+	}
+
+	for _, run := range history {
+		cwd := run.CWD
+		if cwd == "" {
+			cwd = session.CWD
+		}
+		matches := make([]openCodeSession, 0)
+		seen := make(map[string]struct{})
+		for _, item := range items {
+			if item.ID == "" || item.Created == 0 || !sameOpenCodePath(item.Directory, cwd) {
+				continue
+			}
+			if _, ok := claimed[item.ID]; ok {
+				continue
+			}
+			if _, ok := seen[item.ID]; ok {
+				continue
+			}
+			created := time.UnixMilli(item.Created)
+			if created.Before(run.CreatedAt.Add(-openCodeRecoveryClockSkew)) || created.After(run.CreatedAt.Add(openCodeRecoveryWindow)) {
+				continue
+			}
+			seen[item.ID] = struct{}{}
+			matches = append(matches, item)
+		}
+		if len(matches) == 0 {
+			continue
+		}
+		if len(matches) > 1 {
+			sort.Slice(matches, func(i, j int) bool {
+				if matches[i].Created != matches[j].Created {
+					return matches[i].Created < matches[j].Created
+				}
+				return matches[i].ID < matches[j].ID
+			})
+			ids := make([]string, len(matches))
+			for i, item := range matches {
+				ids[i] = item.ID
+			}
+			return "", "", fail("opencode_thread_ambiguous", "cannot safely recover session %s: Run %s has multiple OpenCode conversations in its detection window (%s); use `workspace session bind-thread %s --thread-id <thread-id>` and retry", session.ID, run.ID, strings.Join(ids, ", "), session.ID)
+		}
+		return matches[0].ID, run.ID, nil
+	}
+	return "", "", nil
+}
+
 func chooseOpenCodeThread(items []openCodeSession, cwd string, known map[string]struct{}, startedAt time.Time, baselineOK bool) string {
 	var best openCodeSession
 	for _, item := range items {
@@ -326,6 +507,9 @@ func chooseOpenCodeThread(items []openCodeSession, cwd string, known map[string]
 }
 
 func sameOpenCodePath(left, right string) bool {
+	if strings.TrimSpace(left) == "" || strings.TrimSpace(right) == "" {
+		return false
+	}
 	left = cleanOpenCodePath(left)
 	right = cleanOpenCodePath(right)
 	if runtime.GOOS == "windows" {

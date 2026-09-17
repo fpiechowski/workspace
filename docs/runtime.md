@@ -67,6 +67,12 @@ OpenCode Runs expose a unique loopback endpoint owned by that Run. The superviso
 checks readiness, posts the marker-bearing prompt to the active TUI session and confirms
 the marker in session history before recording delivery. A new Run gets a new endpoint;
 the logical Session may retain the same native thread ID.
+OpenCode session discovery accepts both endpoint and executable-list metadata shapes.
+If an old idle logical Session has empty native-thread fields, resume repairs the
+binding from a uniquely correlated historical Run before building the next Run's
+`resume_argv`; an ambiguous or unavailable repair stops with the manual
+`workspace session bind-thread` recovery path instead of silently starting another
+conversation. A successful empty listing still permits a fresh first conversation.
 An active Run migrated from the retired bundled OpenCode transport cannot be repaired in
 place: it has no server flags or Run-scoped endpoint. The supervisor records a durable
 `restart_required` delivery phase, leaves the message unacknowledged and undelivered, and
