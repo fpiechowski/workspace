@@ -259,6 +259,8 @@ func (m *Model) statusRow() string {
 		text = "Working… keep this panel open."
 	case text == "" && (m.snapshotPending || m.projectPending):
 		text = "Refreshing…"
+	case text == "" && m.isDetailPage():
+		text = m.scrollPosition()
 	}
 	if text == "" {
 		return ""

@@ -44,9 +44,10 @@ Status musi pozostawać rozpoznawalny bez barwy.
 ## Typography
 
 Krój i rozmiar pisma wyznacza terminal. Hierarchię tworzą fabryki stylów
-(`titleStyle`, `headingStyle`, `labelStyle`, `metaStyle`, `keycapStyle`,
-`noticeStyle`, `selectedStyle`, `panelStyle`): pogrubiony nagłówek, akcent
-sekcji, przygaszony podtytuł, podświetlenie zaznaczenia i ramka fokusu.
+(`titleStyle`, `headingStyle`, `sectionStyle`, `labelStyle`, `valueStyle`,
+`warningStyle`, `metaStyle`, `keycapStyle`, `noticeStyle`, `selectedStyle`,
+`panelStyle`): pogrubiony nagłówek, akcent sekcji, etykieta i wartość pola,
+ostrzeżenie, przygaszony podtytuł, podświetlenie zaznaczenia i ramka fokusu.
 Szerokości mierzy się w kolumnach terminala, z uwzględnieniem Unicode; długi
 tekst jest skracany przez `…`.
 
@@ -104,6 +105,20 @@ nie tworzy workspace'u.
 **Runtime.** Topologia tmux jest tabelą `bubbles/table` (window, pane, kind,
 owner, run, state) w trybie wide, a w trybie compact tym samym danym w układzie
 wierszy. Błędy runtime i stan zarządzanego interfejsu pozostają nad topologią.
+
+**Szczegóły i podglądy.** Każdy szczegół i podgląd jest dokumentem złożonym z
+jednego zestawu bloków: nagłówka tożsamości i statusu, par etykieta/wartość,
+nagłówków sekcji, punktów, ostrzeżeń `[!]`, linków do powiązanych zasobów oraz
+dyskretnej proveniencji (ID, digest, znaczniki czasu). Kolejność jest stała:
+tożsamość i status, fakty operacyjne, narracja, powiązane zasoby, a na końcu
+proveniencja. Wartości zewnętrzne są sanityzowane przed nadaniem stylu, a długie
+cele, instrukcje, podsumowania, powody, linie poleceń, ścieżki i treści change
+requestów zawijają się do szerokości viewportu, z twardym łamaniem
+nieprzerywalnych tokenów. Jawne znaki nowej linii w tekście podglądu są
+zachowane, a taby rozwijane. Każdy dokument przewija się w istniejącym
+viewportcie (`↑`/`↓`, `PgUp`/`PgDn`); wiersz statusu pokazuje `line x–y of n`
+tylko wtedy, gdy treść przekracza widok, a pozycja przewijania wraca po powrocie
+na trasę.
 
 **Status.** Symbolowi zawsze towarzyszy podpis: `✓` sukces, `×` błąd, `!` blokada,
 `◈` review, `○` oczekiwanie, `■` zatrzymanie lub zamknięcie, `◇` przerwanie lub wyjście.

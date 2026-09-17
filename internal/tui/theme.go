@@ -117,6 +117,15 @@ func (p palette) headingStyle() lipgloss.Style { return p.style(p.accent, true) 
 // labelStyle renders field labels.
 func (p palette) labelStyle() lipgloss.Style { return p.style(p.secondary, true) }
 
+// valueStyle renders field values and narrative document text.
+func (p palette) valueStyle() lipgloss.Style { return p.style(p.primary, false) }
+
+// sectionStyle renders document section headings one level below the page title.
+func (p palette) sectionStyle() lipgloss.Style { return p.style(p.secondary, true) }
+
+// warningStyle renders warning callouts.
+func (p palette) warningStyle() lipgloss.Style { return p.style(p.warning, true) }
+
 // metaStyle renders secondary metadata such as subtitles.
 func (p palette) metaStyle() lipgloss.Style { return p.style(p.secondary, false) }
 

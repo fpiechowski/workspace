@@ -448,9 +448,17 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keybind.Matches(msg, m.keys.Primary[4]):
 		m.navigate(route{Page: "more"})
 	case keybind.Matches(msg, m.keys.Up):
-		m.moveSelection(-1)
+		if m.isCollectionPage() {
+			m.moveSelection(-1)
+		} else {
+			m.viewport.LineUp(1)
+		}
 	case keybind.Matches(msg, m.keys.Down):
-		m.moveSelection(1)
+		if m.isCollectionPage() {
+			m.moveSelection(1)
+		} else {
+			m.viewport.LineDown(1)
+		}
 	case keybind.Matches(msg, m.keys.PageUp):
 		if m.isCollectionPage() {
 			m.moveSelection(-max(1, m.contentHeight()-2))

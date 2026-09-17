@@ -62,7 +62,12 @@ func (m *Model) focusDashboardPanel(delta int) {
 
 func (m *Model) detailContent() string {
 	if m.initialError != "" || m.route.Page == "error" {
-		return safeContent([]string{"Could not load this workspace", m.initialError, "Press w to choose a workspace or q to quit."})
+		doc := newDetailDoc(m.palette, m.detailWidth())
+		doc.title("Workspace", "", "")
+		doc.warning("Could not load this workspace")
+		doc.body(m.initialError)
+		doc.action("Press w to choose a workspace or q to quit.")
+		return doc.render()
 	}
 	if m.route.Page == "preview" {
 		return m.previewContent()
@@ -74,49 +79,71 @@ func (m *Model) detailContent() string {
 		return m.orchestratorContent()
 	}
 	id := m.route.EntityID
-	lines := []string{}
+	doc := newDetailDoc(m.palette, m.detailWidth())
 	switch m.route.Page {
 	case "task":
 		task, ok := m.task(id)
 		if !ok {
-			return missingEntity("task", id)
+			return m.missingEntity("task", id)
 		}
-		lines = append(lines, "Task", task.Title, statusBadge(task.State), m.taskItem(task).Subtitle, "t open / resume terminal", "ID: "+task.ID, fmt.Sprintf("Attempt %d · profile %s · role %s", task.Attempt, task.Profile, task.Role), "", "Goal", task.Goal)
+		doc.title("Task", task.Title, task.State)
+		doc.action("t open / resume terminal")
+		doc.section("Facts")
+		doc.field("Attempt", fmt.Sprint(task.Attempt))
+		doc.field("Profile", task.Profile)
+		doc.field("Role", task.Role)
+		doc.field("Activity", m.taskItem(task).Subtitle)
+		doc.section("Goal")
+		doc.body(task.Goal)
 		if task.Reason != "" {
-			lines = append(lines, "", "Reason", task.Reason)
+			doc.section("Reason")
+			doc.body(task.Reason)
 		}
-		lines = append(lines, "", "Acceptance criteria")
-		lines = append(lines, bulletLines(task.AcceptanceCriteria)...)
-		lines = append(lines, "", "Depends on")
-		lines = append(lines, bulletLines(task.DependsOn)...)
-		lines = append(lines, "", "Required artifacts")
-		lines = append(lines, bulletLines(task.RequiredArtifacts)...)
-		lines = append(lines, "", "Related resources (shortcuts, not primary navigation)", "1 Sessions · 2 Worktrees · 3 Results · f toggles attempt history")
+		doc.section("Acceptance criteria")
+		doc.bullets(task.AcceptanceCriteria)
+		doc.section("Depends on")
+		doc.bullets(task.DependsOn)
+		doc.section("Required artifacts")
+		doc.bullets(task.RequiredArtifacts)
+		doc.section("Related resources")
+		doc.link("Shortcuts, not primary navigation: 1 Sessions · 2 Worktrees · 3 Results · f toggles attempt history")
+		doc.section("Provenance")
+		doc.provenance("ID", task.ID)
 		if task.AcceptedHandoff != "" {
-			lines = append(lines, "Accepted handoff: "+task.AcceptedHandoff)
+			doc.provenance("Accepted handoff", task.AcceptedHandoff)
 		}
 	case "worktree":
 		worktree, ok := findWorktree(m.snapshot.Status.Worktrees, id)
 		if !ok {
-			return missingEntity("worktree", id)
+			return m.missingEntity("worktree", id)
 		}
-		lines = append(lines, "Worktree", worktree.Name, statusBadge(worktree.State), "ID: "+worktree.ID, "Path: "+worktree.Path, "Branch: "+worktree.Branch, "Purpose: "+worktree.Purpose)
+		doc.title("Worktree", worktree.Name, worktree.State)
+		doc.section("Facts")
+		doc.field("Path", worktree.Path)
+		doc.field("Branch", worktree.Branch)
+		doc.field("Purpose", worktree.Purpose)
 		if observation, exists := m.worktreeInspection[id]; exists {
-			lines = append(lines, "", "Git observation · "+formatTime(observation.CheckedAt))
+			doc.section("Git observation")
+			doc.field("Checked", formatTime(observation.CheckedAt))
 			if observation.Error != "" {
-				lines = append(lines, "Error: "+observation.Error)
+				doc.warning(observation.Error)
 			} else {
 				dirty := "clean"
 				if observation.Dirty {
 					dirty = "dirty"
 				}
-				lines = append(lines, "HEAD: "+observation.Head+" · "+dirty)
+				doc.field("HEAD", observation.Head)
+				doc.field("Working tree", dirty)
 			}
 		} else if m.worktreePending {
-			lines = append(lines, "", "Inspecting HEAD and working tree…")
+			doc.section("Git observation")
+			doc.body("Inspecting HEAD and working tree…")
 		}
 		if relation, ok := worktreeRelation(m.snapshot.Relations.Worktrees, id); ok {
-			lines = append(lines, "", "Related task IDs", "  "+strings.Join(relation.TaskIDs, ", "), "Session IDs", "  "+strings.Join(relation.SessionIDs, ", "), "Service IDs", "  "+strings.Join(relation.ServiceIDs, ", "))
+			doc.section("Relations")
+			doc.field("Task IDs", strings.Join(relation.TaskIDs, ", "))
+			doc.field("Session IDs", strings.Join(relation.SessionIDs, ", "))
+			doc.field("Service IDs", strings.Join(relation.ServiceIDs, ", "))
 		}
 		var writers, readers, services []string
 		for _, session := range m.snapshot.Status.Sessions {
@@ -139,17 +166,35 @@ func (m *Model) detailContent() string {
 				services = append(services, firstNonempty(service.Name, service.ID)+" ("+service.ID+")")
 			}
 		}
-		lines = append(lines, "", "Active writer sessions", "  "+firstNonempty(strings.Join(writers, ", "), "none"), "Active read-only sessions", "  "+firstNonempty(strings.Join(readers, ", "), "none"), "Active services", "  "+firstNonempty(strings.Join(services, ", "), "none"))
+		doc.section("Active processes")
+		doc.field("Writers", firstNonempty(strings.Join(writers, ", "), "none"))
+		doc.field("Read-only", firstNonempty(strings.Join(readers, ", "), "none"))
+		doc.field("Services", firstNonempty(strings.Join(services, ", "), "none"))
+		doc.section("Provenance")
+		doc.provenance("ID", worktree.ID)
 	case "session":
 		session, ok := findSession(m.snapshot.Status.Sessions, id)
 		if !ok {
-			return missingEntity("session", id)
+			return m.missingEntity("session", id)
 		}
-		lines = append(lines, "Session", session.AgentSnapshot.Name, statusBadge(session.LifecycleState), "ID: "+session.ID, "Role: "+session.AgentSnapshot.Role, "Profile: "+session.Profile, "Client: "+session.ClientSnapshot.Adapter+" · "+session.Route.Model, "Task: "+session.TaskID+" · attempt "+fmt.Sprint(session.TaskAttempt), "Worktree: "+session.WorktreeID, fmt.Sprintf("Read only: %t", session.ReadOnly), "Current run: "+session.CurrentRunID, "Last run: "+session.LastRunID, "Native thread: "+session.ClientThreadID, "", "Enter opens Run history · g jumps to the current Run")
+		doc.title("Session", session.AgentSnapshot.Name, session.LifecycleState)
+		doc.action("Enter opens Run history · g jumps to the current Run")
+		doc.section("Facts")
+		doc.field("Role", session.AgentSnapshot.Role)
+		doc.field("Profile", session.Profile)
+		doc.field("Client", session.ClientSnapshot.Adapter+" · "+session.Route.Model)
+		doc.field("Task", session.TaskID+" · attempt "+fmt.Sprint(session.TaskAttempt))
+		doc.field("Worktree", session.WorktreeID)
+		doc.field("Read only", fmt.Sprintf("%t", session.ReadOnly))
+		doc.field("Current run", session.CurrentRunID)
+		doc.field("Last run", session.LastRunID)
+		doc.field("Native thread", session.ClientThreadID)
+		doc.section("Provenance")
+		doc.provenance("ID", session.ID)
 	case "run":
 		run, ok := m.run(id)
 		if !ok {
-			return missingEntity("run", id)
+			return m.missingEntity("run", id)
 		}
 		current := false
 		for _, session := range m.snapshot.Status.Sessions {
@@ -158,108 +203,196 @@ func (m *Model) detailContent() string {
 				break
 			}
 		}
-		lines = append(lines, "Run", run.ID, statusBadge(run.State), "Session: "+run.SessionID, "Generation: "+fmt.Sprint(run.Generation), "Current: "+fmt.Sprint(current), "Provider / model: "+run.Route.Provider+" / "+run.Route.Model, "Client: "+run.Route.Client, "Pane / window: "+run.PaneID+" / "+run.WindowID, "Created: "+formatTime(run.CreatedAt), "Finished: "+formatTimePtr(run.FinishedAt), "Exit code: "+formatIntPtr(run.ExitCode), "Client state: "+run.ClientState)
+		doc.title("Run", run.ID, run.State)
+		doc.section("Facts")
+		doc.field("Session", run.SessionID)
+		doc.field("Generation", fmt.Sprint(run.Generation))
+		doc.field("Current", fmt.Sprint(current))
+		doc.field("Provider / model", run.Route.Provider+" / "+run.Route.Model)
+		doc.field("Client", run.Route.Client)
+		doc.field("Pane / window", run.PaneID+" / "+run.WindowID)
 		if run.Error != "" {
-			lines = append(lines, "Error", run.Error)
+			doc.section("Error")
+			doc.warning(run.Error)
 		}
 		if !current {
-			lines = append(lines, "", "This run is historical. Jump is unavailable; open its current Session instead.")
+			doc.warning("This run is historical. Jump is unavailable; open its current Session instead.")
 		}
+		doc.section("Provenance")
+		doc.provenance("Created", formatTime(run.CreatedAt))
+		doc.provenance("Finished", formatTimePtr(run.FinishedAt))
+		doc.provenance("Exit code", formatIntPtr(run.ExitCode))
+		doc.provenance("Client state", run.ClientState)
 	case "agent":
 		agent, ok := findAgent(m.snapshot.Status.Agents, id)
 		if !ok {
-			return missingEntity("agent", id)
+			return m.missingEntity("agent", id)
 		}
-		lines = append(lines, "Agent", agent.Name, "ID: "+agent.ID, "Role: "+agent.Role, "Profile: "+agent.Profile, "", "Instructions", agent.Instructions, "", "Sessions")
+		doc.title("Agent", agent.Name, "")
+		doc.section("Facts")
+		doc.field("Role", agent.Role)
+		doc.field("Profile", agent.Profile)
+		doc.section("Instructions")
+		doc.body(agent.Instructions)
+		doc.section("Sessions")
+		sessions := make([]string, 0)
 		for _, session := range m.snapshot.Status.Sessions {
 			if session.AgentID == id {
-				lines = append(lines, "  "+session.ID+" · "+session.LifecycleState+" · "+session.CurrentRunID)
+				sessions = append(sessions, session.ID+" · "+session.LifecycleState+" · "+session.CurrentRunID)
 			}
 		}
+		doc.bullets(sessions)
+		doc.section("Provenance")
+		doc.provenance("ID", agent.ID)
 	case "service":
 		service, ok := findService(m.snapshot.Services, id)
 		if !ok {
-			return missingEntity("service", id)
+			return m.missingEntity("service", id)
 		}
-		lines = append(lines, "Service", service.Name, statusBadge(service.State), "ID: "+service.ID, "Worktree: "+service.WorktreeID, "CWD: "+service.CWD, "Pane: "+service.PaneID, "Exit code: "+formatIntPtr(service.ExitCode), "", "Command", strings.Join(service.Argv, " "))
+		doc.title("Service", service.Name, service.State)
+		doc.section("Facts")
+		doc.field("Worktree", service.WorktreeID)
+		doc.field("CWD", service.CWD)
+		doc.field("Pane", service.PaneID)
+		doc.field("Exit code", formatIntPtr(service.ExitCode))
+		doc.section("Command")
+		doc.body(strings.Join(service.Argv, " "))
+		doc.section("Provenance")
+		doc.provenance("ID", service.ID)
 	case "artifact":
 		artifact, ok := findArtifact(m.snapshot.Status.Workspace.Artifacts, id)
 		if !ok {
-			return missingEntity("artifact", id)
+			return m.missingEntity("artifact", id)
 		}
-		lines = append(lines, "Artifact", artifact.Name, "ID: "+artifact.ID, "Kind: "+artifact.Kind, "Size: "+fmt.Sprint(artifact.Size), "Digest: "+artifact.Digest, "Source handoff: "+artifact.SourceHandoff, "Task / session / run: "+artifact.TaskID+" / "+artifact.SessionID+" / "+artifact.RunID, "Created: "+formatTime(artifact.CreatedAt), "Enter to preview")
+		doc.title("Artifact", artifact.Name, "")
+		doc.action("Enter to preview")
+		doc.section("Facts")
+		doc.field("Kind", artifact.Kind)
+		doc.field("Size", fmt.Sprint(artifact.Size))
+		doc.section("Provenance")
+		doc.provenance("ID", artifact.ID)
+		doc.provenance("Digest", artifact.Digest)
+		doc.provenance("Source handoff", artifact.SourceHandoff)
+		doc.provenance("Task / session / run", artifact.TaskID+" / "+artifact.SessionID+" / "+artifact.RunID)
+		doc.provenance("Created", formatTime(artifact.CreatedAt))
 	case "handoff":
 		handoff, ok := findHandoff(m.snapshot.Handoffs, id)
 		if !ok {
-			return missingEntity("handoff", id)
+			return m.missingEntity("handoff", id)
 		}
 		state := handoff.State
 		if handoff.Stale {
 			state = "stale · " + state
 		}
-		lines = append(lines, "Handoff", handoff.Outcome, statusBadge(state), "ID: "+handoff.ID, "Task / attempt: "+handoff.TaskID+" / "+fmt.Sprint(handoff.Attempt), "From / to: "+handoff.FromAgent+" / "+handoff.ToAgent, "", "Summary", handoff.Summary, "", "Risks")
-		lines = append(lines, bulletLines(handoff.Risks)...)
+		doc.title("Handoff", handoff.Outcome, state)
+		doc.section("Facts")
+		doc.field("Task / attempt", handoff.TaskID+" / "+fmt.Sprint(handoff.Attempt))
+		doc.field("From / to", handoff.FromAgent+" / "+handoff.ToAgent)
+		doc.section("Summary")
+		doc.body(handoff.Summary)
+		doc.section("Risks")
+		doc.bullets(handoff.Risks)
 		if handoff.Feedback != "" {
-			lines = append(lines, "", "Feedback", handoff.Feedback)
+			doc.section("Feedback")
+			doc.body(handoff.Feedback)
 		}
-		lines = append(lines, "", "Artifacts", strings.Join(handoff.ArtifactIDs, ", "))
+		doc.section("Artifacts")
+		doc.bullets(handoff.ArtifactIDs)
+		doc.section("Provenance")
+		doc.provenance("ID", handoff.ID)
 	case "check":
 		check, ok := findCheck(m.snapshot.Checks, id)
 		if !ok {
-			return missingEntity("check", id)
+			return m.missingEntity("check", id)
 		}
-		lines = append(lines, "Check", check.ID, statusBadge(check.State), fmt.Sprintf("Exit code: %d", check.ExitCode), "Task / attempt: "+check.TaskID+" / "+fmt.Sprint(check.Attempt), "Head: "+check.Head, "End head: "+check.EndHead, "Digest: "+check.Digest, "Command: "+strings.Join(check.Argv, " "), "Enter to preview captured output")
+		doc.title("Check", check.ID, check.State)
+		doc.action("Enter to preview captured output")
+		doc.section("Facts")
+		doc.field("Exit code", fmt.Sprint(check.ExitCode))
+		doc.field("Task / attempt", check.TaskID+" / "+fmt.Sprint(check.Attempt))
+		doc.section("Command")
+		doc.body(strings.Join(check.Argv, " "))
+		doc.section("Provenance")
+		doc.provenance("Head", check.Head)
+		doc.provenance("End head", check.EndHead)
+		doc.provenance("Digest", check.Digest)
 	case "decision":
 		decision, ok := findDecision(m.snapshot.Status.Workspace.Decisions, m.snapshot.Status.Workspace.PendingDecision, id)
 		if !ok {
-			return missingEntity("decision", id)
+			return m.missingEntity("decision", id)
 		}
-		lines = append(lines, "Decision", decision.Question, statusBadge(firstNonempty(decision.Answer, "pending")), "ID: "+decision.ID, "Kind: "+decision.Kind, "Options")
-		lines = append(lines, bulletLines(decision.Options)...)
+		doc.title("Decision", decision.Question, firstNonempty(decision.Answer, "pending"))
+		doc.section("Facts")
+		doc.field("Kind", decision.Kind)
+		doc.section("Options")
+		doc.bullets(decision.Options)
 		if decision.Answer != "" {
-			lines = append(lines, "", "Answer", decision.Answer, "Reason", decision.Reason)
+			doc.section("Answer")
+			doc.body(decision.Answer)
+			doc.field("Reason", decision.Reason)
 		}
+		doc.section("Provenance")
+		doc.provenance("ID", decision.ID)
 	case "change_request":
 		request, ok := findChangeRequest(m.snapshot.Status.Workspace.ChangeRequests, id)
 		if !ok {
-			return missingEntity("change request", id)
+			return m.missingEntity("change request", id)
 		}
-		lines = append(lines, "Change request", request.Title, statusBadge(request.State), "ID: "+request.ID, "Branch: "+request.Branch, "Target: "+request.Target, "Worktree: "+request.WorktreeID, "Head: "+request.HeadCommit, "", "Body", request.Body, "", "URL", request.URL)
+		doc.title("Change request", request.Title, request.State)
+		doc.section("Facts")
+		doc.field("Branch", request.Branch)
+		doc.field("Target", request.Target)
+		doc.field("Worktree", request.WorktreeID)
+		doc.section("Body")
+		doc.body(request.Body)
+		doc.section("URL")
+		doc.body(request.URL)
+		doc.section("Provenance")
+		doc.provenance("ID", request.ID)
+		doc.provenance("Head", request.HeadCommit)
 	case "runtime":
 		return m.runtimeContent()
 	default:
-		return safeContent([]string{m.collectionTitle(), "ID: " + id})
+		doc.title(m.collectionTitle(), "", "")
+		doc.provenance("ID", id)
 	}
-	return safeContent(lines)
+	return doc.render()
 }
 
 func (m *Model) previewContent() string {
 	if m.previewPending {
 		return "Loading preview…"
 	}
+	doc := newDetailDoc(m.palette, m.detailWidth())
+	doc.title("Preview", m.preview.Name, "")
 	if m.loadError != "" {
-		return safeContent([]string{"Preview unavailable", m.loadError, "Esc returns to the resource."})
+		doc.warning("Preview unavailable")
+		doc.body(m.loadError)
+		doc.action("Esc returns to the resource.")
+		return doc.render()
 	}
 	if m.preview.ResourceID == "" {
-		return "Preview unavailable."
+		doc.body("Preview unavailable.")
+		return doc.render()
 	}
-	lines := []string{m.preview.Name, fmt.Sprintf("%d bytes", m.preview.Size)}
+	doc.field("Size", fmt.Sprintf("%d bytes", m.preview.Size))
 	if m.preview.Digest != "" {
-		lines = append(lines, "Digest: "+m.preview.Digest)
+		doc.provenance("Digest", m.preview.Digest)
 	}
 	if m.preview.Binary {
-		lines = append(lines, "Binary file · text preview is unavailable.")
+		doc.warning("Binary file · text preview is unavailable.")
 	}
 	if m.preview.Truncated {
-		lines = append(lines, "[!] Preview truncated at 256 KiB")
+		doc.warning("Preview truncated at 256 KiB")
 	}
 	if m.preview.Warning != "" {
-		lines = append(lines, "[!] "+m.preview.Warning)
+		doc.warning(m.preview.Warning)
 	}
 	if m.preview.Text != "" {
-		lines = append(lines, "", strings.ReplaceAll(m.preview.Text, "\t", "    "))
+		doc.section("Content")
+		doc.body(strings.ReplaceAll(m.preview.Text, "\t", "    "))
 	}
-	return safeContent(lines)
+	return doc.render()
 }
 
 // runtimeRow is one comparison row shared by the wide table and the compact
@@ -380,63 +513,88 @@ func runtimeStacked(rows []runtimeRow) []string {
 }
 
 func (m *Model) runtimeContent() string {
-	lines := []string{"Runtime", "Workspace tmux: " + statusBadge(m.runtime.State), "Supervisor: " + statusBadge(m.runtime.SupervisorState)}
+	doc := newDetailDoc(m.palette, m.detailWidth())
+	doc.title("Runtime", "", "")
+	doc.section("Facts")
+	doc.field("Workspace tmux", m.runtime.State)
+	doc.field("Supervisor", m.runtime.SupervisorState)
 	if m.uiError != "" {
-		lines = append(lines, "Managed interface status error: "+m.uiError)
+		doc.warning("Managed interface status error: " + m.uiError)
 	} else {
-		lines = append(lines, "Managed interface: "+statusBadge(m.uiStatus.State)+fmt.Sprintf(" · desired %t", m.uiStatus.Desired))
+		doc.field("Managed interface", m.uiStatus.State)
+		doc.field("Desired", fmt.Sprintf("%t", m.uiStatus.Desired))
 		if m.uiStatus.PaneID != "" || m.uiStatus.WindowID != "" {
-			lines = append(lines, "UI pane / window: "+m.uiStatus.PaneID+" / "+m.uiStatus.WindowID)
+			doc.field("UI pane / window", m.uiStatus.PaneID+" / "+m.uiStatus.WindowID)
 		}
 		if m.uiStatus.LastError != "" {
-			lines = append(lines, "Managed interface error: "+m.uiStatus.LastError)
+			doc.warning("Managed interface error: " + m.uiStatus.LastError)
 		}
 		if m.uiStatus.NextRetryAt != nil {
-			lines = append(lines, "Managed interface retry: "+formatTime(*m.uiStatus.NextRetryAt))
+			doc.field("Managed interface retry", formatTime(*m.uiStatus.NextRetryAt))
 		}
 	}
 	if m.runtimeError != "" {
-		lines = append(lines, "Runtime error: "+m.runtimeError)
+		doc.warning("Runtime error: " + m.runtimeError)
 	}
 	if m.runtime.SupervisorError != "" {
-		lines = append(lines, "Supervisor error: "+m.runtime.SupervisorError)
+		doc.warning("Supervisor error: " + m.runtime.SupervisorError)
 	}
-	lines = append(lines, "Observed: "+formatTime(m.runtime.ObservedAt), "Session: "+m.runtime.Topology.SessionName)
-	header := safeContent(lines)
+	doc.field("Observed", formatTime(m.runtime.ObservedAt))
+	doc.field("Session", m.runtime.Topology.SessionName)
 	rows := m.runtimeRows()
 	if len(rows) == 0 {
-		return header + "\nNo tmux windows were observed."
+		doc.section("Topology")
+		doc.body("No tmux windows were observed.")
+		return doc.render()
 	}
+	doc.section("Topology")
 	if layoutFor(m.width, m.height) == layoutWide {
-		return header + "\n" + strings.Join(m.runtimeTable(rows), "\n")
+		doc.raw(m.runtimeTable(rows)...)
+	} else {
+		doc.raw(runtimeStacked(rows)...)
 	}
-	return header + "\n" + strings.Join(runtimeStacked(rows), "\n")
+	return doc.render()
 }
 
 func (m *Model) orchestratorContent() string {
 	session, run := m.orchestrator()
+	doc := newDetailDoc(m.palette, m.detailWidth())
 	if session == nil {
-		return "Orchestrator\nNo orchestrator session is recorded."
+		doc.title("Orchestrator", "", "")
+		doc.body("No orchestrator session is recorded.")
+		return doc.render()
 	}
-	lines := []string{"Orchestrator", session.AgentSnapshot.Name, statusBadge(session.LifecycleState), "Workspace: " + m.workspaceID, "Directory: " + m.snapshot.Status.Directory, "Session: " + session.ID, "Current run: " + session.CurrentRunID, "Last run: " + session.LastRunID}
+	doc.title("Orchestrator", session.AgentSnapshot.Name, session.LifecycleState)
+	doc.section("Facts")
+	doc.field("Workspace", m.workspaceID)
+	doc.field("Directory", m.snapshot.Status.Directory)
+	doc.field("Session", session.ID)
+	doc.field("Current run", session.CurrentRunID)
+	doc.field("Last run", session.LastRunID)
 	if run != nil {
-		lines = append(lines, "", "Run", statusBadge(run.State), "Model: "+run.Route.Model, "Provider: "+run.Route.Provider, "Pane / window: "+run.PaneID+" / "+run.WindowID)
+		doc.section("Run")
+		doc.field("State", statusBadge(run.State))
+		doc.field("Model", run.Route.Model)
+		doc.field("Provider", run.Route.Provider)
+		doc.field("Pane / window", run.PaneID+" / "+run.WindowID)
 	}
 	uiState := m.uiStatus.State
 	if uiState == "" {
 		uiState = "unknown"
 	}
-	lines = append(lines, "", "Managed UI", "State: "+statusBadge(uiState), fmt.Sprintf("Desired: %t · generation %d", m.uiStatus.Desired, m.uiStatus.Generation))
+	doc.section("Managed UI")
+	doc.field("State", statusBadge(uiState))
+	doc.field("Desired", fmt.Sprintf("%t · generation %d", m.uiStatus.Desired, m.uiStatus.Generation))
 	if m.uiStatus.PaneID != "" || m.uiStatus.WindowID != "" {
-		lines = append(lines, "Pane / window: "+m.uiStatus.PaneID+" / "+m.uiStatus.WindowID)
+		doc.field("Pane / window", m.uiStatus.PaneID+" / "+m.uiStatus.WindowID)
 	}
 	if m.uiError != "" {
-		lines = append(lines, "Status error: "+m.uiError)
+		doc.warning("Status error: " + m.uiError)
 	} else if m.uiStatus.LastError != "" {
-		lines = append(lines, "Error: "+m.uiStatus.LastError)
+		doc.warning("Error: " + m.uiStatus.LastError)
 	}
-	lines = append(lines, "g jumps to a verified live orchestrator pane")
-	return safeContent(lines)
+	doc.action("g jumps to a verified live orchestrator pane")
+	return doc.render()
 }
 
 func (m *Model) quickDetails(kind, id string) []string {
@@ -487,19 +645,15 @@ func safeContent(lines []string) string {
 	return strings.Join(lines, "\n")
 }
 
-func bulletLines(values []string) []string {
-	if len(values) == 0 {
-		return []string{"  —"}
-	}
-	out := make([]string, len(values))
-	for i, value := range values {
-		out[i] = "  · " + value
-	}
-	return out
-}
-
-func missingEntity(kind, id string) string {
-	return safeContent([]string{strings.Title(kind) + " no longer exists", "ID: " + id, "The selection has changed. Press Esc to return.", "Press r to refresh."})
+func (m *Model) missingEntity(kind, id string) string {
+	label := strings.Title(kind)
+	doc := newDetailDoc(m.palette, m.detailWidth())
+	doc.title(label, "", "")
+	doc.warning(label + " no longer exists")
+	doc.provenance("ID", id)
+	doc.body("The selection has changed. Press Esc to return.")
+	doc.action("Press r to refresh.")
+	return doc.render()
 }
 
 func findWorktree(values []core.Worktree, id string) (core.Worktree, bool) {

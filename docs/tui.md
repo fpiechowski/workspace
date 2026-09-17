@@ -47,6 +47,18 @@ Artefakt bez możliwego do ustalenia lineage jest oznaczony jako unknown i widoc
 w historii. Detail Worktree pokazuje powiązane zadania/sesje/usługi, aktywnych writerów
 i read-only readerów oraz osobną, oznaczoną czasem obserwację Git.
 
+Szczegóły zadań, sesji, runów, worktrees, handoffów, checków, decyzji, change
+requestów, runtime'u i orkiestratora oraz podglądy plików są dokumentami o stałej
+hierarchii: najpierw tożsamość i status, potem fakty operacyjne, dalej sekcje
+narracyjne i powiązane zasoby, a na końcu ID, digesty i znaczniki czasu. Długie
+cele, instrukcje, podsumowania, powody, linie poleceń, ścieżki i treści change
+requestów zawijają się do szerokości viewportu, a nieprzerywalne tokeny są
+łamane; jawne znaki nowej linii w podglądzie pozostają zachowane. Treść binarna
+lub obcięta ma jawny komunikat `[!]`, a brak encji — komunikat odzyskania z `Esc`
+i `r`. Każdy dokument przewija się strzałkami lub `PgUp`/`PgDn`; wiersz statusu
+pokazuje `line x–y of n` tylko przy przewijaniu, a pozycja wraca po powrocie z
+innej trasy.
+
 `Enter` otwiera zaznaczenie, a `Esc` wraca lub czyści filtr. Na kolekcjach `/` edytuje
 filtr substring po nazwie, ID i podtytule; porównanie nie rozróżnia wielkości liter.
 `Esc` podczas edycji przywraca poprzednią wartość i zaznaczenie. Poza edycją czyści najpierw filtr tekstowy, następnie statusowy, zanim wróci do poprzedniej strony. `f` przełącza aktywny/archiwalny

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -120,4 +121,26 @@ func (m *Model) contentHeight() int {
 		rows--
 	}
 	return max(1, rows)
+}
+
+// detailWidth is the wrapping width for detail and preview documents. It
+// follows the content viewport so wrapped text never overflows it.
+func (m *Model) detailWidth() int {
+	if m.viewport.Width > 0 {
+		return m.viewport.Width
+	}
+	return max(1, m.width-4)
+}
+
+// scrollPosition reports the visible window of an overflowing viewport. It
+// returns "" when all content fits, so the indicator only appears on overflow.
+func (m *Model) scrollPosition() string {
+	total := m.viewport.TotalLineCount()
+	visible := m.viewport.VisibleLineCount()
+	if total <= visible {
+		return ""
+	}
+	top := m.viewport.YOffset
+	bottom := min(total, top+visible)
+	return fmt.Sprintf("line %d–%d of %d", top+1, bottom, total)
 }
