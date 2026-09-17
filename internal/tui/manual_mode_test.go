@@ -35,7 +35,7 @@ func TestManualWorkspaceHeaderAndActions(t *testing.T) {
 		t.Fatalf("manual label missing from the header:\n%s", view)
 	}
 	values := actionValues(t, m)
-	for _, action := range []string{"pause", "pause_interrupt"} {
+	for _, action := range []string{"pause", "pause_interrupt", "complete_workspace"} {
 		if !values[action] {
 			t.Fatalf("manual actions missing %q: %+v", action, values)
 		}
@@ -51,6 +51,18 @@ func TestManualWorkspaceHeaderAndActions(t *testing.T) {
 	}
 }
 
+// A completed manual workspace offers archive and no longer offers completion.
+func TestCompletedManualWorkspaceOffersArchive(t *testing.T) {
+	m := workspaceState("ws_manual", "completed")
+	values := actionValues(t, m)
+	if !values["archive_workspace"] {
+		t.Fatalf("completed manual actions missing archive: %+v", values)
+	}
+	if values["complete_workspace"] {
+		t.Fatalf("completed manual workspace still offered completion: %+v", values)
+	}
+}
+
 // A pending creation choice still offers workflow selection and is not labeled
 // as manual.
 func TestPendingWorkspaceOffersSelectionNotManual(t *testing.T) {
@@ -58,6 +70,9 @@ func TestPendingWorkspaceOffersSelectionNotManual(t *testing.T) {
 	values := actionValues(t, m)
 	if !values["select_workflow"] {
 		t.Fatalf("pending actions lost workflow selection: %+v", values)
+	}
+	if values["complete_workspace"] {
+		t.Fatalf("pending workspace offered manual completion: %+v", values)
 	}
 	if view := m.View(); strings.Contains(view, "manual") {
 		t.Fatalf("pending workspace was labeled manual:\n%s", view)

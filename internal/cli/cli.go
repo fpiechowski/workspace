@@ -512,7 +512,25 @@ func newRoot(o *options) *cobra.Command {
 		}
 		root.AddCommand(lifecycle)
 	}
-	root.AddCommand(command("archive", "Archive a released workspace", func(c *cobra.Command, _ []string) error {
+	var completeReason string
+	var completeConfirmed bool
+	var completeExpected int
+	complete := command("complete", "Complete an intentionally manual workspace after explicit user confirmation", func(c *cobra.Command, _ []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.CompleteWorkspace(c.Context(), id, core.CompleteOptions{Reason: completeReason, UserConfirmed: completeConfirmed, ExpectedRevision: completeExpected}, o.key)
+		if err != nil {
+			return err
+		}
+		return o.emit(v)
+	})
+	complete.Flags().StringVar(&completeReason, "reason", "", "Reason recorded for the completion")
+	complete.Flags().BoolVar(&completeConfirmed, "user-confirmed", false, "Attest that the user explicitly requested completion when running from an agent session")
+	complete.Flags().IntVar(&completeExpected, "expected-revision", 0, "Required current workspace revision")
+	root.AddCommand(complete)
+	root.AddCommand(command("archive", "Archive a completed workspace", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err

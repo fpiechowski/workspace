@@ -480,8 +480,12 @@ var commandHelpSpecs = map[string]commandHelp{
 		"Resume delegation for a paused workspace.",
 		"workspace resume",
 	),
+	"workspace complete": h(
+		"Complete an intentionally manual workspace after the user explicitly confirms it. The workspace must have no active Runs, services or non-accepted tasks; a workspace with a selected workflow uses release confirmation instead.",
+		"workspace complete --reason \"Analysis delivered\" --user-confirmed",
+	),
 	"workspace archive": h(
-		"Archive a released workspace so it can no longer receive normal delegation operations.",
+		"Archive a completed workspace so it can no longer receive normal delegation operations. A workflow workspace requires a confirmed release; a completed manual workspace does not.",
 		"workspace archive",
 	),
 	"workspace clean": h(
@@ -583,6 +587,7 @@ var flagHelpSpecs = map[string]map[string]string{
 		"user-confirmed":    "Attest that this answer was explicitly supplied by the user.",
 	},
 	"workspace release confirm":        {"reference": "Release or deployment reference (required).", "user-confirmed": "Attest explicit user release confirmation when running from an agent session."},
+	"workspace complete":               {"reason": "Reason recorded for the completion.", "user-confirmed": "Attest the explicit user completion request when running from an agent session.", "expected-revision": "Required current workspace revision."},
 	"workspace state update":           {"patch-file": "YAML/JSON patch for title, body, status or phase (required).", "expected-revision": "Required current workspace revision (required)."},
 	"workspace state edit":             {"file": "Import an edited WORKSPACE.md instead of opening EDITOR.", "expected-revision": "Required revision when using --file."},
 	"workspace change-request prepare": {"worktree": "Worktree to diff; defaults to integration.", "target": "Target branch.", "title": "Change-request title.", "body-file": "Change-request description file."},

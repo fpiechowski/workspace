@@ -75,7 +75,17 @@ func (s *Service) archive(ctx context.Context, selector string, expectedRevision
 			out = d.Status()
 			return nil
 		}
-		if d.State.Status != "completed" || !d.State.Release.UserConfirmed {
+		if d.State.Status != "completed" {
+			if d.State.Manual() {
+				return fail("workspace_not_completed", "complete this manual workspace before archiving")
+			}
+			return fail("release_required", "confirm release before archiving")
+		}
+		// A workflow workspace still requires the explicit release confirmation.
+		// An intentionally manual workspace reaches completed only through the
+		// dedicated user-confirmed complete operation, so archive does not ask
+		// for a workflow release reference (user decision 2026-09-17).
+		if !d.State.Release.UserConfirmed && !d.State.Manual() {
 			return fail("release_required", "confirm release before archiving")
 		}
 		for _, p := range d.Registry.Services {

@@ -96,7 +96,7 @@ func TestManualWorkspaceMenuModes(t *testing.T) {
 	if menu.Phase != "manual" {
 		t.Fatalf("manual menu phase: %q", menu.Phase)
 	}
-	for _, id := range []string{"status", "sessions", "artifacts", "inbox", "pause"} {
+	for _, id := range []string{"status", "sessions", "artifacts", "inbox", "pause", "complete"} {
 		if !menuHas(menu, id) {
 			t.Fatalf("manual menu is missing %q: %+v", id, menu.Actions)
 		}

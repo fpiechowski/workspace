@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -404,5 +405,74 @@ func TestHelpSuffixPrecedenceAndLiteralEscape(t *testing.T) {
 	}
 	if got := normalizeHelpArgs([]string{"_session-exec", "help"}); !reflect.DeepEqual(got, []string{"_session-exec", "help"}) {
 		t.Fatalf("internal runner arguments were changed: %#v", got)
+	}
+}
+
+func TestCompleteAndArchiveManualWorkspace(t *testing.T) {
+	project := t.TempDir()
+	ctx := context.Background()
+	for _, args := range [][]string{
+		{"init"},
+		{"-c", "user.name=Workspace Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"},
+	} {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = project
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	if _, err := core.InitProject(ctx, project); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"--json", "--project", project, "create", "--no-workflow", "manual completion CLI"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("manual create failed: %d %s", code, errOut.String())
+	}
+	var created struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	ws := created.Data.Workspace.ID
+	revision := created.Data.Workspace.Revision
+
+	out.Reset()
+	errOut.Reset()
+	args := []string{
+		"--json", "--project", project, "complete", "--workspace", ws,
+		"--reason", "analysis delivered", "--expected-revision", strconv.Itoa(revision),
+		"--operation-key", "complete:1",
+	}
+	if code := Execute(args, nil, &out, &errOut); code != 0 {
+		t.Fatalf("complete failed: %d %s", code, errOut.String())
+	}
+	var completed struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &completed); err != nil {
+		t.Fatal(err)
+	}
+	if !completed.OK || completed.Data.Workspace.Status != "completed" || !completed.Data.Workspace.Manual() {
+		t.Fatalf("complete response: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Execute([]string{"--json", "--project", project, "archive", "--workspace", ws, "--operation-key", "archive:1"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("archive failed: %d %s", code, errOut.String())
+	}
+	var archived struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &archived); err != nil {
+		t.Fatal(err)
+	}
+	if archived.Data.Workspace.Status != "archived" {
+		t.Fatalf("archive response: %s", out.String())
 	}
 }

@@ -90,6 +90,9 @@ func (b CoreBackend) PerformAction(ctx context.Context, selector string, call Ac
 	case "archive_workspace":
 		_, err := b.Service.ArchiveGuarded(ctx, selector, call.Key, call.ExpectedRevision)
 		return err
+	case "complete_workspace":
+		_, err := b.Service.CompleteWorkspace(ctx, selector, core.CompleteOptions{Reason: call.Reason, ExpectedRevision: call.ExpectedRevision}, call.Key)
+		return err
 	case "pause":
 		_, err := b.Service.SetPausedGuarded(ctx, selector, true, call.Key, core.MutationGuard{ExpectedRevision: call.ExpectedRevision})
 		return err

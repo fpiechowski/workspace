@@ -472,16 +472,20 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 			return nil
 		}
 		if d.State.Manual() {
-			// Manual mode has no phase, selection or advance action. It only
-			// exposes ordinary inspection plus the pause/resume lifecycle.
+			// Manual mode has no phase, selection or advance action. It exposes
+			// ordinary inspection plus the guarded pause/resume and
+			// complete/archive lifecycle.
 			out.Phase = "manual"
 			switch d.State.Status {
+			case "completed":
+				out.Actions = append(out.Actions, MenuAction{"archive", "Archive this workspace", "archive"})
+			case "archived":
+				out.Actions = append(out.Actions, MenuAction{"clean", "Inspect cleanup plan", "clean --dry-run"})
 			case "paused":
 				out.Actions = append(out.Actions, MenuAction{"resume", "Resume delegation", "resume"})
-			case "completed", "archived":
-				// Terminal manual lifecycle is intentionally not implemented yet.
 			default:
 				out.Actions = append(out.Actions, MenuAction{"pause", "Pause delegation", "pause"})
+				out.Actions = append(out.Actions, MenuAction{"complete", "Complete this manual workspace", "complete --user-confirmed"})
 			}
 			return nil
 		}

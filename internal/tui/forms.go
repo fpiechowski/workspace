@@ -101,6 +101,9 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		if workspaceState == "needs_workflow" {
 			add("Select workflow", "select_workflow")
 		}
+		if m.snapshot.Status.Workspace.Manual() && workspaceState != "completed" && workspaceState != "archived" {
+			add("Complete this manual workspace", "complete_workspace")
+		}
 		if workspaceState == "completed" {
 			add("Archive completed workspace", "archive_workspace")
 		}
@@ -151,7 +154,15 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 	}
 	if action == "archive_workspace" {
 		call.TargetName = firstNonempty(m.snapshot.Status.Workspace.Title, m.workspaceID)
-		call.TargetDetails = "Archive this completed workspace. The core still requires confirmed release and no active Sessions or services. Worktrees and history are retained until explicitly cleaned or deleted."
+		if m.snapshot.Status.Workspace.Manual() {
+			call.TargetDetails = "Archive this completed manual workspace. The core still requires no active Sessions or services; no workflow release reference is needed. Worktrees and history are retained until explicitly cleaned or deleted."
+		} else {
+			call.TargetDetails = "Archive this completed workspace. The core still requires confirmed release and no active Sessions or services. Worktrees and history are retained until explicitly cleaned or deleted."
+		}
+	}
+	if action == "complete_workspace" {
+		call.TargetName = firstNonempty(m.snapshot.Status.Workspace.Title, m.workspaceID)
+		call.TargetDetails = "Complete this manual workspace. The core refuses completion while Runs, services or non-accepted tasks remain; archive then no longer requires a workflow release reference."
 	}
 	m.formAction = call
 	m.formReason = ""
@@ -483,6 +494,8 @@ func actionCaption(call ActionCall) string {
 		return "Permanently delete workspace " + targetName + " · " + targetID
 	case "archive_workspace":
 		return "Archive completed workspace " + targetName
+	case "complete_workspace":
+		return "Complete manual workspace " + targetName
 	case "pause":
 		return "Pause the workspace and leave current Runs untouched"
 	case "resume_workspace":
@@ -622,7 +635,7 @@ func actionSeverity(action string) dialogSeverity {
 	switch action {
 	case "delete_workspace", "delete_task", "delete_session", "pause_interrupt":
 		return severityDanger
-	case "archive_workspace", "stop_run", "stop_service", "retry_task", "pause":
+	case "archive_workspace", "complete_workspace", "stop_run", "stop_service", "retry_task", "pause":
 		return severityWarning
 	default:
 		return severityNeutral
