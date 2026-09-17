@@ -16,7 +16,7 @@ profiles:
       - {id: orchestrator, client: opencode, provider: zai-coding-plan, model: zai-coding-plan/glm-5.3-flash, max_concurrency: 1}
   supervisor:
     routes:
-      - {id: supervisor, client: opencode, provider: opencode-go, model: opencode-go/glm-5.3, max_concurrency: 1}
+      - {id: supervisor, client: opencode, provider: zai-coding-plan, model: zai-coding-plan/glm-5.3, max_concurrency: 1}
   worker:
     routes:
       - {id: worker, client: opencode, provider: deepseek, model: deepseek/deepseek-flash, max_concurrency: 3}
