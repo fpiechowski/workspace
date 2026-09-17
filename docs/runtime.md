@@ -64,20 +64,37 @@ stable revision should use another worktree. Resume preserves reader status.
 
 Native Codex delivery is handled through its app-server bridge between turns. Native
 OpenCode Runs expose a unique loopback endpoint owned by that Run. The supervisor
-checks readiness, posts the marker-bearing prompt to the active TUI session and confirms
-the marker in session history before recording delivery. A new Run gets a new endpoint;
-the logical Session may retain the same native thread ID.
+checks readiness, reads a bounded recent history window, selects the Run's
+`client_thread_id`, appends the marker-bearing prompt through `/tui/append-prompt`,
+submits through `/tui/submit-prompt`, and confirms the marker in the same history
+window before recording delivery. Every HTTP request has a deadline and the complete
+attempt is bounded (currently 750ms per request, 2s readiness, and 5s total). A new
+Run gets a new endpoint; the logical Session may retain the same native thread ID.
+The durable delivery phases are `checking`, `retry`, `appended`, `submitted`,
+`uncertain_append`, `uncertain`, and `confirmed`. A retry always reconciles history
+first: it never appends again from `appended`, `submitted`, or an uncertain submit,
+and it refuses to repeat an append whose outcome is unknown. A marker already present
+converges directly to confirmed/delivered without a TUI mutation.
 An active Run migrated from the retired bundled OpenCode transport cannot be repaired in
 place: it has no server flags or Run-scoped endpoint. The supervisor records a durable
 `restart_required` delivery phase, leaves the message unacknowledged and undelivered, and
 waits for one explicit stop/resume. That resume creates the native endpoint and keeps the
 pending message eligible for delivery on the successor Run.
-A generic client's optional
-`deliver_argv` receives `{thread_id}`, `{message_file}` and
-`{message_id}` and must return `{"accepted":true}`. It must deduplicate message IDs;
-transport delivery is at least once. Without a delivery adapter, the supervisor shows
-a tmux notification and the agent reads `inbox` explicitly. No terminal keystroke
-injection is used. An ACK records receipt; accepting a handoff is a separate decision.
+If native delivery times out or is rejected, the message remains undelivered and the
+supervisor emits the existing pending-inbox tmux notification at most once for that
+Run. The notification is a transport-failure fallback, not an ACK; handoff acceptance
+is independent. A failed OpenCode delivery is recorded and does not prevent later
+messages or workspaces from being attempted. A generic client's optional
+`deliver_argv` receives `{thread_id}`, `{message_file}` and `{message_id}` and must
+return `{"accepted":true}`. It must deduplicate message IDs; transport delivery is at
+least once. Without a delivery adapter, the supervisor shows a tmux notification and
+the agent reads `inbox` explicitly. No terminal keystroke injection or
+`/tui/clear-prompt` is used. An ACK records receipt; accepting a handoff is a separate
+decision.
+
+Restart the project supervisor after installing a newly built binary so the new
+delivery code is loaded. An OpenCode Session with a valid existing Run endpoint does
+not need to be stopped, recreated, or rebound.
 
 After user-confirmed release, stop remaining sessions and `archive` the workspace.
 `clean --dry-run` reports which worktrees can be removed. Uncommitted/unpreserved files

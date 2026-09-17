@@ -109,6 +109,8 @@ Claude/OpenCode uruchamiają interaktywny klient. Domyślny OpenCode dostaje dla
 Runu prywatny endpoint loopback i dostawę przez aktywne TUI; wiadomość jest oznaczona
 `message_id` i trafia do statusu dopiero po potwierdzeniu w historii sesji. `session
 bind-thread` pozostaje narzędziem awaryjnym. [Adaptery i ich możliwości](docs/clients.md).
+Po zbudowaniu nowej wersji uruchom ponownie supervisor projektu, aby wczytać nowy kod
+dostawy; istniejącej sesji OpenCode z poprawnym endpointem Run nie trzeba odtwarzać.
 
 Routing liczy uruchomienia i aktywne rezerwacje w projekcie przez ostatnie 24 h,
 uwzględnia wagi providerów, równoległość, capabilities i cooldown po błędzie startu.

@@ -21,8 +21,31 @@ sets the selected model and workspace cwd. It does not bypass client permissions
 For OpenCode, each Run receives a unique `127.0.0.1` endpoint and the normal TUI is
 started with server flags. The native session ID is discovered through that endpoint
 and persisted. Resuming a logical Session creates a new Run and endpoint while
-preserving the compatible `client_thread_id`. Delivery posts a visible marker-bearing
-prompt to that exact session and accepts it only after the marker appears in history;
+preserving the compatible `client_thread_id`. Delivery to the active parent TUI uses
+this bounded route sequence on the current Run's endpoint:
+
+1. check `/global/health`;
+2. read `/session/{client_thread_id}/message?limit=100` and stop if the marker is
+   already present;
+3. `POST /tui/select-session` with `{"sessionID":"..."}`;
+4. `POST /tui/append-prompt` with `{"text":"..."}` containing the durable message
+   marker and inbox instruction, then persist the `appended` phase;
+5. `POST /tui/submit-prompt` with `{}`, then persist the `submitted` phase;
+6. poll the same bounded history window and mark the message delivered only after the
+   marker is observed.
+
+Each TUI mutation must return a 2xx response containing the JSON boolean `true`.
+The complete attempt and every request have deadlines (currently 5 seconds per
+attempt, 750ms per request, and 2 seconds for readiness). A rejected operation is
+retryable; an uncertain append is recorded as `uncertain_append` and is not repeated,
+while `appended`, `submitted`, and the legacy-compatible `uncertain` submit phases
+retry from submit without appending again. A timeout or other failure leaves the
+message undelivered and shows the Run-scoped tmux pending-inbox notification once.
+The notification is only a fallback; it is not transport delivery or an ACK. This
+active-TUI sequence is deliberately distinct from OpenCode's external
+`/session/{id}/prompt_async` request, which can be accepted without appearing in the
+visible TUI. No terminal keystrokes or `/tui/clear-prompt` are used.
+
 HTTP success or process startup alone is not delivery. A busy or unready TUI leaves the
 message in the inbox for retry. Delivery, inbox ACK and handoff acceptance are separate
 operations. OpenCode with no `deliver_argv` is native by default. A genuinely custom,
@@ -31,6 +54,10 @@ historical bundled argv `python3 {project_dir}/scripts/opencode-deliver.py {thre
 {message_file} {message_id}` is migrated from persisted Session snapshots to native
 delivery; similar or custom wrappers are not changed. Explicit non-native configurations
 remain readable and keep their configured generic adapter behavior.
+
+After rebuilding `workspace`, restart the project supervisor so it loads the new
+delivery implementation. An already-running OpenCode Session with a valid Run-scoped
+endpoint does not need to be recreated.
 
 `client_thread_id` is not a workspace identity or mailbox address. The binding is
 unique across active logical Sessions for the same adapter. Manual binding, Codex

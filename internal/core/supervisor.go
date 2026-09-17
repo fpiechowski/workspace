@@ -314,7 +314,12 @@ func (s *Service) tickWorkspaceAgents(ctx context.Context, status Status) error 
 			}
 			if err := s.deliverOpenCodeMessage(ctx, status.Workspace.ID, p, run, message); err != nil {
 				// Delivery is at-least-once and must not stop supervision of other
-				// sessions. The durable phase remains retryable on the next tick.
+				// sessions. The durable phase remains retryable on the next tick;
+				// the notification is only a fallback and never marks transport
+				// delivery successful.
+				notifyCtx, cancel := context.WithTimeout(ctx, openCodePersistenceTimeout)
+				_ = s.notifyPendingMessage(notifyCtx, status.Workspace.ID, p, message)
+				cancel()
 				continue
 			}
 			continue
@@ -357,34 +362,86 @@ func (s *Service) tickWorkspaceAgents(ctx context.Context, status Status) error 
 			}
 			continue
 		}
-		if message.NotifiedRunID == p.CurrentRunID || p.PaneID == "" {
-			continue
-		}
-		if rt, ok := s.Runtime.(Tmux); ok {
-			pane, err := rt.Inspect(ctx, p.PaneID)
-			if err != nil {
-				continue
-			}
-			if !paneOwns(pane, p.ID, p.CurrentRunID) {
-				continue
-			}
-			if _, err := rt.call(ctx, "display-message", "-t", p.PaneID, "workspace: pending "+message.Kind+" "+message.ID+" (read inbox)"); err != nil {
-				return err
-			}
-			if err := s.With(ctx, status.Workspace.ID, func(d *Document) error {
-				m, err := findMessage(d, message.ID)
-				if err != nil {
-					return err
-				}
-				m.NotifiedSessionID = p.ID
-				m.NotifiedRunID = p.CurrentRunID
-				return saveDocument(d)
-			}); err != nil {
-				return err
-			}
+		if err := s.notifyPendingMessage(ctx, status.Workspace.ID, p, message); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// notifyPendingMessage is the tmux-only fallback for transports that cannot
+// wake a client or whose native delivery is currently uncertain. It verifies
+// the exact current Run before and after display-message so a successor Run
+// cannot inherit a notification receipt from an older pane. The message stays
+// undelivered and unacknowledged.
+func (s *Service) notifyPendingMessage(ctx context.Context, selector string, session Session, message Message) error {
+	if !session.Active() || session.CurrentRunID == "" || session.PaneID == "" {
+		return nil
+	}
+	rt, ok := s.Runtime.(interface {
+		Inspect(context.Context, string) (Pane, error)
+		DisplayMessage(context.Context, string, string) error
+	})
+	if !ok {
+		return nil
+	}
+	eligible := false
+	if err := s.With(ctx, selector, func(d *Document) error {
+		p, err := findSession(d, session.ID)
+		if err != nil {
+			return err
+		}
+		r, err := currentRun(d, p)
+		if err != nil {
+			return err
+		}
+		m, err := findMessage(d, message.ID)
+		if err != nil {
+			return err
+		}
+		if p.CurrentRunID != session.CurrentRunID || r.ID != session.CurrentRunID || !r.Active() || m.DeliveredRunID == r.ID || m.NotifiedRunID == r.ID {
+			return nil
+		}
+		eligible = true
+		return nil
+	}); err != nil {
+		return err
+	}
+	if !eligible {
+		return nil
+	}
+	pane, err := rt.Inspect(ctx, session.PaneID)
+	if err != nil {
+		// A disappearing pane is already covered by reconciliation; do not turn
+		// a best-effort notification into a supervisor failure.
+		return nil
+	}
+	if !paneOwns(pane, session.ID, session.CurrentRunID) {
+		return nil
+	}
+	if err := rt.DisplayMessage(ctx, session.PaneID, "workspace: pending "+message.Kind+" "+message.ID+" (read inbox)"); err != nil {
+		return err
+	}
+	return s.With(ctx, selector, func(d *Document) error {
+		p, err := findSession(d, session.ID)
+		if err != nil {
+			return err
+		}
+		r, err := currentRun(d, p)
+		if err != nil {
+			return err
+		}
+		m, err := findMessage(d, message.ID)
+		if err != nil {
+			return err
+		}
+		if p.CurrentRunID != session.CurrentRunID || r.ID != session.CurrentRunID || !r.Active() || m.DeliveredRunID == r.ID || m.NotifiedRunID == r.ID {
+			return nil
+		}
+		m.NotifiedSessionID = p.ID
+		m.NotifiedRunID = r.ID
+		return saveDocument(d)
+	})
 }
 
 func (s *Service) autoBindOpenCodeThreads(ctx context.Context, selector string, latest map[string]Session) error {
