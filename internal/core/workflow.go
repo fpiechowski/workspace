@@ -9,6 +9,17 @@ import (
 
 var workflowPhases = []string{"planning", "plan_review", "implementing", "integrating", "change_requests", "live_test_offer", "live_testing", "awaiting_release", "completed"}
 
+// requireWorkflowOperation rejects operations that only apply to a
+// workflow-driven workspace with a stable, non-interactive error. It is a no-op
+// for a selected workflow and for a pending creation choice, whose existing
+// selection prompt stays authoritative.
+func requireWorkflowOperation(w Workspace, operation string) error {
+	if w.Manual() {
+		return fail("operation_not_applicable", "%s is not available without a selected workflow", operation)
+	}
+	return nil
+}
+
 func advancePlanFirst(d *Document) error {
 	phase := d.State.Workflow.Phase
 	switch phase {
@@ -149,8 +160,11 @@ func validateIntegration(ctx context.Context, d *Document) error {
 	return nil
 }
 func advance(ctx context.Context, d *Document, target string) error {
-	if d.State.Workflow == nil {
+	if d.State.NeedsWorkflow() {
 		return decisionRequired("select a workflow", "plan-first")
+	}
+	if err := requireWorkflowOperation(d.State, "workflow advance"); err != nil {
+		return err
 	}
 	if d.State.Status != "active" {
 		return fail("workflow_gate", "workspace is %s", d.State.Status)
@@ -309,6 +323,9 @@ func (s *Service) AnswerDecision(ctx context.Context, selector string, opt Decis
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := requireWorkflowOperation(d.State, "decision answers"); err != nil {
+			return err
+		}
 		if (s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "") && !opt.UserConfirmed {
 			return fail("user_decision_required", "confirm that the user supplied this answer with --user-confirmed")
 		}
@@ -391,6 +408,9 @@ func (s *Service) ConfirmRelease(ctx context.Context, selector, reference string
 			out = d.Status()
 			return nil
 		}
+		if err := requireWorkflowOperation(d.State, "release confirmation"); err != nil {
+			return err
+		}
 		if d.State.Workflow == nil || d.State.Workflow.Phase != "awaiting_release" || d.State.Status != "active" {
 			return fail("workflow_gate", "workspace must be active and awaiting_release")
 		}
@@ -447,8 +467,22 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 	var out Menu
 	err := s.With(ctx, selector, func(d *Document) error {
 		out = Menu{Revision: d.State.Revision, PendingDecision: d.State.PendingDecision, FreeText: true, Actions: []MenuAction{{"status", "Show progress", "status"}, {"sessions", "Open an agent session", "session list"}, {"artifacts", "Inspect results", "artifact list"}, {"inbox", "Read messages", "inbox list"}}}
-		if d.State.Workflow == nil {
+		if d.State.NeedsWorkflow() {
 			out.Actions = append(out.Actions, MenuAction{"workflow", "Select plan-first", "workflow select plan-first"})
+			return nil
+		}
+		if d.State.Manual() {
+			// Manual mode has no phase, selection or advance action. It only
+			// exposes ordinary inspection plus the pause/resume lifecycle.
+			out.Phase = "manual"
+			switch d.State.Status {
+			case "paused":
+				out.Actions = append(out.Actions, MenuAction{"resume", "Resume delegation", "resume"})
+			case "completed", "archived":
+				// Terminal manual lifecycle is intentionally not implemented yet.
+			default:
+				out.Actions = append(out.Actions, MenuAction{"pause", "Pause delegation", "pause"})
+			}
 			return nil
 		}
 		out.Phase = d.State.Workflow.Phase

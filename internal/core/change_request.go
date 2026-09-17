@@ -24,6 +24,9 @@ func (s *Service) PrepareChangeRequest(ctx context.Context, selector string, opt
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := requireWorkflowOperation(d.State, "change-request preparation"); err != nil {
+			return err
+		}
 		previous, err := d.previous(opt.OperationKey, opt)
 		if err != nil {
 			return err
@@ -186,6 +189,9 @@ func (s *Service) PublishChangeRequest(ctx context.Context, selector, id string,
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := requireWorkflowOperation(d.State, "change-request publication"); err != nil {
+			return err
+		}
 		if err := validateIntegration(ctx, d); err != nil {
 			return err
 		}
@@ -268,7 +274,12 @@ func (s *Service) SyncChangeRequests(ctx context.Context, selector string, keys 
 	if key := mutationKey(keys); key != "" {
 		return effect(s, ctx, selector, key, "change-request.sync", s.requireOrchestrator, func() ([]ChangeRequest, error) { return s.SyncChangeRequests(ctx, selector) })
 	}
-	if err := s.With(ctx, selector, s.requireOrchestrator); err != nil {
+	if err := s.With(ctx, selector, func(d *Document) error {
+		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		return requireWorkflowOperation(d.State, "change-request sync")
+	}); err != nil {
 		return nil, err
 	}
 	status, err := s.Status(ctx, selector)
@@ -321,6 +332,9 @@ func (s *Service) ResolveChangeRequest(ctx context.Context, selector, id, action
 	var out ChangeRequest
 	err := mutate(s, ctx, selector, keys, []any{"change-request.resolve", id, action, reference, reason, userConfirmed}, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		if err := requireWorkflowOperation(d.State, "change-request resolution"); err != nil {
 			return err
 		}
 		if (s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "") && !userConfirmed {

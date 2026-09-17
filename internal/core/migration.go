@@ -111,6 +111,9 @@ func (s *Service) MigrateWorkflow(ctx context.Context, selector string, opt Revi
 		if err := revisionGate(s, d, opt.ExpectedRevision, opt.Reason); err != nil {
 			return err
 		}
+		if err := requireWorkflowOperation(d.State, "workflow migration"); err != nil {
+			return err
+		}
 		if d.State.Workflow == nil {
 			return fail("workflow_required", "select a workflow first")
 		}

@@ -122,9 +122,7 @@ func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) 
 			row.ID, row.ProjectID = doc.State.ID, doc.State.ProjectID
 			row.Title, row.Status, row.CreatedAt, row.Revision = doc.State.Title, doc.State.Status, doc.State.CreatedAt, doc.State.Revision
 			row.InputSource = doc.State.Input.Source
-			if doc.State.Workflow != nil {
-				row.Phase = doc.State.Workflow.Phase
-			}
+			row.Phase = doc.State.PhaseLabel()
 			doc, err := loadDocument(dir)
 			if err != nil {
 				row.Error = err.Error()
@@ -142,9 +140,7 @@ func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) 
 				CreatedAt:   status.Workspace.CreatedAt,
 				Revision:    status.Workspace.Revision,
 			}
-			if status.Workspace.Workflow != nil {
-				row.Phase = status.Workspace.Workflow.Phase
-			}
+			row.Phase = status.Workspace.PhaseLabel()
 			for _, run := range status.Runs {
 				if !run.Active() {
 					continue

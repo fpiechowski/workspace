@@ -192,9 +192,9 @@ func chooseWorkspace(o *options, statuses []core.Status, selector string) (core.
 	})
 	fmt.Fprintln(o.out, "Available workspaces:")
 	for i, status := range ordered {
-		phase := "-"
-		if status.Workspace.Workflow != nil && status.Workspace.Workflow.Phase != "" {
-			phase = status.Workspace.Workflow.Phase
+		phase := status.Workspace.PhaseLabel()
+		if phase == "" {
+			phase = "-"
 		}
 		detail := status.Workspace.Input.Source
 		if detail == "" {

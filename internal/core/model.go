@@ -99,11 +99,54 @@ type Workspace struct {
 	Release             Release         `yaml:"release" json:"release"`
 }
 
+// workspaceMode classifies the durable workspace mode. It is the single source
+// of truth behind Manual, NeedsWorkflow and WorkflowSelected so creation,
+// delegation and lifecycle code never repeat the fragile nil/status test.
+type workspaceMode int
+
+const (
+	modeWorkflow workspaceMode = iota
+	modeNeedsWorkflow
+	modeManual
+)
+
+func (w Workspace) mode() workspaceMode {
+	switch {
+	case w.Workflow != nil:
+		return modeWorkflow
+	case w.Status == "needs_workflow":
+		return modeNeedsWorkflow
+	default:
+		return modeManual
+	}
+}
+
 // Manual reports whether the workspace intentionally has no workflow. A nil
 // Workflow alone is not enough: an omitted creation choice stays in
 // needs_workflow until the user selects a workflow.
-func (w Workspace) Manual() bool {
-	return w.Workflow == nil && w.Status != "needs_workflow"
+func (w Workspace) Manual() bool { return w.mode() == modeManual }
+
+// NeedsWorkflow reports whether creation omitted a workflow and the workspace is
+// still waiting for the user to select one.
+func (w Workspace) NeedsWorkflow() bool { return w.mode() == modeNeedsWorkflow }
+
+// WorkflowSelected reports whether the workspace is driven by a selected
+// workflow snapshot.
+func (w Workspace) WorkflowSelected() bool { return w.mode() == modeWorkflow }
+
+// PhaseLabel is the stable presentation label for the workflow phase or mode. It
+// never synthesizes a Workflow object: an intentional manual workspace reads
+// "manual", a selected workflow shows its phase, and a pending creation choice
+// has no label yet.
+func (w Workspace) PhaseLabel() string {
+	switch w.mode() {
+	case modeWorkflow:
+		return w.Workflow.Phase
+	case modeManual:
+		return "manual"
+	default:
+		return ""
+	}
 }
 
 type Workflow struct {

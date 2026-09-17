@@ -170,6 +170,25 @@ func TestWorkspaceShortNamesAndSelector(t *testing.T) {
 	}
 }
 
+func TestWorkspacePickerShowsManualModeLabel(t *testing.T) {
+	workspaces := []core.Status{
+		{Workspace: core.Workspace{ID: "ws_manual", Title: "Manual", Status: "active"}},
+		{Workspace: core.Workspace{ID: "ws_pending", Title: "Pending", Status: "needs_workflow"}},
+		{Workspace: core.Workspace{ID: "ws_flow", Title: "Flow", Status: "active", Workflow: &core.Workflow{ID: "issue-resolution", Phase: "planning"}}},
+	}
+	out := &bytes.Buffer{}
+	o := &options{in: strings.NewReader("q\n"), out: out}
+	if _, err := chooseWorkspace(o, workspaces, ""); err == nil {
+		t.Fatal("cancel should stop selection")
+	}
+	text := out.String()
+	for _, want := range []string{"[active / manual]", "[needs_workflow / -]", "[active / planning]"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("picker missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestSessionCompactOutputIncludesLogicalAndRunSummary(t *testing.T) {
 	value := shortOutput([]core.Session{{ID: "sess_1", AgentID: "agent_1", TaskID: "task_1", LifecycleState: "idle", LastRunID: "run_3", RunCount: 3, RunState: "interrupted", ClientThreadID: "thread_1"}})
 	b, err := json.Marshal(value)

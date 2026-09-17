@@ -80,6 +80,9 @@ func (s *Service) PrepareIntegration(ctx context.Context, selector string, opt I
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := requireWorkflowOperation(d.State, "integration"); err != nil {
+			return err
+		}
 		if _, err := d.previous(opt.OperationKey, opt); err != nil {
 			return err
 		}

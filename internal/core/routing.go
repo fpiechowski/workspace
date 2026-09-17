@@ -9,7 +9,7 @@ import (
 )
 
 func workflowProfile(cfg Config, d *Document, role, fallback string) string {
-	if d.State.Workflow == nil {
+	if !d.State.WorkflowSelected() {
 		if role == "orchestrator" && cfg.Defaults.OrchestratorProfile != "" {
 			return cfg.Defaults.OrchestratorProfile
 		}

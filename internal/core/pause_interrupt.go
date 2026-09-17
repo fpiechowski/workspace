@@ -67,7 +67,7 @@ func (s *Service) pauseInterrupt(ctx context.Context, selector, key string, requ
 			if d.State.Status == "completed" || d.State.Status == "archived" {
 				return fail("workspace_closed", "closed workspace cannot be paused")
 			}
-			if d.State.Workflow == nil {
+			if d.State.NeedsWorkflow() {
 				return decisionRequired("select a workflow before pausing", exampleWorkflow)
 			}
 			plan.WorkspaceID = d.State.ID

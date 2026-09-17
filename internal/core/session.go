@@ -26,7 +26,7 @@ const defaultMaxParallelTasks = 3
 
 // workerParallelLimit resolves the active worker limit under the workspace lock.
 func workerParallelLimit(cfg Config, d *Document) int {
-	if d.State.Workflow != nil {
+	if d.State.WorkflowSelected() {
 		if limit := cfg.Workflows[d.State.Workflow.ID].MaxParallelTasks; limit > 0 {
 			return limit
 		}
@@ -116,7 +116,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		// Delegation is blocked only while the creation choice is still pending.
 		// An intentional manual workspace (nil workflow plus an operational
 		// status) permits the same task-bound worker sessions as a workflow.
-		if a.Role != "orchestrator" && d.State.Workflow == nil && !d.State.Manual() {
+		if a.Role != "orchestrator" && d.State.NeedsWorkflow() {
 			return decisionRequired("select a workflow before delegation", "plan-first")
 		}
 		parent := opt.Parent

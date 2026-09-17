@@ -475,14 +475,14 @@ func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error)
 	if err := atomicWrite(filepath.Join(dir, "inputs", "issue.md"), []byte(opt.Input)); err != nil {
 		return Status{}, err
 	}
-	if err := s.snapshotTemplates(d, opt.Workflow, opt.NoWorkflow); err != nil {
+	if err := s.snapshotTemplates(d, opt.Workflow, d.State.Manual()); err != nil {
 		return Status{}, err
 	}
-	if d.State.Workflow != nil {
+	if d.State.WorkflowSelected() {
 		orch.Profile = workflowProfile(cfg, d, "orchestrator", orch.Profile)
 		d.Registry.Agents[0] = orch
 	}
-	body, err := s.render("WORKSPACE.md.tmpl", agentPromptData{Workspace: d.State, Manual: opt.NoWorkflow})
+	body, err := s.render("WORKSPACE.md.tmpl", agentPromptData{Workspace: d.State, Manual: d.State.Manual()})
 	if err != nil {
 		return Status{}, err
 	}
@@ -650,6 +650,9 @@ func (s *Service) selectWorkflow(ctx context.Context, selector, name string, exp
 		if expectedRevision != 0 && d.State.Revision != expectedRevision {
 			return fail("revision_conflict", "workspace changed while the action was being confirmed")
 		}
+		if d.State.Manual() {
+			return fail("operation_not_applicable", "workflow selection is not available in a manual workspace")
+		}
 		cfg, err := s.Config()
 		if err != nil {
 			return err
@@ -657,7 +660,7 @@ func (s *Service) selectWorkflow(ctx context.Context, selector, name string, exp
 		if !workflowAvailable(s.Root, cfg, name) {
 			return fail("unknown_workflow", "available workflow: %s", strings.Join(WorkflowNames(s.Root, cfg), ", "))
 		}
-		if d.State.Workflow != nil {
+		if d.State.WorkflowSelected() {
 			if d.State.Workflow.ID != name {
 				return fail("workflow_conflict", "workflow already selected")
 			}
@@ -706,7 +709,7 @@ func (s *Service) setPaused(ctx context.Context, selector string, paused bool, g
 		if d.State.Status == "completed" || d.State.Status == "archived" {
 			return fail("workspace_closed", "closed workspace cannot be resumed or paused")
 		}
-		if d.State.Workflow == nil {
+		if d.State.NeedsWorkflow() {
 			return decisionRequired("select a workflow first", exampleWorkflow)
 		}
 		next := "active"

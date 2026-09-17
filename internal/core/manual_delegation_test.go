@@ -76,7 +76,7 @@ func TestManualWorkspaceDelegationEndToEnd(t *testing.T) {
 	if _, err := s.AdvanceWorkflow(ctx, ws, "", "manual-advance"); err == nil {
 		t.Fatal("workflow advance must stay unavailable for a manual workspace")
 	} else {
-		expectCode(t, err, "decision_required")
+		expectCode(t, err, "operation_not_applicable")
 	}
 	status, err = s.Status(ctx, ws)
 	if err != nil {

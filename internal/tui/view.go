@@ -67,8 +67,8 @@ func (m *Model) header() string {
 		}
 		parts = append(parts, name)
 		parts = append(parts, statusBadge(m.snapshot.Status.Workspace.Status))
-		if phase := m.snapshot.Status.Workspace.Workflow; phase != nil && phase.Phase != "" {
-			parts = append(parts, "·", phase.Phase)
+		if label := m.snapshot.Status.Workspace.PhaseLabel(); label != "" {
+			parts = append(parts, "·", label)
 		}
 	}
 	if m.initialError != "" {
