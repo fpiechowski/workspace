@@ -14,6 +14,9 @@ func workspaceState(id, status string) *Model {
 	m.snapshot = core.WorkspaceSnapshot{ObservedAt: time.Now(), Status: core.Status{
 		Workspace: core.Workspace{ID: id, Title: "Workspace", Status: status, Revision: 3},
 	}}
+	// Workspace-level actions are reachable from the Orchestrator route now that
+	// the Work dashboard is gone.
+	m.route = route{Page: "orchestrator"}
 	return m
 }
 

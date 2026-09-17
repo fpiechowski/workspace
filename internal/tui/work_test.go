@@ -37,20 +37,16 @@ func workFixture() *Model {
 	return m
 }
 
-func TestWorkViewShowsProgressAndCurrentAssignments(t *testing.T) {
+func TestTasksAndSessionsCollectionsShowLiveWork(t *testing.T) {
 	m := workFixture()
-	for _, size := range [][2]int{{60, 24}, {120, 32}, {160, 40}} {
+	for _, size := range [][2]int{{100, 24}, {120, 32}, {160, 40}} {
 		m.width, m.height = size[0], size[1]
+		m.navigate(route{Page: "tasks"})
 		view := m.View()
-		for _, text := range []string{"1/4 accepted", "25%", "2 live · 1 review · 1 blocked · 2 attention", "Orchestrator", "Payments worker", "Retry failed payments", "t terminal"} {
+		for _, text := range []string{"Payments worker", "Retry failed payments", "t terminal"} {
 			if !strings.Contains(view, text) {
 				t.Errorf("%v missing %q:\n%s", size, text, view)
 			}
-		}
-	}
-	for _, item := range m.workItems() {
-		if item.ID == "sess_old" {
-			t.Fatal("historical attempt appeared as current work")
 		}
 	}
 	m.navigate(route{Page: "tasks"})
@@ -60,6 +56,10 @@ func TestWorkViewShowsProgressAndCurrentAssignments(t *testing.T) {
 	task, _ := m.task("task_work")
 	if subtitle := m.taskItem(task).Subtitle; !strings.Contains(subtitle, "1 live · 1 sessions · 1 runs") {
 		t.Fatal(subtitle)
+	}
+	m.navigate(route{Page: "sessions"})
+	if items := m.filteredItems(); len(items) != 4 {
+		t.Fatalf("root sessions collection lost rows: %+v", items)
 	}
 	m.navigate(route{Page: "sessions", ParentID: "task_review"})
 	if items := m.filteredItems(); len(items) != 1 || items[0].ID != "sess_other" {
@@ -71,7 +71,7 @@ func TestFilterEscapeRestoresSelectionAndOwnsRetryKey(t *testing.T) {
 	for _, managed := range []bool{false, true} {
 		m := workFixture()
 		m.managed = managed
-		m.navigate(route{Page: "tasks", Query: "payments", SelectedID: "task_work"})
+		m.route = route{Page: "tasks", Query: "payments", SelectedID: "task_work"}
 		m.actionFailure = true
 		m.lastAction = &ActionCall{Action: "pause"}
 		m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
@@ -237,7 +237,7 @@ func TestCompletedWorkspaceCanBeArchivedFromTUI(t *testing.T) {
 	model.backend = &actionHarness{}
 	model.snapshot.Status.Workspace.Status = "completed"
 	model.snapshot.Status.Workspace.Revision = 12
-	model.navigate(route{Page: "dashboard"})
+	model.navigate(route{Page: "orchestrator"})
 
 	if cmd := model.beginAction("archive_workspace", ""); cmd == nil {
 		t.Fatal("archive did not require confirmation")
@@ -327,6 +327,7 @@ func TestTerminalUsesExactCurrentRunAndConfirmsIdleResume(t *testing.T) {
 	backend := &terminalHarness{}
 	m.backend = backend
 	m.navigator = unusedNavigator{}
+	m.navigate(route{Page: "sessions"})
 	m.route.SelectedID = "sess_worker"
 	cmd := m.openTerminal()
 	if cmd == nil {
@@ -346,7 +347,7 @@ func TestTerminalUsesExactCurrentRunAndConfirmsIdleResume(t *testing.T) {
 
 func TestSortAndAnimationDoNotLoseSelection(t *testing.T) {
 	m := workFixture()
-	m.navigate(route{Page: "tasks", SelectedID: "task_work"})
+	m.route = route{Page: "tasks", SelectedID: "task_work"}
 	m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	if m.filteredItems()[0].ID != "task_blocked" || m.route.SelectedID != "task_work" {
 		t.Fatal("name sort lost selection or order")
@@ -363,15 +364,126 @@ func TestSortAndAnimationDoNotLoseSelection(t *testing.T) {
 	}
 }
 
-func TestDashboardStatusFilterIsVisibleAndEscapeClearsIt(t *testing.T) {
+func TestWorkspaceEntryLandsOnTasks(t *testing.T) {
+	direct := New(Config{ProjectFound: true, WorkspaceID: "ws_entry"})
+	if direct.route.Page != "tasks" {
+		t.Fatalf("direct workspace entry route = %q, want tasks", direct.route.Page)
+	}
+
+	picker := New(Config{ProjectFound: true})
+	picker.project = core.ProjectOverview{ObservedAt: time.Now(), Workspaces: []core.WorkspaceSummary{{ID: "ws_entry", Title: "Entry", Status: "active"}}}
+	picker.route = route{Page: "project", SelectedID: "ws_entry"}
+	picker.validateSelection()
+	_, _ = picker.openSelection()
+	if picker.route.Page != "tasks" {
+		t.Fatalf("project picker selection route = %q, want tasks", picker.route.Page)
+	}
+}
+
+func TestPrimaryOrderLabelsAtWideAndCompactWidths(t *testing.T) {
 	m := workFixture()
+	m.navigate(route{Page: "tasks"})
+	m.width, m.height = 120, 32
+	wide := m.View()
+	for _, want := range []string{"1 Tasks", "2 Sessions", "3 Worktrees", "4 Results", "5 More"} {
+		if !strings.Contains(wide, want) {
+			t.Fatalf("wide shell missing primary label %q:\n%s", want, wide)
+		}
+	}
+	m.width, m.height = 80, 24
+	compact := m.View()
+	for _, want := range []string{"1 Tasks", "2 Sessions", "3 Worktrees", "4 Results", "5 More"} {
+		if !strings.Contains(compact, want) {
+			t.Fatalf("compact shell missing primary label %q:\n%s", want, compact)
+		}
+	}
+	m.width, m.height = 40, 12
+	narrow := m.View()
+	for _, want := range []string{"1 Tasks", "2 Sess", "3 Trees", "4 Out", "5 More"} {
+		if !strings.Contains(narrow, want) {
+			t.Fatalf("minimum-width shell missing primary label %q:\n%s", want, narrow)
+		}
+	}
+	help := collapseHelp(m.helpView())
+	for _, want := range []string{"1 Tasks", "2 Sessions", "3 Worktrees", "4 Results", "5 More"} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("full help missing primary label %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestTaskDetailRelatedShortcutsStayRelated(t *testing.T) {
+	cases := []struct{ key, page, tab string }{
+		{"1", "sessions", ""},
+		{"2", "worktrees", ""},
+		{"3", "results", "handoffs"},
+	}
+	for _, tc := range cases {
+		m := workFixture()
+		m.snapshot.Status.Worktrees = []core.Worktree{{ID: "wt_main", Name: "main"}}
+		m.navigate(route{Page: "task", EntityID: "task_work"})
+		_, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tc.key)})
+		if m.route.Page != tc.page || m.route.ParentID != "task_work" {
+			t.Fatalf("task detail key %s opened %+v, want related %s", tc.key, m.route, tc.page)
+		}
+		if tc.tab != "" && m.route.Tab != tc.tab {
+			t.Fatalf("task detail key %s tab = %q, want %q", tc.key, m.route.Tab, tc.tab)
+		}
+	}
+}
+
+func TestRuntimeOffersWorkspaceActions(t *testing.T) {
+	m := workFixture()
+	m.snapshot.Status.Workspace.Status = "active"
+	m.navigate(route{Page: "runtime"})
+	values := actionValues(t, m)
+	for _, action := range []string{"start_orchestrator", "pause", "pause_interrupt"} {
+		if !values[action] {
+			t.Fatalf("runtime lost workspace action %q: %+v", action, values)
+		}
+	}
+}
+
+func TestSessionsCurrentHistoryFilterIsVisibleAndEscapeClearsIt(t *testing.T) {
+	m := workFixture()
+	now := time.Now()
+	m.snapshot.Status.Sessions = append(m.snapshot.Status.Sessions,
+		core.Session{ID: "sess_closed", AgentSnapshot: core.Agent{Name: "Closed worker"}, LifecycleState: "closed", ClosedAt: &now})
+	m.navigate(route{Page: "sessions"})
 	all := len(m.filteredItems())
+
 	m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if m.route.StatusFilter == "" || !strings.Contains(m.View(), "state: "+m.route.StatusFilter) || len(m.filteredItems()) == all {
-		t.Fatal("active status filter must be visible and restrict work")
+	if m.route.StatusFilter != "current" || !strings.Contains(m.View(), "status: current") || len(m.filteredItems()) != all-1 {
+		t.Fatalf("current filter must be visible and hide closed sessions: filter=%q view=%q", m.route.StatusFilter, m.View())
+	}
+	m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	history := m.filteredItems()
+	if m.route.StatusFilter != "history" || len(history) != 1 || history[0].ID != "sess_closed" {
+		t.Fatalf("history filter must show only closed sessions: filter=%q items=%+v", m.route.StatusFilter, history)
 	}
 	m.updateKey(tea.KeyMsg{Type: tea.KeyEsc})
-	if m.route.StatusFilter != "" || m.route.Page != "dashboard" || len(m.filteredItems()) != all {
-		t.Fatal("Esc must clear status before navigating")
+	if m.route.StatusFilter != "" || m.route.Page != "sessions" || len(m.filteredItems()) != all {
+		t.Fatalf("Esc must clear status before navigating: %+v", m.route)
+	}
+}
+
+func TestMoreOmitsSessionsAndKeepsAttentionAndActivity(t *testing.T) {
+	m := workFixture()
+	m.navigate(route{Page: "more"})
+	ids := make(map[string]bool)
+	for _, item := range m.filteredItems() {
+		ids[item.ID] = true
+	}
+	if ids["sessions"] {
+		t.Fatalf("More still duplicates the primary Sessions route: %+v", ids)
+	}
+	for _, want := range []string{"attention", "activity"} {
+		if !ids[want] {
+			t.Fatalf("More lost the %q page: %+v", want, ids)
+		}
+	}
+	m.route.SelectedID = "attention"
+	if _, cmd := m.openSelection(); cmd != nil || m.route.Page != "attention" {
+		t.Fatalf("More did not open Needs attention: page=%q cmd=%v", m.route.Page, cmd)
 	}
 }

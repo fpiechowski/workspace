@@ -13,21 +13,6 @@ func (m *Model) allItems() []collectionItem {
 	s := m.snapshot
 	items := []collectionItem{}
 	switch m.route.Page {
-	case "dashboard":
-		switch m.focusedPanel {
-		case 0:
-			return m.workItems()
-		case 1:
-			for _, task := range s.Status.Workspace.Tasks {
-				items = append(items, m.taskItem(task))
-			}
-		case 2:
-			return m.attentionItems()
-		case 3:
-			return m.activityItems()
-		}
-	case "work":
-		return m.workItems()
 	case "project":
 		for _, workspace := range m.project.Workspaces {
 			if m.route.StatusFilter == "active" && workspace.Status == "archived" || m.route.StatusFilter == "archived" && workspace.Status != "archived" {
@@ -45,7 +30,6 @@ func (m *Model) allItems() []collectionItem {
 		}
 	case "more":
 		items = []collectionItem{
-			{ID: "sessions", Kind: "page", Title: "Sessions", Subtitle: "Logical sessions and their Run history"},
 			{ID: "agents", Kind: "page", Title: "Agents", Subtitle: "Persona definitions"},
 			{ID: "services", Kind: "page", Title: "Services", Subtitle: "Background processes"},
 			{ID: "decisions", Kind: "page", Title: "Decisions", Subtitle: "Pending and recorded decisions"},
@@ -297,61 +281,6 @@ func shortID(id string) string {
 		return id[:12] + "…"
 	}
 	return id
-}
-
-func (m *Model) dashboardPanels() [4]struct {
-	Title string
-	Lines []string
-} {
-	var panels [4]struct {
-		Title string
-		Lines []string
-	}
-	metrics := m.snapshot.Metrics
-	panels[0].Title = "Agents & runs"
-	panels[0].Lines = []string{
-		fmt.Sprintf("Accepted %d / %d", metrics.TaskAccepted, metrics.TaskTotal),
-		fmt.Sprintf("Running %d · blocked %d · needs changes %d", metrics.TaskRunning, metrics.TaskBlocked, metrics.TaskNeedsChanges),
-		fmt.Sprintf("Runs %d · worktrees %d · services %d", metrics.ActiveRuns, metrics.ReadyWorktrees, metrics.ActiveServices),
-	}
-	panels[1].Title = "Orchestrator"
-	if session, run := m.orchestrator(); session != nil {
-		model := ""
-		state := session.LifecycleState
-		if run != nil {
-			model = run.Route.Model
-			state += " · " + run.State
-		}
-		panels[1].Lines = []string{statusBadge(state), session.AgentSnapshot.Name + " · " + model, "Session " + shortID(session.ID), "Press o to inspect · g to jump"}
-	} else {
-		panels[1].Lines = []string{"No orchestrator session", "Use Actions to start orchestration"}
-	}
-	panels[2].Title = fmt.Sprintf("Needs attention (%d)", len(m.attentionItems()))
-	attention := m.attentionItems()
-	panels[2].Lines = []string{}
-	for _, item := range attention {
-		if len(panels[2].Lines) == 5 {
-			break
-		}
-		panels[2].Lines = append(panels[2].Lines, statusBadge(item.State)+" · "+item.Title)
-	}
-	if len(panels[2].Lines) == 0 {
-		panels[2].Lines = []string{"No recorded issues"}
-	} else if len(attention) > 5 {
-		panels[2].Lines = append(panels[2].Lines, fmt.Sprintf("View all (%d) · press v", len(attention)))
-	}
-	panels[3].Title = "Recent recorded activity"
-	panels[3].Lines = []string{}
-	for _, item := range m.activityItems() {
-		if len(panels[3].Lines) == 5 {
-			break
-		}
-		panels[3].Lines = append(panels[3].Lines, statusBadge(item.State)+" · "+item.Title)
-	}
-	if len(panels[3].Lines) == 0 {
-		panels[3].Lines = []string{"No recorded activity"}
-	}
-	return panels
 }
 
 func (m *Model) orchestrator() (*core.Session, *core.Run) {

@@ -18,7 +18,7 @@ const (
 )
 
 // layoutFor makes a single layout decision shared by every page, including
-// Work. Compact is the intentional single-column mode for medium terminals.
+// collections. Compact is the intentional single-column mode for medium terminals.
 func layoutFor(width, height int) layoutMode {
 	if width < minLayoutWidth || height < minLayoutHeight {
 		return layoutTiny

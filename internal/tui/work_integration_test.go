@@ -21,7 +21,7 @@ type workDemo struct{ *Model }
 func (m workDemo) Init() tea.Cmd { return m.Model.ensureAnimation() }
 
 // The helper runs the real Bubble Tea input decoder and renderer inside a PTY.
-func TestWorkPTYHelper(t *testing.T) {
+func TestWorkspacePTYHelper(t *testing.T) {
 	if os.Getenv("WORKSPACE_TUI_HELPER") != "1" {
 		t.Skip("PTY helper")
 	}
@@ -104,7 +104,7 @@ func TestRuntimeTableInTmux(t *testing.T) {
 	}
 }
 
-func TestWorkFilterEscapeInTmux(t *testing.T) {
+func TestNavigationFilterEscapeInTmux(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Getenv("WORKSPACE_TMUX_TEST") != "1" {
 		t.Skip("requires opt-in Linux/tmux")
 	}
@@ -125,7 +125,7 @@ func TestWorkFilterEscapeInTmux(t *testing.T) {
 		return string(out)
 	}
 	t.Cleanup(func() { _ = exec.Command("tmux", "-L", socket, "kill-server").Run() })
-	command := "env WORKSPACE_TUI_HELPER=1 " + "'" + strings.ReplaceAll(binary, "'", "'\\''") + "' -test.run '^TestWorkPTYHelper$'"
+	command := "env WORKSPACE_TUI_HELPER=1 " + "'" + strings.ReplaceAll(binary, "'", "'\\''") + "' -test.run '^TestWorkspacePTYHelper$'"
 	pane := strings.TrimSpace(tmux("new-session", "-d", "-P", "-F", "#{pane_id}", "-s", "ui", "-x", "120", "-y", "32", command))
 	waitFor := func(needle string) string {
 		t.Helper()
@@ -141,53 +141,56 @@ func TestWorkFilterEscapeInTmux(t *testing.T) {
 		t.Fatalf("missing %q in PTY:\n%s", needle, capture)
 		return ""
 	}
+	// The initial workspace route is Tasks.
+	waitFor("Retry failed payments")
+	// Key 2 opens the unparented Sessions collection; no Tab cycling applies.
+	tmux("send-keys", "-t", pane, "2")
 	waitFor("Payments worker")
-	tmux("send-keys", "-t", pane, "f")
-	filtered := waitFor("state: exited")
-	if strings.Contains(filtered, "Payments worker") {
-		t.Fatal("status filter retained running worker")
+	tmux("send-keys", "-t", pane, "Tab")
+	if capture := tmux("capture-pane", "-p", "-t", pane); !strings.Contains(capture, "Payments worker") {
+		t.Fatalf("Tab changed the Sessions route:\n%s", capture)
 	}
-	tmux("send-keys", "-t", pane, "Escape")
-	waitFor("Payments worker")
+	tmux("send-keys", "-t", pane, "1")
+	waitFor("Retry failed payments")
 	for _, size := range [][2]int{{40, 12}, {60, 24}, {80, 18}, {100, 24}, {120, 32}} {
 		tmux("resize-window", "-t", pane, "-x", fmt.Sprint(size[0]), "-y", fmt.Sprint(size[1]))
-		waitFor("1/4 accepted")
+		waitFor("1 Tasks")
 		capture := waitFor("t terminal")
 		if dir := os.Getenv("WORKSPACE_TUI_CAPTURES"); dir != "" {
-			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("work-%dx%d.txt", size[0], size[1])), []byte(capture), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("tasks-%dx%d.txt", size[0], size[1])), []byte(capture), 0600); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
 	tmux("resize-window", "-t", pane, "-x", "120", "-y", "32")
 	tmux("send-keys", "-t", pane, "2")
-	tasks := waitFor("Persist payment receipts")
+	sessions := waitFor("Payments worker")
 	if dir := os.Getenv("WORKSPACE_TUI_CAPTURES"); dir != "" {
-		if err := os.WriteFile(filepath.Join(dir, "tasks-120x32.txt"), []byte(tasks), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "sessions-120x32.txt"), []byte(sessions), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	tmux("send-keys", "-t", pane, "1")
-	waitFor("Payments worker")
+	waitFor("Retry failed payments")
 	tmux("send-keys", "-t", pane, "/")
 	waitFor("Esc cancel")
 	tmux("send-keys", "-t", pane, "-l", "no-match")
-	waitFor("No records in this view")
+	waitFor("No matches")
 	tmux("send-keys", "-t", pane, "Escape")
-	waitFor("Payments worker")
+	waitFor("Retry failed payments")
 	// Esc was decoded as an application key: it restored the list and released
 	// the filter, allowing the next page shortcut rather than typing into it.
 	tmux("send-keys", "-t", pane, "2")
-	waitFor("Persist payment receipts")
+	waitFor("Payments worker")
 	tmux("send-keys", "-t", pane, "/")
 	tmux("send-keys", "-t", pane, "-l", "refund")
 	tmux("send-keys", "-t", pane, "Enter")
 	waitFor("Esc clear filter")
 	tmux("send-keys", "-t", pane, "Escape")
-	waitFor("Persist payment receipts")
+	waitFor("Payments worker")
 }
 
-func TestWorkEscapeWithoutTmux(t *testing.T) {
+func TestFilterEscapeWithoutTmux(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Getenv("WORKSPACE_TMUX_TEST") != "1" {
 		t.Skip("requires Linux PTY")
 	}
@@ -200,7 +203,7 @@ func TestWorkEscapeWithoutTmux(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	command := "stty cols 100 rows 32; exec env -u TMUX -u TMUX_PANE WORKSPACE_TUI_HELPER=1 TERM=xterm-256color '" + strings.ReplaceAll(binary, "'", "'\\''") + "' -test.run '^TestWorkPTYHelper$'"
+	command := "stty cols 100 rows 32; exec env -u TMUX -u TMUX_PANE WORKSPACE_TUI_HELPER=1 TERM=xterm-256color '" + strings.ReplaceAll(binary, "'", "'\\''") + "' -test.run '^TestWorkspacePTYHelper$'"
 	cmd := exec.CommandContext(ctx, "script", "-qfec", command, "/dev/null")
 	input, err := cmd.StdinPipe()
 	if err != nil {

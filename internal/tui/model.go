@@ -34,7 +34,6 @@ type routeKey struct {
 type routeMemory struct {
 	Query, SelectedID, StatusFilter, Sort string
 	ViewportOffset                        int
-	FocusedPanel                          int
 }
 
 type collectionItem struct {
@@ -81,10 +80,9 @@ type Model struct {
 	notice          string
 	quit            bool
 
-	route        route
-	stack        []route
-	routeMemory  map[routeKey]routeMemory
-	focusedPanel int
+	route       route
+	stack       []route
+	routeMemory map[routeKey]routeMemory
 
 	project            core.ProjectOverview
 	snapshot           core.WorkspaceSnapshot
@@ -222,7 +220,7 @@ func New(config Config) *Model {
 	if m.workspaceID == "" {
 		m.route = route{Page: "project"}
 	} else {
-		m.route = route{Page: "dashboard"}
+		m.route = route{Page: "tasks"}
 	}
 	if m.initialError != "" {
 		m.route = route{Page: "error"}
@@ -280,9 +278,6 @@ func (m *Model) activateRoute(next route) {
 		next.SelectedID = memory.SelectedID
 		next.StatusFilter = memory.StatusFilter
 		next.Sort = memory.Sort
-		m.focusedPanel = memory.FocusedPanel
-	} else {
-		m.focusedPanel = 0
 	}
 	m.route = next
 	m.resetView()
@@ -311,7 +306,6 @@ func (m *Model) rememberRoute() {
 		StatusFilter:   m.route.StatusFilter,
 		Sort:           m.route.Sort,
 		ViewportOffset: m.viewport.YOffset,
-		FocusedPanel:   m.focusedPanel,
 	}
 }
 
@@ -357,6 +351,6 @@ func (m *Model) setWorkspace(id string) tea.Cmd {
 	m.previewPending = false
 	m.worktreePending = false
 	m.projectPending = false
-	m.activateRoute(route{Page: "dashboard"})
+	m.activateRoute(route{Page: "tasks"})
 	return m.beginRefresh()
 }

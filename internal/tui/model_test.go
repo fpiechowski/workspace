@@ -44,7 +44,7 @@ func TestRenderedFrameFitsSmallAndUnicodeDimensions(t *testing.T) {
 		ObservedAt: time.Now(),
 		Status:     core.Status{Workspace: core.Workspace{ID: "ws_unicode", Title: "界面 e\u0301 title with a very long suffix", Status: "active", Workflow: &core.Workflow{Phase: "implementation"}}},
 	}
-	model.route = route{Page: "dashboard"}
+	model.route = route{Page: "tasks"}
 	model.snapshot.Status.Workspace.Tasks = []core.Task{{ID: "task_long", TaskSpec: core.TaskSpec{Title: "漢字 and combining e\u0301 with a long title"}, State: "blocked"}}
 	model.snapshot.Metrics = core.WorkspaceMetrics{TaskTotal: 8, TaskAccepted: 3, TaskRunning: 2, TaskBlocked: 1, ReadyWorktrees: 4}
 	model.rebuildViewport()
@@ -105,7 +105,7 @@ func TestMainPageNavigationRestoresCollectionAndPreviewState(t *testing.T) {
 	if model.route.Page != "worktrees" {
 		t.Fatalf("key 3 did not open worktrees: %+v", model.route)
 	}
-	_, _ = model.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	_, _ = model.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
 	if model.route.Page != "tasks" || model.route.Query != "compile" || model.route.SelectedID != "task_compile" || model.route.StatusFilter != "pending" {
 		t.Fatalf("returning to Tasks lost its filter or selection: %+v", model.route)
 	}
@@ -197,7 +197,7 @@ func TestCollectionInitialRefreshExplainsMissingData(t *testing.T) {
 	}
 }
 
-func TestDashboardAttentionShowsFivePrioritizedRowsAndViewAll(t *testing.T) {
+func TestAttentionItemsArePrioritizedAndStable(t *testing.T) {
 	model := New(Config{ProjectFound: true, WorkspaceID: "ws_attention"})
 	model.snapshot = core.WorkspaceSnapshot{Status: core.Status{Workspace: core.Workspace{
 		ID:              "ws_attention",
@@ -215,46 +215,11 @@ func TestDashboardAttentionShowsFivePrioritizedRowsAndViewAll(t *testing.T) {
 	if len(items) != 7 || items[0].Kind != "decision" || items[1].ID != "task_a" {
 		t.Fatalf("attention priority or stable ID ordering changed: %+v", items)
 	}
-	panel := model.dashboardPanels()[2]
-	if len(panel.Lines) != 6 || !strings.Contains(panel.Lines[0], "Choose a direction") || !strings.Contains(panel.Lines[1], "task_a") || !strings.Contains(panel.Lines[4], "task_d") || !strings.Contains(panel.Lines[5], "View all (7)") {
-		t.Fatalf("dashboard did not show five attention rows plus View all: %+v", panel)
-	}
 }
 
-func TestTabCyclesDashboardPanelsAndResultsTypes(t *testing.T) {
+func TestTabCyclesResultsTypesOnly(t *testing.T) {
 	model := New(Config{ProjectFound: true, WorkspaceID: "ws_focus"})
 	model.width, model.height = 120, 18
-	model.snapshot = core.WorkspaceSnapshot{
-		ObservedAt: time.Now(),
-		Status:     core.Status{Workspace: core.Workspace{ID: "ws_focus", Title: "Focus test", Status: "active"}},
-	}
-	model.route = route{Page: "dashboard"}
-	model.rebuildViewport()
-
-	for _, want := range []struct {
-		key   tea.KeyMsg
-		focus int
-		text  string
-	}{
-		{key: tea.KeyMsg{Type: tea.KeyTab}, focus: 1, text: "Tasks"},
-		{key: tea.KeyMsg{Type: tea.KeyTab}, focus: 2, text: "Needs attention"},
-		{key: tea.KeyMsg{Type: tea.KeyTab}, focus: 3, text: "Recent recorded activity"},
-	} {
-		_, _ = model.updateKey(want.key)
-		if model.route.Page != "dashboard" || model.focusedPanel != want.focus || !strings.Contains(model.View(), want.text) {
-			t.Fatalf("Tab did not focus dashboard panel %d: page=%q focus=%d view=%q", want.focus, model.route.Page, model.focusedPanel, model.View())
-		}
-	}
-	_, _ = model.updateKey(tea.KeyMsg{Type: tea.KeyShiftTab})
-	if model.focusedPanel != 2 {
-		t.Fatalf("Shift+Tab did not move to the previous dashboard panel: %d", model.focusedPanel)
-	}
-
-	model.navigate(route{Page: "tasks"})
-	model.navigate(route{Page: "dashboard"})
-	if model.focusedPanel != 2 {
-		t.Fatalf("returning to Dashboard lost panel focus: %d", model.focusedPanel)
-	}
 
 	model.navigate(route{Page: "results", Tab: "artifacts", Query: "important", SelectedID: "artifact_a"})
 	_, _ = model.updateKey(tea.KeyMsg{Type: tea.KeyTab})
@@ -265,6 +230,12 @@ func TestTabCyclesDashboardPanelsAndResultsTypes(t *testing.T) {
 	_, _ = model.updateKey(tea.KeyMsg{Type: tea.KeyShiftTab})
 	if model.route.Tab != "artifacts" || model.route.Query != "important" || model.route.SelectedID != "artifact_a" {
 		t.Fatalf("returning to the Artifacts type lost its filter or selection: %+v", model.route)
+	}
+
+	model.navigate(route{Page: "sessions"})
+	_, _ = model.updateKey(tea.KeyMsg{Type: tea.KeyTab})
+	if model.route.Page != "sessions" || model.route.Tab != "" {
+		t.Fatalf("Tab changed a route without type tabs: %+v", model.route)
 	}
 }
 

@@ -106,11 +106,7 @@ func (m *Model) rebuildViewport() {
 	}
 	m.viewport.Width = max(1, m.width-4)
 	m.viewport.Height = max(1, m.contentHeight())
-	content := m.detailContent()
-	if content == "" {
-		content = m.dashboardContent()
-	}
-	m.viewport.SetContent(content)
+	m.viewport.SetContent(m.detailContent())
 }
 
 func (m *Model) contentHeight() int {

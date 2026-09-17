@@ -10,62 +10,12 @@ import (
 	"workspace/internal/core"
 )
 
-// TestWorkProgressCountsOnlyAcceptedTasks proves a completed run or process
-// state never advances the accepted counter.
-func TestWorkProgressCountsOnlyAcceptedTasks(t *testing.T) {
-	m := New(Config{ProjectFound: true, WorkspaceID: "ws_progress", NoColor: true})
-	m.snapshot = core.WorkspaceSnapshot{
-		ObservedAt: time.Now(),
-		Status: core.Status{Workspace: core.Workspace{
-			ID: "ws_progress",
-			Tasks: []core.Task{
-				{ID: "task_accepted", TaskSpec: core.TaskSpec{Title: "Accepted"}, State: "accepted", Attempt: 1},
-				{ID: "task_completed", TaskSpec: core.TaskSpec{Title: "Process finished"}, State: "completed", Attempt: 1},
-				{ID: "task_running", TaskSpec: core.TaskSpec{Title: "Running"}, State: "running", Attempt: 1},
-				{ID: "task_review", TaskSpec: core.TaskSpec{Title: "Review"}, State: "awaiting_review", Attempt: 1},
-				{ID: "task_blocked", TaskSpec: core.TaskSpec{Title: "Blocked"}, State: "blocked", Attempt: 1},
-			},
-		}},
-	}
-	metrics := m.workMetrics()
-	if metrics.total != 5 || metrics.accepted != 1 || metrics.working != 1 || metrics.review != 1 || metrics.blocked != 1 {
-		t.Fatalf("progress counters are wrong: %+v", metrics)
-	}
-	line := strings.Join(m.progressLines(), "\n")
-	if !strings.Contains(line, "1/5 accepted") || !strings.Contains(line, "20%") {
-		t.Fatalf("progress line is missing the textual accepted/total fallback: %q", line)
-	}
-	if strings.Contains(line, "2/5") {
-		t.Fatalf("a non-accepted task was counted as complete: %q", line)
-	}
-}
-
-// TestWorkStatusBarSeparatesMetrics pins the compact live/review/blocked/
-// attention summary so it is not a single blended number.
-func TestWorkStatusBarSeparatesMetrics(t *testing.T) {
-	m := workFixture()
-	metrics := m.workMetrics()
-	if metrics.live != 2 || metrics.review != 1 || metrics.blocked != 1 || metrics.attention != 2 {
-		t.Fatalf("dashboard metrics changed: %+v", metrics)
-	}
-	bar := m.workStatusBar(metrics)
-	for _, want := range []string{"2 live", "1 review", "1 blocked", "2 attention"} {
-		if !strings.Contains(bar, want) {
-			t.Fatalf("status bar %q is missing %q", bar, want)
-		}
-	}
-	m.width, m.height = 100, 24
-	if view := m.View(); !strings.Contains(view, "2 live · 1 review · 1 blocked · 2 attention") {
-		t.Fatalf("dashboard view does not render the metric status bar:\n%s", view)
-	}
-}
-
 // TestCollectionRowsKeepSelectionVisibleInNoColor proves the regularized rows
 // keep their focus marker and stay within width without any color.
 func TestCollectionRowsKeepSelectionVisibleInNoColor(t *testing.T) {
 	m := workFixture()
 	m.width, m.height = 80, 24
-	m.navigate(route{Page: "tasks", SelectedID: "task_blocked"})
+	m.route = route{Page: "tasks", SelectedID: "task_blocked"}
 	items := m.filteredItems()
 	rows := m.renderItems(items, 40, 12)
 	if len(rows) > 12 {
@@ -119,7 +69,7 @@ func TestPreviewActionLineIsSelectionAware(t *testing.T) {
 func TestStableSelectionAcrossSortFilterAndRefresh(t *testing.T) {
 	m := workFixture()
 	m.width, m.height = 120, 32
-	m.navigate(route{Page: "tasks", SelectedID: "task_review"})
+	m.route = route{Page: "tasks", SelectedID: "task_review"}
 
 	if _, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}); m.route.SelectedID != "task_review" {
 		t.Fatalf("sort changed the selected ID: %q", m.route.SelectedID)
@@ -168,7 +118,7 @@ func TestEmptyStatesExplainAndOfferNextAction(t *testing.T) {
 	t.Run("filtered empty clears the filter", func(t *testing.T) {
 		m := workFixture()
 		m.width, m.height = 100, 24
-		m.navigate(route{Page: "tasks", Query: "no-such-task"})
+		m.route = route{Page: "tasks", Query: "no-such-task"}
 		view := m.View()
 		for _, want := range []string{"No matches", "Esc clears the filter."} {
 			if !strings.Contains(view, want) {
@@ -181,7 +131,7 @@ func TestEmptyStatesExplainAndOfferNextAction(t *testing.T) {
 func TestWideCollectionsUseNamedPanels(t *testing.T) {
 	m := workFixture()
 	m.width, m.height = 120, 32
-	m.navigate(route{Page: "tasks", SelectedID: "task_work"})
+	m.route = route{Page: "tasks", SelectedID: "task_work"}
 	wide := m.View()
 	for _, want := range []string{"Preview", "Tasks", "› "} {
 		if !strings.Contains(wide, want) {
@@ -202,7 +152,7 @@ func TestCollectionFramesFitAtSupportedSizes(t *testing.T) {
 	for _, size := range sizes {
 		m := workFixture()
 		m.width, m.height = size[0], size[1]
-		m.navigate(route{Page: "tasks", SelectedID: "task_work"})
+		m.route = route{Page: "tasks", SelectedID: "task_work"}
 		view := m.View()
 		lines := strings.Split(view, "\n")
 		if len(lines) != size[1] {

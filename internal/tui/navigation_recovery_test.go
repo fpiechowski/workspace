@@ -111,7 +111,8 @@ func TestNavigationFailuresDoNotOfferUnrelatedOrStaleRecovery(t *testing.T) {
 
 func TestListSeparatorsKeepSelectedEntryVisible(t *testing.T) {
 	m := workFixture()
-	items := m.workItems()
+	m.navigate(route{Page: "sessions"})
+	items := m.filteredItems()
 	m.route.SelectedID = items[len(items)-1].ID
 	for _, height := range []int{1, 3, 4, 5, 8, 12} {
 		rows := m.renderItems(items, 40, height)
