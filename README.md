@@ -188,7 +188,8 @@ workspace tui hide --workspace ws_ID
 `j`/`k` zmienia zaznaczenie, `Enter` otwiera element, `Esc` wraca, `/` filtruje
 kolekcję, a `f` przełącza widok statusu lub historii. `s` sortuje listę.
 `t` otwiera terminal zaznaczonego agenta lub potwierdzenie wznowienia;
-`o`, potem `t`, pozwala szybko otworzyć albo uruchomić orkiestratora. `a`
+`o`, potem `t`, pozwala szybko otworzyć albo uruchomić orkiestratora; `l`
+wraca do Agents & runs, a `v` otwiera Needs attention z Dashboardu. `a`
 otwiera tylko operacje dostępne dla zaznaczenia, w tym tworzenie i pełne usuwanie
 workspace'ów w pickerze projektu, archiwizację zakończonego workspace'u oraz usuwanie
 niepowiązanych tasków i nieaktywnych sesji. `g` przechodzi do zweryfikowanego

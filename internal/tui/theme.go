@@ -200,6 +200,3 @@ func (p palette) panelStyle(focused bool) lipgloss.Style {
 	}
 	return style.BorderForeground(p.border)
 }
-
-// borderStyle is retained for call sites that only need a rounded border.
-func (p palette) borderStyle(focused bool) lipgloss.Style { return p.panelStyle(focused) }

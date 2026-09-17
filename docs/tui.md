@@ -9,7 +9,8 @@ i nie uruchamia orkiestratora ani supervisora; jawna akcja w pickerze może utwo
 Picker projektu pokazuje tytuł, status, fazę, aktywne Runy, problemy, pełny ID, ścieżkę,
 źródło wejścia i datę utworzenia. Gdy lista jest pusta, pokazuje tytuł, jednozdaniowe
 wyjaśnienie i jedną prawidłową akcję (`a` tworzy workspace), więc nie zaprzecza już
-akcji Create workspace. Wybór workspace'u otwiera Work: pasek postępu (bubbles/progress)
+akcji Create workspace. W trybie szerokim obok listy pokazuje szczegóły zaznaczenia
+(ID, ścieżkę, źródło wejścia, datę utworzenia i stan) bez ramki panelu. Wybór workspace'u otwiera Work: pasek postępu (bubbles/progress)
 z tekstowym `accepted/total` i procentem oraz pasek statusu z osobnymi licznikami
 live, review, blocked i attention. Podsumowanie pozostaje widoczne przy przełączaniu sekcji Agents & runs, Tasks,
 Needs attention i Recent recorded activity. Agents & runs pokazuje orkiestratora,
@@ -74,6 +75,8 @@ breadcrumb, a na szczegółach zadania `1`–`3` są skrótami do powiązanych z
 |---|---|
 | `1`–`5` | Work, Tasks, Worktrees, Results, More |
 | `Up`/`Down`, `j`/`k` | Zmiana zaznaczenia lub przewijanie szczegółów |
+| `PgUp`/`PgDn` | Przewiń dokument albo przesuń zaznaczenie o stronę na kolekcji |
+| `Home`/`End` | Początek lub koniec dokumentu albo kolekcji |
 | `Enter` | Otwórz zaznaczenie; nie uruchamia mutacji |
 | `Esc` | Anuluj formularz, wyjdź z edycji filtra, wyczyść filtr albo wróć |
 | `/` | Edytuj filtr kolekcji |
@@ -81,6 +84,7 @@ breadcrumb, a na szczegółach zadania `1`–`3` są skrótami do powiązanych z
 | `Tab` / `Shift+Tab` | Zmień fokus panelu Dashboard albo typ wyników |
 | `s` | Sortuj według priorytetu, nazwy lub ostatniego wykonania |
 | `l` | Wróć do Agents & runs |
+| `v` | Otwórz Needs attention z Dashboardu |
 | `t` | Otwórz terminal agenta albo potwierdź start/wznowienie |
 | `a` | Otwórz dostępne akcje zaznaczenia lub workspace'u |
 | `g` | Skocz do zweryfikowanego celu tmux |

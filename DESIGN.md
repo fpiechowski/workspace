@@ -57,16 +57,20 @@ Powłoka ma stałą kolejność: nagłówek tożsamości i świeżości, główn
 opcjonalny breadcrumb/ nawigacja wtórna, treść, wiersz statusu/komunikatu oraz
 kontekstowa legenda klawiszy. Wiersz statusu i legenda są rezerwowane zawsze,
 więc pozostają widoczne przy każdym wspieranym rozmiarze. Breadcrumb pojawia się
-na trasach szczegółów i kolekcjach zależnych; trasy główne go nie pokazują.
+na trasach szczegółów i kolekcjach zależnych, a Results używa tej linii jako
+nawigacji wtórnej typu wyniku; Work i picker projektu jej nie pokazują.
 
 - Minimum to **40×12**; mniejszy terminal pokazuje komunikat o rozmiarze.
 - Jedna decyzja `layoutFor` steruje wszystkimi stronami: **tiny** poniżej 40×12,
   **compact** dla średnich terminali (jedna kolumna) oraz **wide** od 100×24
   (lista i szczegóły obok siebie). Work korzysta z tej samej decyzji zamiast
-  własnego progu szerokości. Lista w trybie wide zajmuje trzy piąte szerokości.
-- Kolekcje i picker projektu w trybie wide pokazują dwa nazwane, obramowane
-  panele (lista oraz `Preview`) obok siebie, z jedną wyraźną krawędzią fokusu;
-  szerokość listy jest oparta na dwóch piątych szerokości terminala.
+  własnego progu szerokości; w trybie wide lista Work zajmuje trzy piąte
+  szerokości.
+- Kolekcje w trybie wide pokazują dwa nazwane, obramowane panele (lista oraz
+  `Preview`) obok siebie, z jedną wyraźną krawędzią fokusu; szerokość listy jest
+  oparta na dwóch piątych szerokości terminala. Picker projektu w trybie wide
+  pokazuje listę workspace'ów i obok szczegóły zaznaczenia bez ramki, z
+  wyróżnionym wierszem wyboru.
 - Wpis ma dwa wiersze: znacznik, status i tytuł, następnie kontekst. Gdy na listę
   pozostają mniej niż cztery wiersze, wpis zwija się do jednego. W pozostałych
   rozmiarach sąsiednie wpisy oddziela linia o niższym nacisku (`subtle`).

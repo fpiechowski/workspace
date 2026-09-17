@@ -149,7 +149,7 @@ func TestWorkFilterEscapeInTmux(t *testing.T) {
 	}
 	tmux("send-keys", "-t", pane, "Escape")
 	waitFor("Payments worker")
-	for _, size := range [][2]int{{120, 32}, {60, 24}, {40, 12}} {
+	for _, size := range [][2]int{{40, 12}, {60, 24}, {80, 18}, {100, 24}, {120, 32}} {
 		tmux("resize-window", "-t", pane, "-x", fmt.Sprint(size[0]), "-y", fmt.Sprint(size[1]))
 		waitFor("1/4 accepted")
 		capture := waitFor("t terminal")
