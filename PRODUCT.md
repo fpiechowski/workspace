@@ -1,161 +1,168 @@
-# Wizja produktu `workspace`
+# `workspace` Product Vision
 
-## Cel
+## Goal
 
-`workspace` jest lokalnym narzędziem do prowadzenia złożonych zmian w repozytorium Git
-przez jednego orkiestratora i wielu wyspecjalizowanych agentów. Utrwala kontekst pracy,
-oddziela planowanie od implementacji, izoluje zmiany w Git worktrees i pozostawia
-człowiekowi kontrolę nad decyzjami produktowymi, publikacją oraz zakończeniem pracy.
-Praca może korzystać z nazwanego workflow albo być prowadzona manualnie bez workflow.
+`workspace` is a local tool for carrying out complex changes in a Git repository through
+one orchestrator and multiple specialized agents. It preserves work context, separates
+planning from implementation, isolates changes in Git worktrees, and leaves product
+decisions, publication, and completion under human control. Work can use a named
+workflow or be conducted manually without a workflow.
 
-Produkt rozwiązuje problem sesji agentowych, które są łatwe do uruchomienia, ale trudne
-do bezpiecznego wznowienia i skoordynowania. Sam terminal lub historia czatu nie mówi,
-który wynik został zaakceptowany, do jakiej rewizji kodu się odnosi ani czy operację
-można bezpiecznie ponowić. `workspace` zapisuje te informacje jako jawny stan projektu.
+The product addresses the problem of agent sessions that are easy to start but difficult
+to resume and coordinate safely. A terminal or chat history alone does not say which
+result was accepted, which code revision it refers to, or whether an operation can be
+safely retried. `workspace` records this information as explicit project state.
 
-## Dla kogo
+## Audience
 
-Podstawowym użytkownikiem jest programista korzystający z agentów CLI podczas pracy
-nad istniejącym repozytorium. Drugim odbiorcą jest sam agent: stabilny interfejs CLI,
-JSON/YAML i instalowany skill pozwalają mu wykonywać operacje bez zgadywania stanu.
+The primary user is a developer using CLI agents while working on an existing
+repository. The second audience is the agent itself: a stable CLI, JSON/YAML, and an
+installable skill let it perform operations without guessing the state.
 
-Narzędzie jest szczególnie przydatne, gdy zadanie:
+The tool is especially useful when a task:
 
-- wymaga najpierw diagnozy i planu;
-- można podzielić na zależne lub równoległe części;
-- angażuje różne role, modele albo klientów agentowych;
-- musi przetrwać przerwanie procesu, terminala lub komputera;
-- wymaga śladu decyzji, wyników testów i pochodzenia artefaktów.
+- requires diagnosis and a plan first;
+- can be split into dependent or parallel parts;
+- involves different roles, models, or agent clients;
+- must survive interruption of a process, terminal, or computer;
+- requires a record of decisions, test results, and artifact provenance.
 
-## Obietnica produktu
+## Product Promise
 
-Użytkownik przekazuje ticket albo opis problemu i wybiera jedną z trzech jawnych dróg:
-nazwany workflow, świadome odroczenie wyboru (`needs_workflow`) albo pracę manualną bez
-workflow (`--no-workflow`). Pracę można obserwować w tmux. Orkiestrator deleguje
-planowanie, implementację, integrację i testy w workflow, a w trybie manualnym sam
-tworzy jawne zadania i worktrees, bez faz i release'u. Każdy wynik ma wskazane zadanie,
-wykonanie, commit i dowody weryfikacji. Po przerwaniu pracy system odtwarza stan
-z plików, zamiast polegać wyłącznie na pamięci rozmowy.
+The user provides a ticket or problem description and chooses one of three explicit
+paths: a named workflow, a deliberate deferral of the choice (`needs_workflow`), or
+manual work without a workflow (`--no-workflow`). Work can be observed in tmux. The
+orchestrator delegates planning, implementation, integration, and testing in a
+workflow; in manual mode it creates explicit tasks and worktrees without phases or
+release. Each result identifies a task, execution, commit, and verification evidence.
+After an interruption, the system reconstructs state from files instead of relying only
+on conversation memory.
 
-Sukces oznacza, że użytkownik może:
+Success means that the user can:
 
-1. utworzyć workspace z trwałym snapshotem wejścia;
-2. bezpiecznie delegować pracę do izolowanych worktrees;
-3. sprawdzić aktualny stan, decyzje, artefakty i historię wykonań;
-4. wznowić przerwaną pracę bez duplikowania niepewnych operacji;
-5. świadomie zatwierdzić publikację i live testing w workflow oraz potwierdzić
-   zakończenie workflow albo manualnego workspace'u.
+1. create a workspace with a durable input snapshot;
+2. safely delegate work to isolated worktrees;
+3. inspect current state, decisions, artifacts, and execution history;
+4. resume interrupted work without duplicating uncertain operations;
+5. deliberately approve publication and live testing in a workflow and confirm
+   completion of either the workflow or a manual workspace.
 
-## Zasady produktu
+## Product Principles
 
-### Stan jest ważniejszy niż historia czatu
+### State Matters More Than Chat History
 
-`WORKSPACE.md`, snapshot workflow i rejestry runtime są źródłem odtwarzalnego stanu.
-Historia rozmowy może poprawić ciągłość pracy, ale nie zastępuje zadań, decyzji,
-artefaktów ani identyfikatorów operacji.
+`WORKSPACE.md`, the workflow snapshot, and runtime registries are the source of
+recoverable state. Conversation history can improve continuity, but it does not replace
+tasks, decisions, artifacts, or operation identifiers.
 
-### Delegowanie jest jawne
+### Delegation Is Explicit
 
-Zadanie ma cel, rolę, kryteria akceptacji, zależności i wymagane produkty. Zakończenie
-procesu nie oznacza przyjęcia wyniku, a odebranie wiadomości nie oznacza akceptacji
-handoffu. Orkiestrator ocenia wynik przed akceptacją zadania, a w workflow także przed
-przesunięciem fazy.
+A task has a goal, role, acceptance criteria, dependencies, and required products.
+Process completion does not mean that the result was accepted, and receiving a message
+does not mean that the handoff was accepted. The orchestrator evaluates the result
+before accepting a task and, in a workflow, before advancing the phase.
 
-### Człowiek zachowuje decyzje o skutkach zewnętrznych
+### Humans Retain Decisions with External Effects
 
-Agent może przygotować change request i przedstawić diff, ale publikacja zależy od
-polityki skonfigurowanej przez użytkownika. Workflow kończy się dopiero po otrzymanym
-od użytkownika potwierdzeniu wdrożenia albo release'u; manualny workspace zamyka się
-wyłącznie jawną, potwierdzoną przez użytkownika operacją `complete`. Treść ticketa nie
-rozszerza uprawnień agenta.
+An agent may prepare a change request and present a diff, but publication depends on
+the policy configured by the user. A workflow ends only after user confirmation of
+deployment or release; a manual workspace closes only through the explicit,
+user-confirmed `complete` operation. Ticket content does not expand the agent's
+privileges.
 
-### Ponowienie nie może duplikować pracy
+### Retrying Must Not Duplicate Work
 
-Mutacje mają klucze operacji i trwałe receipts. Powtórzenie tej samej intencji zwraca
-poprzedni wynik; zmieniona intencja wymaga nowego klucza. Niepewny efekt zewnętrzny
-jest najpierw uzgadniany, a nie wykonywany ponownie w ciemno.
+Mutations have operation keys and durable receipts. Repeating the same intent returns
+the previous result; a changed intent requires a new key. An uncertain external effect
+is reconciled first rather than blindly executed again.
 
-### Lokalna praca użytkownika jest chroniona
+### Local User Work Is Protected
 
-Worktrees izolują zapisywalne zadania. Sprzątanie nie usuwa aktywnych, brudnych ani
-niezabezpieczonych zmian. Narzędzie nie traktuje dzierżawy zapisu jako systemowego
-sandboxa i nie obiecuje ochrony przed dowolnym procesem działającym poza nim.
+Worktrees isolate writable tasks. Cleanup does not remove active, dirty, or unprotected
+changes. The tool does not treat a write lease as an operating-system sandbox and does
+not promise protection from arbitrary processes running outside it.
 
-### Możliwości klienta są jawne
+### Client Capabilities Are Explicit
 
-Uruchomienie procesu, wznowienie natywnej rozmowy, dostarczenie wiadomości, obserwacja
-i przerwanie to osobne możliwości adaptera. Generyczny launcher pozostaje użyteczny,
-ale pełna autonomiczna komunikacja wymaga klienta obsługującego dostarczenie.
+Process launch, native conversation resume, message delivery, observation, and
+interruption are separate adapter capabilities. A generic launcher remains useful, but
+full autonomous communication requires a client that supports delivery.
 
-## Zakres produktu
+## Product Scope
 
-Aktualny zakres obejmuje:
+The current scope includes:
 
-- pojedynczy lokalny projekt Git i wiele workspace'ów;
-- trzy jawne tryby utworzenia workspace'u: nazwany workflow, odroczony wybór
-  (`needs_workflow`) i manualna orkiestracja bez workflow (`--no-workflow`);
-- planowanie i implementację w oddzielnych worktrees;
-- tmux jako widoczny runtime procesów;
-- persony agentów, logiczne sesje oraz historię konkretnych uruchomień;
-- trwały inbox, handoffy, niezmienne artefakty i przechwycone wyniki poleceń;
-- routing klientów, providerów i modeli według profili;
-- adaptery Codex, Claude, OpenCode i własnych poleceń;
-- integrację zmian oraz przygotowanie/publikację change requests;
-- kontrolowane wznowienie, uzgadnianie awarii, archiwizację i sprzątanie;
-- workflow `plan-first` oraz rozbudowany, zgodny wstecznie `issue-resolution`.
-- manualny tryb bez workflow: delegowanie zadań i worktrees, handoffy, checks i
-  akceptacja z ustalonym limitem 3 równoległych workerów, bez faz, advance, release'u
-  ani konwersji na workflow;
-- interaktywny TUI do przeglądania tego samego stanu, nawigacji po taskach i
-  uruchamiania jawnie dozwolonych operacji core.
+- a single local Git project and multiple workspaces;
+- three explicit workspace-creation modes: named workflow, deferred choice
+  (`needs_workflow`), and manual orchestration without a workflow (`--no-workflow`);
+- planning and implementation in separate worktrees;
+- tmux as visible process runtime;
+- agent personas, logical sessions, and the history of specific executions;
+- a durable inbox, handoffs, immutable artifacts, and captured command results;
+- client, provider, and model routing through profiles;
+- Codex, Claude, OpenCode, and custom-command adapters;
+- change integration and change-request preparation/publication;
+- controlled resumption, failure reconciliation, archiving, and cleanup;
+- the `plan-first` workflow and the extended, backward-compatible `issue-resolution` workflow;
+- manual mode without a workflow: task and worktree delegation, handoffs, checks, and
+  acceptance with a fixed limit of 3 parallel workers, without phases, advance, release,
+  or conversion to a workflow;
+- an interactive TUI for browsing the same state, navigating tasks, and running
+  explicitly permitted core operations.
 
-Poza aktualnym zakresem pozostają zdalne workery, koordynacja wielu komputerów,
-kryptograficzne potwierdzanie tożsamości człowieka, rozliczanie tokenów lub kosztów
-całego konta oraz ochrona przed procesami działającymi z tymi samymi uprawnieniami
-systemowymi.
+Outside the current scope are remote workers, multi-computer coordination,
+cryptographic confirmation of human identity, account-wide token or cost accounting,
+and protection against processes running with the same system permissions.
 
-## Doświadczenie użytkownika
+## User Experience
 
-CLI i formaty maszynowe pozostają podstawowym interfejsem agentów i automatyzacji.
-Programista może użyć TUI do przeglądania workspace'ów, tasków, wykonania, worktrees,
-wyników i runtime, a następnie skoczyć do zweryfikowanego panelu tmux. TUI korzysta
-z tych samych zapytań i operacji core co CLI; każda mutacja ma potwierdzenie oraz
-guardy bieżącej rewizji, próby lub RunID. Nie dodaje akcji wysyłania wiadomości,
-ACK-owania inboxa ani automatycznej akceptacji wyników.
+The CLI and machine-readable formats remain the primary interface for agents and
+automation. A developer can use the TUI to browse workspaces, tasks, executions,
+worktrees, results, and runtime, then jump to a verified tmux pane. The TUI uses the
+same core queries and operations as the CLI; every mutation has confirmation and a
+guard for the current revision, attempt, or RunID. It does not add actions for sending
+messages, acknowledging the inbox, or automatically accepting results.
 Native OpenCode delivery is visible in the active parent TUI: the Run-scoped loopback
 server selects the current session, appends the marker-bearing workspace prompt, and
 submits it through the active TUI control API. Delivery is confirmed against the
 current Run only after the marker appears in session history; it remains distinct from
 inbox ACK and handoff acceptance.
 
-W pickerze projektu użytkownik może utworzyć workspace, wybierając nazwany workflow,
-świadomie odkładając wybór (`needs_workflow`) albo tworząc workspace manualny bez
-workflow. Tryby odróżnia etykieta fazy: `manual` dla orkiestracji manualnej i `-`
-dla odroczonego wyboru. Manualny workspace ukończy jawna, potwierdzona przez
-użytkownika operacja `complete`, po której archive nie wymaga release'u; workflow
-pozostaje przy potwierdzonym release. Alternatywnie użytkownik może świadomie odrzucić
-workspace w całości bez wymogu release/archive. Pełne usunięcie wymaga przepisania ID,
-zatrzymuje runtime i usuwa stan, worktrees, niezacommitowane pliki oraz lokalne gałęzie
-workspace'u. Wewnątrz zakończonego workspace'u TUI udostępnia archive, które zachowuje
-historię i respektuje bramki aktywnego runtime oraz release'u (workflow) albo
-wcześniejszego `complete` (tryb manualny). Można też usunąć task bez zależności
-i utrwalonych wyników oraz nieaktywną sesję bez referencji wynikowych. Taski i sesje
-otrzymują audytowalny tombstone i znikają z normalnych widoków; operacja nie przepisuje
-ani nie kasuje historii, na której opierają się inne rekordy.
+Messages and handoffs use exact logical Session addresses. `ToAgent` remains an audit
+and legacy projection, while `--to` is accepted only when it resolves to one eligible
+Session; idle Sessions remain pending and closed or deleted Sessions are never silently
+rerouted. Agents inspect, acknowledge, and review only their current Session, while the
+user selects a Session explicitly or requests an agent-wide historical view explicitly.
 
-Pierwszy ekran TUI skupia się na postępie zaakceptowanych zadań i aktualnej pracy
-agentów. Łączy zadanie, sesję i bieżący Run w czytelnym wpisie, odróżnia wykonanie
-procesu od akceptacji wyniku oraz umożliwia otwarcie lub jawne wznowienie terminala.
-Brak panelu podczas nawigacji prowadzi do propozycji reconcile wymagającej
-potwierdzenia użytkownika, a następnie ponownej próby otwarcia tego samego celu.
+In the project picker, the user can create a workspace by choosing a named workflow,
+deliberately deferring the choice (`needs_workflow`), or creating a manual workspace
+without a workflow. The modes are distinguished by the phase label: `manual` for
+manual orchestration and `-` for deferred selection. A manual workspace is completed by
+the explicit, user-confirmed `complete` operation, after which archive does not require
+a release; a workflow still requires a confirmed release. Alternatively, the user can
+deliberately discard the entire workspace without requiring release/archive. Full
+deletion requires retyping the ID, stops the runtime, and removes state, worktrees,
+uncommitted files, and local workspace branches. Within a completed workspace, the TUI
+offers archive, which preserves history and respects active-runtime and release gates
+(for a workflow) or the earlier `complete` (for manual mode). A task with no
+dependencies or persisted results and an inactive session with no result references can
+also be deleted. Tasks and sessions receive an auditable tombstone and disappear from
+normal views; the operation does not rewrite or delete history used by other records.
 
-TUI może działać ręcznie jako przeglądarka albo jako zarządzany panel obok orkiestratora.
-Supervisor odtwarza wyłącznie panel o zapisanej, zweryfikowanej tożsamości; q w tym
-panelu zapisuje hide przed wyjściem. Podczas pause i completed panel może pozostać
-dostępny do przeglądu, a archive go sprząta. Brak tmux ogranicza nawigację runtime,
-ale pozostawia dostępny zapisany stan workspace'u. Kontrakt ekranów i skrótów opisuje
+The first TUI screen focuses on accepted-task progress and agents' current work. It
+combines the task, session, and current Run in a readable entry, distinguishes process
+execution from result acceptance, and allows the terminal to be opened or explicitly
+resumed. If a pane is missing during navigation, the TUI proposes a reconcile that
+requires user confirmation and then retries opening the same target.
+
+The TUI can run manually as a browser or as a managed pane next to the orchestrator.
+The supervisor restores only a pane with recorded, verified identity; `q` in that pane
+records hide before exiting. During pause and completed, the pane may remain available
+for review, and archive cleans it up. Without tmux, runtime navigation is limited, but
+the persisted workspace state remains available. The screen and shortcut contract is
+described in
 [docs/tui.md](docs/tui.md).
 
-Instrukcje instalacji i użycia znajdują się w [README.md](README.md). Szczegóły
-techniczne opisuje [ARCHITECTURE.md](ARCHITECTURE.md), a planowane zmiany są utrzymywane
-w [TODO.md](TODO.md).
+Installation and usage instructions are in [README.md](README.md). Technical details
+are described in [ARCHITECTURE.md](ARCHITECTURE.md), and planned changes are maintained
+in [TODO.md](TODO.md).

@@ -2,174 +2,169 @@
 
 ## Overview
 
-Tryb **Operate**: natywny interfejs terminalowy do obserwowania pracy agentów,
-przeglądania wyników i wykonywania jawnych operacji. Pierwszy ekran Work pokazuje
-postęp zaakceptowanych zadań oraz aktualną pracę. Zakończenie procesu nie oznacza
-akceptacji wyniku: licznik i procent postępu uwzględniają wyłącznie zadania `accepted`.
+**Operate** mode: a native terminal interface for observing agent work, reviewing
+results, and performing explicit operations. The first Work screen shows accepted-task
+progress and current work. Process completion does not mean result acceptance: the count
+and progress percentage include only `accepted` tasks.
 
-Źródłami kontraktu są [PRODUCT.md](PRODUCT.md) i [docs/tui.md](docs/tui.md).
-Implementacja wyglądu znajduje się w `internal/tui/theme.go`, `status.go`, `view.go`
-i `work.go`.
+The contract sources are [PRODUCT.md](PRODUCT.md) and [docs/tui.md](docs/tui.md).
+The visual implementation is in `internal/tui/theme.go`, `status.go`, `view.go`, and
+`work.go`.
 
 ## Colors
 
-Paleta rozróżnia role semantyczne, a renderery używają ich zamiast surowych
-kolorów: tekst podstawowy, pomocniczy i dyskretny, obramowanie i obramowanie
-fokusu, akcent, tło i tekst zaznaczenia, sukces, ostrzeżenie, zagrożenie oraz
-powierzchnia informacyjna. Motyw `auto` rozwiązuje się przez wykrywanie tła
-terminala (Lip Gloss / termenv). Gdy terminal nie pozwala wiarygodnie odczytać
-tła (potok, tmux, screen, `dumb`), obowiązuje udokumentowany fallback do palety
-ciemnej. Jawne `dark` i `light` ignorują wykrywanie, a `--no-color` nie ustawia
-żadnego koloru i pozostaje deterministyczne. Tło terminala poza zaznaczeniem
-pozostaje ustawieniem użytkownika; token zaznaczenia wypełnia cały zaznaczony
-wpis, łącznie z jego opisem.
+The palette distinguishes semantic roles, and renderers use them instead of raw colors:
+primary, secondary, and subtle text; border and focused border; accent; selection
+background and text; success, warning, danger, and an information surface. The `auto`
+theme is resolved by detecting the terminal background (Lip Gloss / termenv). When the
+terminal does not allow the background to be read reliably (pipe, tmux, screen, `dumb`),
+the documented fallback is the dark palette. Explicit `dark` and `light` ignore
+detection, while `--no-color` sets no color and remains deterministic. Outside the
+selection, the terminal background remains the user's setting; the selection token
+fills the entire selected entry, including its description.
 
-| Token | Dark | Light | Rola |
+| Token | Dark | Light | Role |
 |---|---|---|---|
-| `primary` | `#E2E8F0` | `#0F172A` | Tekst podstawowy |
-| `secondary` | `#B4C0D3` | `#334155` | Podtytuły i etykiety |
-| `subtle` | `#7C8CA3` | `#64748B` | Dyskretne metadane i ID |
-| `border` | `#475569` | `#CBD5E1` | Obramowanie bez fokusu |
-| `focusedBorder` | `#67E8F9` | `#0E7490` | Obramowanie aktywnego panelu |
-| `accent` | `#67E8F9` | `#0E7490` | Nagłówki, fokus, aktywna praca |
-| `selectionFg` / `selectionBg` | `#F8FAFC` / `#1E293B` | `#0F172A` / `#E0F2FE` | Tekst i tło zaznaczenia |
+| `primary` | `#E2E8F0` | `#0F172A` | Primary text |
+| `secondary` | `#B4C0D3` | `#334155` | Subtitles and labels |
+| `subtle` | `#7C8CA3` | `#64748B` | Subtle metadata and IDs |
+| `border` | `#475569` | `#CBD5E1` | Unfocused border |
+| `focusedBorder` | `#67E8F9` | `#0E7490` | Active-panel border |
+| `accent` | `#67E8F9` | `#0E7490` | Headings, focus, active work |
+| `selectionFg` / `selectionBg` | `#F8FAFC` / `#1E293B` | `#0F172A` / `#E0F2FE` | Selection text and background |
 | `success` | `#86EFAC` | `#166534` | Accepted, completed, ready |
-| `warning` | `#FDE68A` | `#92400E` | Blokady, review i przerwanie |
+| `warning` | `#FDE68A` | `#92400E` | Blocks, review, and interruption |
 | `danger` | `#FDA4AF` | `#BE123C` | Failed, error |
-| `infoSurface` | `#164E63` | `#E0F2FE` | Tło komunikatu informacyjnego |
+| `infoSurface` | `#164E63` | `#E0F2FE` | Information-message background |
 
-`--no-color` usuwa kolory, zachowując tekst, symbole, pogrubienie i animację.
-Status musi pozostawać rozpoznawalny bez barwy.
+`--no-color` removes colors while preserving text, symbols, bold styling, and animation.
+Status must remain recognizable without color.
 
 ## Typography
 
-Krój i rozmiar pisma wyznacza terminal. Hierarchię tworzą fabryki stylów
+The terminal determines the typeface and font size. Hierarchy is created by the style
+factories
 (`titleStyle`, `headingStyle`, `sectionStyle`, `labelStyle`, `valueStyle`,
 `warningStyle`, `metaStyle`, `keycapStyle`, `noticeStyle`, `selectedStyle`,
-`panelStyle`): pogrubiony nagłówek, akcent sekcji, etykieta i wartość pola,
-ostrzeżenie, przygaszony podtytuł, podświetlenie zaznaczenia i ramka fokusu.
-Szerokości mierzy się w kolumnach terminala, z uwzględnieniem Unicode; długi
-tekst jest skracany przez `…`.
+`panelStyle`): bold heading, section accent, field label and value, warning, muted
+subtitle, selection highlight, and focus border. Widths are measured in terminal
+columns with Unicode support; long text is truncated with `…`.
 
 ## Layout
 
-Powłoka ma stałą kolejność: nagłówek tożsamości i świeżości, główna nawigacja,
-opcjonalny breadcrumb/ nawigacja wtórna, treść, wiersz statusu/komunikatu oraz
-kontekstowa legenda klawiszy. Wiersz statusu i legenda są rezerwowane zawsze,
-więc pozostają widoczne przy każdym wspieranym rozmiarze. Breadcrumb pojawia się
-na trasach szczegółów i kolekcjach zależnych, a Results używa tej linii jako
-nawigacji wtórnej typu wyniku; Work i picker projektu jej nie pokazują.
+The shell has a fixed order: identity and freshness header, primary navigation,
+optional breadcrumb/secondary navigation, content, status/message row, and a
+contextual key legend. The status row and legend are always reserved, so they remain
+visible at every supported size. The breadcrumb appears on detail routes and dependent
+collections, while Results uses this line as secondary result-type navigation; Work and
+the project picker do not show it.
 
-- Minimum to **40×12**; mniejszy terminal pokazuje komunikat o rozmiarze.
-- Jedna decyzja `layoutFor` steruje wszystkimi stronami: **tiny** poniżej 40×12,
-  **compact** dla średnich terminali (jedna kolumna) oraz **wide** od 100×24
-  (lista i szczegóły obok siebie). Work korzysta z tej samej decyzji zamiast
-  własnego progu szerokości; w trybie wide lista Work zajmuje trzy piąte
-  szerokości.
-- Kolekcje w trybie wide pokazują dwa nazwane, obramowane panele (lista oraz
-  `Preview`) obok siebie, z jedną wyraźną krawędzią fokusu; szerokość listy jest
-  oparta na dwóch piątych szerokości terminala. Picker projektu w trybie wide
-  pokazuje listę workspace'ów i obok szczegóły zaznaczenia bez ramki, z
-  wyróżnionym wierszem wyboru.
-- Wpis ma dwa wiersze: znacznik, status i tytuł, następnie kontekst. Gdy na listę
-  pozostają mniej niż cztery wiersze, wpis zwija się do jednego. W pozostałych
-  rozmiarach sąsiednie wpisy oddziela linia o niższym nacisku (`subtle`).
-  Zaznaczenie pozostaje widoczne, a linia akcji podglądu reklamuje tylko komendy
-  wspierane przez zaznaczony rodzaj.
-- Etykiety sekcji Work skracają się poniżej 75 kolumn, a główne zakładki,
-  podsumowanie i skróty używają krótszej wersji poniżej 60 kolumn.
+- Minimum is **40×12**; a smaller terminal shows a size message.
+- One `layoutFor` decision controls every page: **tiny** below 40×12, **compact** for
+  medium terminals (one column), and **wide** from 100×24 (list and details side by
+  side). Work uses the same decision instead of its own width threshold; in wide mode,
+  the Work list occupies three fifths of the width.
+- Collections in wide mode show two named, bordered panels (list and `Preview`) side by
+  side, with one clear focus edge; the list width is based on two fifths of the terminal
+  width. The project picker in wide mode shows the workspace list next to unbordered
+  details for the selection, with a highlighted selection row.
+- An entry has two rows: marker, status, and title, followed by context. When fewer than
+  four rows remain for the list, the entry collapses to one. At other sizes, adjacent
+  entries are separated by a lower-emphasis (`subtle`) line. The selection remains
+  visible, and the preview action line advertises only commands supported by the
+  selected kind.
+- Work section labels are shortened below 75 columns, while the main tabs, summary, and
+  shortcuts use shorter forms below 60 columns.
 
 ## Elevation & Depth
 
-Układ jest płaski. Relacje tworzą odstępy, kolumny, nagłówki oraz obramowania
-terminalowe. Fokus wyróżnia barwa i pogrubienie, bez cieni.
+The layout is flat. Relationships are created by spacing, columns, headings, and
+terminal borders. Focus is distinguished by color and bold styling, without shadows.
 
 ## Shapes
 
-Renderer paneli używa zaokrąglonych ramek znakowych Lip Gloss. Aktywne zakładki
-otrzymują nawiasy `[ ]`, zaznaczony wpis znacznik `›`, a pasek postępu znaki `━` i `─`.
+The panel renderer uses rounded Lip Gloss character borders. Active tabs receive `[ ]`,
+the selected entry receives the `›` marker, and the progress bar uses `━` and `─`.
 
 ## Components
 
-**Agents & runs.** Wybieralny wpis łączy agenta, zadanie, stan wykonania i model.
-Lista obejmuje orkiestratora, aktywne wykonania i niezamknięte sesje bieżących prób
-niezaakceptowanych zadań. Zaznaczenie jest związane z ID także po sortowaniu. Sekcja
-jest pierwszą z czterech sekcji Dashboardu (Agents & runs, Tasks, Needs attention,
-Recent recorded activity); aktywna sekcja ma znaczniki tekstowe `[ ]`, dzięki czemu
-fokus pozostaje widoczny bez koloru.
+**Agents & runs.** A selectable entry combines the agent, task, execution state, and
+model. The list includes the orchestrator, active executions, and open sessions for
+current attempts of unaccepted tasks. The selection is tied to the ID even after
+sorting. This is the first of four Dashboard sections (Agents & runs, Tasks, Needs
+attention, Recent recorded activity); the active section has textual `[ ]` markers so
+focus remains visible without color.
 
-**Postęp i status.** Pasek postępu używa `bubbles/progress` z tokenem `accent`
-i zawsze towarzyszy mu tekst `accepted/total` oraz procent; liczone są wyłącznie
-zadania `accepted`. Poniżej osobny pasek statusu pokazuje live, review, blocked
-i attention, więc podsumowanie nie opiera się na kolorze ani na jednej liczbie.
-Puste kolekcje pokazują tytuł, jednozdaniowe wyjaśnienie i jedną prawidłową akcję;
-picker projektu reklamuje `a` (Create workspace) zamiast twierdzić, że TUI nigdy
-nie tworzy workspace'u.
+**Progress and status.** The progress bar uses `bubbles/progress` with the `accent`
+token and is always accompanied by `accepted/total` text and a percentage; only
+`accepted` tasks are counted. A separate status bar below shows live, review, blocked,
+and attention, so the summary does not rely on color or a single number. Empty
+collections show a title, one-sentence explanation, and one valid action; the project
+picker advertises `a` (Create workspace) instead of claiming that the TUI never creates
+a workspace.
 
-**Board.** Tasks mają dwa widoki: domyślny **List** i **Board** przełączany klawiszem
-`b` (stopka pokazuje `b board`/`b list`). Board to jedna kolumna na stan zadania w
-stałej kolejności pending, running, blocked, needs_changes, awaiting_review, accepted,
-z nierozpoznanymi stanami dopisanymi na końcu i renderowanymi jako neutralny tekst.
-Karty używają tych samych danych co lista i zachowują znacznik zaznaczenia `›`; kolumny
-pochodzą z nieusuniętych zadań strony Tasks, więc filtrowanie usuwa karty, a nie kolumny.
-Nagłówek kolumny to badge stanu z liczbą widocznych kart, a aktywna kolumna ma obramowanie
-fokusu. W trybie wide kolumny sąsiadują, a przy braku miejsca przewijają się oknem wokół
-aktywnej kolumny z pozycją w linii licznika; w trybie compact widoczna jest tylko aktywna
-kolumna z pagerem `‹ stan (n) › k/m`, dzięki czemu board pozostaje czytelny już od 40×12.
-Zaznaczenie pozostaje przypięte do `route.SelectedID`, a wybór List/Board jest pamiętany
-tylko przez czas sesji (jak `route.Sort` i filtry) i nie jest zapisywany między uruchomieniami.
+**Board.** Tasks have two views: the default **List** and **Board**, toggled with `b`
+(the footer shows `b board`/`b list`). Board has one column per task state in the fixed
+order pending, running, blocked, needs_changes, awaiting_review, accepted, with unknown
+states appended at the end and rendered as neutral text. Cards use the same data as the
+list and retain the `›` selection marker; columns come from undeleted tasks on the Tasks
+page, so filtering removes cards rather than columns. A column header is a state badge
+with the number of visible cards, and the active column has a focus border. In wide mode,
+columns sit side by side; when space is insufficient, a window scrolls around the active
+column with its position in the count line. In compact mode, only the active column is
+visible with the `‹ state (n) › k/m` pager, keeping the board readable from 40×12.
+The selection remains pinned to `route.SelectedID`, while the List/Board choice is
+remembered only for the session (like `route.Sort` and filters) and is not persisted
+between launches.
 
-**Runtime.** Topologia tmux jest tabelą `bubbles/table` (window, pane, kind,
-owner, run, state) w trybie wide, a w trybie compact tym samym danym w układzie
-wierszy. Błędy runtime i stan zarządzanego interfejsu pozostają nad topologią.
+**Runtime.** Tmux topology is a `bubbles/table` (window, pane, kind, owner, run, state)
+in wide mode, and the same data in a row layout in compact mode. Runtime errors and
+managed-interface state remain above the topology.
 
-**Szczegóły i podglądy.** Każdy szczegół i podgląd jest dokumentem złożonym z
-jednego zestawu bloków: nagłówka tożsamości i statusu, par etykieta/wartość,
-nagłówków sekcji, punktów, ostrzeżeń `[!]`, linków do powiązanych zasobów oraz
-dyskretnej proveniencji (ID, digest, znaczniki czasu). Kolejność jest stała:
-tożsamość i status, fakty operacyjne, narracja, powiązane zasoby, a na końcu
-proveniencja. Wartości zewnętrzne są sanityzowane przed nadaniem stylu, a długie
-cele, instrukcje, podsumowania, powody, linie poleceń, ścieżki i treści change
-requestów zawijają się do szerokości viewportu, z twardym łamaniem
-nieprzerywalnych tokenów. Jawne znaki nowej linii w tekście podglądu są
-zachowane, a taby rozwijane. Każdy dokument przewija się w istniejącym
-viewportcie (`↑`/`↓`, `PgUp`/`PgDn`); wiersz statusu pokazuje `line x–y of n`
-tylko wtedy, gdy treść przekracza widok, a pozycja przewijania wraca po powrocie
-na trasę.
+**Details and previews.** Every detail and preview is a document made from one set of
+blocks: identity and status header, label/value pairs, section headings, bullets,
+`[!]` warnings, links to related resources, and subtle provenance (ID, digest,
+timestamps). The order is fixed: identity and status, operational facts, narrative,
+related resources, and provenance at the end. External values are sanitized before
+styling, while long goals, instructions, summaries, reasons, command lines, paths, and
+change-request content wrap to the viewport width, with hard breaks for unbreakable
+tokens. Explicit newlines in preview text are preserved, and tabs are expanded. Every
+document scrolls in the existing viewport (`↑`/`↓`, `PgUp`/`PgDn`); the status row shows
+`line x–y of n` only when content exceeds the view, and the scroll position returns when
+the route is revisited.
 
-**Status.** Symbolowi zawsze towarzyszy podpis: `✓` sukces, `×` błąd, `!` blokada,
-`◈` review, `○` oczekiwanie, `■` zatrzymanie lub zamknięcie, `◇` przerwanie lub wyjście.
-`running` i `starting` używają animacji brajlowskiej co 120 ms. Podsumowanie żywych
-agentów animuje się tylko przy aktywnym bieżącym Runie; inaczej pokazuje `○`.
+**Status.** A label always accompanies the symbol: `✓` success, `×` error, `!` block,
+`◈` review, `○` waiting, `■` stopped or closed, and `◇` interrupted or exited.
+`running` and `starting` use a Braille animation every 120 ms. The live-agent summary
+animates only for an active current Run; otherwise it shows `○`.
 
-**Nawigacja i terminal.** Strzałki lub `j`/`k` wybierają wpis; `Enter` otwiera
-szczegóły. `Tab` zmienia listę Work lub typ wyników. `t` otwiera zweryfikowany
-bieżący terminal, a start lub wznowienie wymaga jawnego potwierdzenia formularza.
-Wiele sesji zadania wymaga wyboru konkretnej sesji. Historyczny Run zachowuje
-dokładny cel i nie przekierowuje automatycznie do nowszego wykonania.
+**Navigation and terminal.** Arrows or `j`/`k` select an entry; `Enter` opens details.
+`Tab` changes the Work list or result type. `t` opens the verified current terminal, and
+starting or resuming requires explicit form confirmation. Multiple task sessions require
+choosing a specific session. A historical Run retains its exact target and does not
+automatically redirect to a newer execution.
 
-**Filtr.** `/` edytuje wyszukiwanie po nazwie, ID i podtytule bez rozróżniania
-wielkości liter. `Enter` zatwierdza. `Esc` podczas edycji przywraca wcześniejszy filtr
-i zaznaczenie; poza edycją usuwa najpierw filtr tekstowy, potem statusowy, a dopiero
-następnie wraca do poprzedniej strony. Stopka pokazuje dostępne działanie.
+**Filter.** `/` edits a case-insensitive search over name, ID, and subtitle. `Enter`
+confirms. `Esc` while editing restores the previous filter and selection; outside editing
+it first removes the text filter, then the status filter, and only then returns to the
+previous page. The footer shows the available action.
 
-**Pomoc i skróty.** Wszystkie skróty pochodzą z jednego, scentralizowanego zestawu
-`bubbles/key`. Stopka i pełna pomoc renderują wyłącznie powiązania włączone dla
-bieżącego zaznaczenia; nieobsługiwane `t`, `g` i `a` nie są reklamowane dla wpisów
-bez procesu lub akcji. Pełna pomoc jest przewijana przez `bubbles/viewport` i
-pogrupowana na **Navigation, View, Runtime, Actions, Exit**, więc każda grupa jest
-osiągalna już przy 40×12; pozycję przewijania pokazuje wiersz statusu. Na szczegółach
-zadania `1`–`3` występują jako skróty do powiązanych zasobów, nie jako nawigacja
-główna. Breadcrumb oraz linia typów Results (`[Artifacts] Handoffs Checks`) nazywają
-miejsce bez polegania na kolorze.
+**Help and shortcuts.** All shortcuts come from one centralized `bubbles/key` set. The
+footer and full help render only bindings enabled for the current selection; unsupported
+`t`, `g`, and `a` are not advertised for entries without a process or action. Full help
+scrolls through `bubbles/viewport` and is grouped into **Navigation, View, Runtime,
+Actions, Exit**, so every group is reachable at 40×12; the status row shows the scroll
+position. On task details, `1`–`3` are shortcuts to related resources, not primary
+navigation. The breadcrumb and Results type line (`[Artifacts] Handoffs Checks`) name the
+location without relying on color.
 
 ## Do's and Don'ts
 
-- Zachowuj rozróżnienie między stanem zadania, sesji i procesu oraz liczbą
-  zaakceptowanych wyników.
-- Utrzymuj czytelność symboli i podpisów bez koloru oraz widoczność zaznaczenia
-  i stopki przy zmianie rozmiaru terminala.
-- Pokazuj brak danych, błąd odświeżenia i nieaktualny snapshot jawnym tekstem.
-- Nie uruchamiaj procesów przez samo otwarcie szczegółów lub odświeżenie widoku.
-- Rozwijaj istniejący system znakowy terminala; fonty webowe, obrazy rastrowe
-  i komponenty przeglądarkowe nie należą do tego interfejsu.
+- Preserve the distinction between task, session, and process state and the number of
+  accepted results.
+- Keep symbols and labels readable without color and keep the selection and footer
+  visible when the terminal is resized.
+- Show missing data, refresh errors, and stale snapshots as explicit text.
+- Do not start processes merely by opening details or refreshing the view.
+- Extend the existing terminal character system; web fonts, raster images, and browser
+  components do not belong in this interface.

@@ -1,23 +1,23 @@
 # workspace
 
-CLI do zarządzania trwałym kontekstem zadania, agentami, Git worktrees i tmux.
-Orkiestrator realizuje prosty workflow `plan-first`: planowanie w osobnym worktree
-i delegowanie implementacji do kolejnych worktree’ów. Workspace może też działać
-manualnie, bez workflow: z jawnymi zadaniami, worktrees, handoffami i checks.
+CLI for managing persistent task context, agents, Git worktrees, and tmux.
+The orchestrator implements the simple `plan-first` workflow: planning in a separate
+worktree and delegating implementation to subsequent worktrees. A workspace can also
+run manually without a workflow, using explicit tasks, worktrees, handoffs, and checks.
 
-- **Agent**: persona z rolą, instrukcjami, szablonem promptu i profilem modelu.
-- **Session**: trwały logiczny kontekst rozmowy w danym agent/task/worktree lineage.
-- **Run**: jedno konkretne uruchomienie klienta i panelu tmux; przechowuje model, argv,
-  prompt, wynik procesu i dokładne pochodzenie operacji.
-- **Workspace**: WORKSPACE.md, AGENTS.md, WORKFLOW.md, zadania, artefakty i worktrees.
+- **Agent**: a persona with a role, instructions, prompt template, and model profile.
+- **Session**: persistent logical conversation context for a given agent/task/worktree lineage.
+- **Run**: one concrete client and tmux-pane execution; stores the model, argv, prompt,
+  process result, and exact operation provenance.
+- **Workspace**: WORKSPACE.md, AGENTS.md, WORKFLOW.md, tasks, artifacts, and worktrees.
 
-Wizja i granice produktu są opisane w [PRODUCT.md](PRODUCT.md), a model techniczny
-i mapa referencji w [ARCHITECTURE.md](ARCHITECTURE.md).
+The product vision and boundaries are described in [PRODUCT.md](PRODUCT.md), while the
+technical model and reference map are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Instalacja
+## Installation
 
-Wymagania: Go 1.24+, Git i tmux. Runtime działa w Linux/macOS lub Linux w WSL.
-Windows obsługuje budowanie i testy rdzenia; sesje uruchamiaj linuxowym binarium w WSL.
+Requirements: Go 1.24+, Git, and tmux. Runtime runs on Linux/macOS or Linux in WSL.
+Windows supports building and core tests; run sessions with a Linux binary in WSL.
 
 ```sh
 go build -o bin/workspace ./cmd/workspace
@@ -25,8 +25,8 @@ export PATH="$PWD/bin:$PATH"
 workspace --help
 ```
 
-Pomoc jest dostępna na każdym poziomie komend. Możesz przejść ścieżkę od głównego
-polecenia albo poprosić o pomoc bezpośrednio po komendzie:
+Help is available at every command level. You can follow the path from the root command
+or request help directly after a command:
 
 ```sh
 workspace help
@@ -36,14 +36,14 @@ workspace session start --help
 workspace session start help
 ```
 
-Końcowe słowo `help` ma pierwszeństwo przed zwykłym argumentem. Jeśli argument
-dosłownie ma wartość `help`, przekaż go po separatorze `--` (np. `workspace create
--- help`); wartość flagi zapisz w formie `--option=help`.
+The final `help` word takes precedence over a regular argument. If an argument literally
+has the value `help`, pass it after the `--` separator (for example, `workspace create -- help`);
+write a flag value as `--option=help`.
 
-Binarium musi pozostać dostępne pod tą ścieżką, ponieważ tmux uruchamia je także później.
-Do uruchamiania sesji nie używaj `go run`.
+The binary must remain available at this path because tmux starts it later as well.
+Do not use `go run` to start sessions.
 
-W projekcie Git z przynajmniej jednym commitem:
+In a Git project with at least one commit:
 
 ```sh
 workspace project init
@@ -51,16 +51,16 @@ workspace doctor --json
 workspace skill install --client codex
 ```
 
-Skill instaluje się w `.agents/skills/workspace` dla Codex/OpenCode lub
-`.claude/skills/workspace` dla Claude. Istniejący zmieniony skill nie jest nadpisywany.
-`init` zachowuje konfigurację i instaluje edytowalne templates w `.workspace/templates`.
-Konfiguracja i templates mogą być wersjonowane; dane robocze mają lokalne reguły Git ignore.
+The skill is installed in `.agents/skills/workspace` for Codex/OpenCode or
+`.claude/skills/workspace` for Claude. An existing modified skill is not overwritten.
+`init` preserves configuration and installs editable templates in `.workspace/templates`.
+Configuration and templates may be versioned; working data has local Git ignore rules.
 
-## Konfiguracja
+## Configuration
 
-Zachowaj wygenerowane `schema_version`, `project_id` i `runtime`. Dodaj klientów i
-profile do `.workspace/config.yaml`. Nazwy modeli zastąp identyfikatorami dostępnymi
-na własnym koncie; profile nie zawierają wbudowanych założeń o cenach ani abonamencie.
+Keep the generated `schema_version`, `project_id`, and `runtime`. Add clients and
+profiles to `.workspace/config.yaml`. Replace model names with identifiers available in
+your own account; profiles contain no built-in assumptions about pricing or subscription.
 
 ```yaml
 clients:
@@ -76,7 +76,7 @@ profiles:
       - {id: planner, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_THINKER_MODEL, max_concurrency: 1}
   orchestrator:
     routes:
-      - {id: orchestrator, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_ORCHESTRATOR_MODEL, max_concurrency: 1}
+      - {id: orchestrator, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_ORCHESTRATOR_MODEL, max_concurrency: 3}
   supervisor:
     routes:
       - {id: supervisor, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_SUPERVISOR_MODEL, max_concurrency: 1}
@@ -98,147 +98,153 @@ forge:
   publication: ask
 ```
 
-`forge.adapter` może być `github`, `gitlab` albo `command`. Bez adaptera powstaje lokalny
-pakiet CR; użytkownik może dołączyć rzeczywisty request lub jawnie pominąć publikację.
-Polityka `allowed` zapisuje uprzednią zgodę na publikację. Przy `ask` orkiestrator
-pokazuje przygotowany opis i diff, a następnie zapisuje otrzymaną odpowiedź.
-W trybie `per-task` przygotuj requesty w kolejności zależności zadań. Pole `merge_after`
-i opis CR wskazują poprzedniki; przygotowanie zależnego CR wymaga ich aktualnych requestów.
+`forge.adapter` can be `github`, `gitlab`, or `command`. Without an adapter, a local CR
+package is created; the user can attach a real request or explicitly skip publication.
+The `allowed` policy records prior consent to publish. With `ask`, the orchestrator shows
+the prepared description and diff, then records the response it receives.
+In `per-task` mode, prepare requests in task-dependency order. The `merge_after` field
+and CR description identify predecessors; preparing a dependent CR requires their
+current requests.
 
-Codex używa app-server i obsługuje wybudzanie między turami oraz native resume.
-Claude/OpenCode uruchamiają interaktywny klient. Domyślny OpenCode dostaje dla każdego
-Runu prywatny endpoint loopback i dostawę przez aktywne TUI; wiadomość jest oznaczona
-`message_id` i trafia do statusu dopiero po potwierdzeniu w historii sesji. `session
-bind-thread` pozostaje narzędziem awaryjnym. [Adaptery i ich możliwości](docs/clients.md).
-Po zbudowaniu nowej wersji uruchom ponownie supervisor projektu, aby wczytać nowy kod
-dostawy; istniejącej sesji OpenCode z poprawnym endpointem Run nie trzeba odtwarzać.
+Codex uses app-server and supports wake-up between turns and native resume.
+Claude/OpenCode start an interactive client. The default OpenCode client receives a
+private loopback endpoint for each Run and delivery through the active TUI; the message
+is marked with `message_id` and enters status only after confirmation in session history.
+`session bind-thread` remains a fallback tool. [Client adapters and their capabilities](docs/clients.md).
+After building a new version, restart the project supervisor to load the new delivery
+code; an existing OpenCode session with a valid Run endpoint does not need to be recreated.
 
-Routing liczy uruchomienia i aktywne rezerwacje w projekcie przez ostatnie 24 h,
-uwzględnia wagi providerów, równoległość, capabilities i cooldown po błędzie startu.
-`profile explain NAME` pokazuje aktualną ocenę tras; historia oceny jest w Session.
-To przybliżenie obciążenia, nie licznik tokenów, kosztów ani limitów całego konta.
-Opcjonalne `max_launches_24h` na trasie ogranicza liczbę lokalnych uruchomień danego
-klienta/providera/modelu w projekcie; zero oznacza brak tego limitu.
+Routing counts launches and active reservations in the project over the last 24 hours,
+accounting for provider weights, concurrency, capabilities, and cooldown after a start
+failure. `profile explain NAME` shows the current route score; score history is stored
+in the Session. This approximates load; it is not a counter of tokens, costs, or
+account-wide limits. `max_concurrency` is a route limit for the entire project, shared
+by all workspaces. Set at least as many slots on the orchestrator route as the number of
+workspaces that must be able to keep an orchestrator session active at the same time.
+The optional `max_launches_24h` route setting limits local launches of a given
+client/provider/model in the project; zero means there is no such limit.
 
-Opcjonalne `workspaces_dir: /absolute/path/project-workspaces` wybiera katalog poza
-repozytorium. Skonfiguruj go przed tworzeniem workspaces; zmiana nie przenosi istniejących
-katalogów. Można nadal wskazać projekt przez `--project`; CWD w zewnętrznym workspace
-również zawiera informację umożliwiającą jego odkrycie.
+The optional `workspaces_dir: /absolute/path/project-workspaces` selects a directory
+outside the repository. Configure it before creating workspaces; changing it does not
+move existing directories. You can still select the project with `--project`; the CWD
+inside an external workspace also contains enough information to discover it.
 
-## Rozpoczęcie pracy
+## Getting Started
 
-Podaj agentowi ticket lub opis i użyj skilla `workspace`, albo wykonaj:
+Give the agent a ticket or description and use the `workspace` skill, or run:
 
 ```sh
 workspace create --issue https://github.com/OWNER/REPO/issues/142 \
   --workflow plan-first --operation-key issue-142
-# Opis można też podać bezpośrednio jako argument albo przez --input-file issue.md.
+# You can also provide the description directly as an argument or through --input-file issue.md.
 workspace create "Improve workspace creation" --workflow plan-first
-# --input-file można opcjonalnie połączyć z --issue URL, aby zachować źródło.
-# Manualna orkiestracja bez workflow:
+# --input-file can optionally be combined with --issue URL to preserve the source.
+# Manual orchestration without a workflow:
 workspace create "Ad-hoc analysis" --no-workflow
 workspace start --workspace ws_ID_Z_ODPOWIEDZI --operation-key orchestrator-1
 workspace attach --workspace ws_ID_Z_ODPOWIEDZI
 ```
 
-`create` utrwala opis; `start` uruchamia supervisora i orkiestratora bez zmiany widoku.
-`attach` przełącza istniejącego klienta tmux lub dołącza z zewnątrz. Wybór trybu jest
-jawny: `--workflow NAME` wybiera workflow, brak flagi tworzy stan `needs_workflow`
-(orkiestrator pyta o wybór przed delegowaniem), a `--no-workflow` tworzy aktywny
-workspace manualny — bez faz, advance i release'u, z delegowaniem zadań, handoffami
-i checks oraz ustalonym limitem 3 równoległych workerów. Nie można łączyć `--workflow`
-z `--no-workflow`, a workspace manualny nie
-konwertuje się później na workflow. [Trackery i snapshoty](docs/trackers.md).
+`create` persists the description; `start` launches the supervisor and orchestrator
+without changing the view. `attach` switches to an existing tmux client or attaches
+from outside. Mode selection is explicit: `--workflow NAME` selects a workflow, no flag
+creates the `needs_workflow` state (the orchestrator asks for a choice before
+delegating), and `--no-workflow` creates an active manual workspace — without phases,
+advance, or release, with task delegation, handoffs, checks, and a fixed limit of 3
+parallel workers. `--workflow` and `--no-workflow` cannot be combined, and a manual
+workspace cannot later be converted to a workflow. [Trackers and snapshots](docs/trackers.md).
 
-Powrót do istniejącego workspace nie wymaga pamiętania ID:
+Returning to an existing workspace does not require remembering its ID:
 
 ```sh
 workspace list --short
 workspace open
-# albo bez menu:
+# or without the menu:
 workspace open "specification"
 workspace open ws_ID
 ```
 
-Globalne `--short` wypisuje zwięzłe podsumowanie dla każdej komendy. Dla nazwanych
-zasobów (workspace, agentów, zadań i worktree) jest to mapa `nazwa: ID`; rekordy bez
-naturalnej nazwy zachowują najważniejsze identyfikatory i stan. `list --map` pozostaje
-aliasem `list --short`. `open` pokazuje interaktywny selector z tytułem, stanem, fazą,
-ID i źródłem wejścia, po czym dołącza do sesji tmux.
+Global `--short` prints a concise summary for every command. For named resources
+(workspaces, agents, tasks, and worktrees), this is a `name: ID` map; records without a
+natural name retain their most important identifiers and state. `list --map` remains an
+alias for `list --short`. `open` shows an interactive selector with the title, state,
+phase, ID, and input source, then attaches to the tmux session.
 
-Sesja tmux odpowiada workspace, okno worktree, panel konkretnego Run. Orkiestrator
-ma własne okno w katalogu workspace. Odłączenie użytkownika nie zatrzymuje procesów.
+A tmux session corresponds to a workspace, a window to a worktree, and a pane to a
+specific Run. The orchestrator has its own window in the workspace directory.
+Detaching the user does not stop processes.
 
-## Interfejs terminalowy (TUI)
+## Terminal User Interface (TUI)
 
-Uruchom `workspace tui`, aby przeglądać workspace'y projektu i ich zadania, worktrees,
-sesje, uruchomienia, wyniki oraz stan runtime. Scope wybiera się tak samo jak w CLI;
-możesz przekazać `--project` i `--workspace`, a bez workspace'u TUI otworzy picker.
-Odczyt działa także na Windows, lecz tmux, jump i zarządzany panel wymagają binarium
-uruchomionego w Linux/macOS albo WSL. Interfejs oczekuje terminala na stdin/stdout i
-co najmniej 40 kolumn × 12 wierszy.
+Run `workspace tui` to browse a project's workspaces and their tasks, worktrees,
+sessions, runs, results, and runtime state. Scope selection works the same as in the
+CLI; you can pass `--project` and `--workspace`, and without a workspace the TUI opens
+a picker. Reading also works on Windows, but tmux, jump, and a managed panel require a
+binary running on Linux/macOS or WSL. The interface expects a terminal on stdin/stdout
+and at least 40 columns × 12 rows.
 
 ```sh
 workspace tui
 workspace tui --project ./repo --theme dark
 workspace tui --workspace ws_ID --no-color
 
-# Zarządzany panel w istniejącym oknie orkiestratora:
+# Managed pane in an existing orchestrator window:
 workspace tui show --workspace ws_ID
 workspace tui status --workspace ws_ID
 workspace tui hide --workspace ws_ID
 ```
 
-`1`–`5` otwierają Work, Tasks, Worktrees, Results i More; na Dashboardzie
-`Tab`/`Shift+Tab` przełącza sekcje Agents & runs, zadań, uwag i aktywności, a w Results typ wyniku
-(aktywny typ jest nazwany w linii pomocniczej). `Up`/`Down` lub
-`j`/`k` zmienia zaznaczenie, `Enter` otwiera element, `Esc` wraca, `/` filtruje
-kolekcję, a `f` przełącza widok statusu lub historii. `s` sortuje listę.
-`t` otwiera terminal zaznaczonego agenta lub potwierdzenie wznowienia;
-`o`, potem `t`, pozwala szybko otworzyć albo uruchomić orkiestratora; `l`
-wraca do Agents & runs, a `v` otwiera Needs attention z Dashboardu. `a`
-otwiera tylko operacje dostępne dla zaznaczenia, w tym tworzenie i pełne usuwanie
-workspace'ów w pickerze projektu, archiwizację zakończonego workspace'u oraz usuwanie
-niepowiązanych tasków i nieaktywnych sesji. `g` przechodzi do zweryfikowanego
-okna/panelu tmux. `r` odświeża odczyt bez reconcile, `?` pokazuje przewijalną pomoc
-pogrupowaną na Navigation, View, Runtime, Actions i Exit (osiągalną już przy 40×12). `--theme`
-przyjmuje `auto`, `dark` lub `light`; `--no-color` wymusza tekstowe badge.
+`1`–`5` open Work, Tasks, Worktrees, Results, and More; on the Dashboard,
+`Tab`/`Shift+Tab` switches between the Agents & runs, tasks, attention, and activity
+sections, while Results uses it to switch result type (the active type is named in the
+helper line). `Up`/`Down` or `j`/`k` changes the selection, `Enter` opens an item,
+`Esc` goes back, `/` filters a collection, and `f` switches between the status and
+history views. `s` sorts the list. `t` opens the selected agent's terminal or a resume
+confirmation; `o`, then `t`, quickly opens or starts the orchestrator; `l` returns to
+Agents & runs, and `v` opens Needs attention from the Dashboard. `a` opens only the
+operations available for the selection, including creating and fully deleting
+workspaces in the project picker, archiving a completed workspace, and deleting
+unrelated tasks and inactive sessions. `g` jumps to a verified tmux window/pane. `r`
+refreshes the read without reconcile, and `?` shows scrollable help grouped into
+Navigation, View, Runtime, Actions, and Exit (already reachable at 40×12). `--theme`
+accepts `auto`, `dark`, or `light`; `--no-color` forces textual badges.
 
-W ręcznie uruchomionym TUI `q` kończy program. W zarządzanym panelu `q`, a poza
-formularzem także `Ctrl+C`, najpierw zapisuje trwałe żądanie hide, przywraca terminal
-i dopiero kończy proces; jeśli zapis się nie powiedzie, panel pozostaje otwarty i można
-ponowić tę samą operację. `Ctrl+C` w formularzu anuluje formularz. `tui show` przywraca
-panel, `tui hide` wyłącza i sprząta wyłącznie zweryfikowany panel, a `tui status` pokazuje
-jego generację, ownership i backoff. Supervisor uzgadnia panel razem z orkiestratorem;
-show nie uruchamia samodzielnie nowego workspace ani supervisora.
+In manually started TUI, `q` exits the program. In a managed pane, `q`, and also
+`Ctrl+C` outside a form, first records a durable hide request, restores the terminal,
+and only then exits; if the write fails, the pane remains open and the same operation
+can be retried. `Ctrl+C` in a form cancels the form. `tui show` restores the pane,
+`tui hide` disables and cleans up only the verified pane, and `tui status` shows its
+generation, ownership, and backoff. The supervisor reconciles the pane together with
+the orchestrator; show does not start a new workspace or supervisor by itself.
 
-TUI używa tych samych zapytań i mutacji core co CLI. Potwierdzenia są chronione rewizją,
-próbą zadania albo dokładnym RunID; „Pause and interrupt” pokazuje Runy i usługi,
-które zostaną zatrzymane. Interfejs nie akceptuje automatycznie handoffów ani decyzji.
-Operacje usuwania wymagają wpisania pełnego ID. Taski i sesje są ukrywane przez
-audytowalny tombstone, a core odrzuca usunięcie danych aktywnych, zależnych lub mających
-utrwalone wyniki. Delete Workspace jest odrębnym, nieodwracalnym discardem: po wpisaniu
-pełnego ID zatrzymuje runtime i usuwa stan, worktrees, niezacommitowane pliki oraz lokalne
-gałęzie workspace'u bez wymagania release lub archive. Archive zachowuje historię;
-workflow nadal wymaga potwierdzonego release'u, a manualny workspace wcześniejszego
-`complete`, i w obu przypadkach braku aktywnych sesji/usług. TUI udostępnia też
-`Complete this manual workspace` jako potwierdzoną operację core.
-Przed downgrade binarium ukryj zarządzany panel przez `workspace tui hide`: starszy
-launcher nie rozpoznaje jeszcze własności nowego panelu.
-Szczegóły ekranów i skrótów: [docs/tui.md](docs/tui.md).
+The TUI uses the same core queries and mutations as the CLI. Confirmations are guarded
+by the revision, task attempt, or exact RunID; “Pause and interrupt” shows the Runs and
+services that will be stopped. The interface does not automatically accept handoffs or
+decisions. Delete operations require entering the full ID. Tasks and sessions are
+hidden through an auditable tombstone, and core rejects deletion of active or dependent
+data or records with persisted results. Delete Workspace is a separate, irreversible
+discard: after the full ID is entered, it stops the runtime and removes state,
+worktrees, uncommitted files, and local workspace branches without requiring release or
+archive. Archive preserves history; a workflow still requires a confirmed release,
+while a manual workspace requires an earlier `complete`, and both require no active
+sessions/services. The TUI also provides `Complete this manual workspace` as a
+confirmed core operation.
+Before downgrading the binary, hide the managed pane with `workspace tui hide`: the
+older launcher does not yet recognize ownership of the new pane.
+For screen and shortcut details, see [docs/tui.md](docs/tui.md).
 
-## Zadania i wyniki
+## Tasks and Results
 
-Orkiestrator definiuje zadania z celem, rolą, kryteriami akceptacji i zależnościami:
+The orchestrator defines tasks with a goal, role, acceptance criteria, and dependencies:
 
 ```yaml
 name: planning
-title: Diagnoza issue
-goal: Wyjaśnij przyczynę i zaproponuj plan realizacji.
+title: Diagnose issue
+goal: Explain the cause and propose an implementation plan.
 role: planner
 acceptance_criteria:
-  - Diagnoza wskazuje dowody z kodu.
-  - Plan zawiera zadania i testy akceptacyjne.
+  - The diagnosis identifies evidence from the code.
+  - The plan includes tasks and acceptance tests.
 required_artifacts: [PLAN.md]
 ```
 
@@ -246,86 +252,88 @@ required_artifacts: [PLAN.md]
 workspace task create --spec-file planning.yaml --operation-key planning-task
 workspace agent create planner --role planner
 workspace worktree create planning --purpose planning
-workspace session start --agent planner --task task_ID --worktree planning \
+workspace session start --agent planner --parent-session sess_ORCHESTRATOR --task task_ID --worktree planning \
   --operation-key planning-start-1
 workspace status
 workspace menu
 ```
 
-Klient otrzymuje IDs agenta, logicznej sesji, runu, zadania, worktree, rodzica i
-orkiestratora w `WORKSPACE_*` (`WORKSPACE_SESSION_ID` i `WORKSPACE_RUN_ID` są różne).
-Wiadomości adresuje się do **Agent ID**. Wykonawcy zapisują lokalne
-produkty i przekazują je przez `handoff submit`; CLI kopiuje jawnie wskazane pliki do
-`artifacts/`. ACK wiadomości i akceptacja zadania są osobnymi decyzjami.
+The client receives the agent, logical session, run, task, worktree, parent, and
+orchestrator IDs in `WORKSPACE_*` (`WORKSPACE_SESSION_ID` and `WORKSPACE_RUN_ID` are
+different). Address messages and handoffs to the exact **Session ID**; `Agent ID`
+remains an ownership and legacy-compatibility projection. Executors write local work
+products and submit them through `handoff submit`; the CLI copies explicitly selected
+files to `artifacts/`. Message ACK and task acceptance are separate decisions.
 
 ```sh
-workspace message send --to agent_PARENT --kind question --body-file question.md
-workspace inbox list
-workspace inbox read msg_ID
-workspace inbox ack msg_ID
+workspace message send --to-session sess_PARENT --kind question --body-file question.md
+workspace inbox list --session sess_PARENT
+workspace inbox read msg_ID --session sess_PARENT
+workspace inbox ack msg_ID --session sess_PARENT
+workspace inbox list --agent agent_PARENT --all   # explicit agent-wide history
 workspace check run --operation-key tests-attempt-1 -- npm test
-workspace handoff submit --task task_ID --to agent_PARENT \
+workspace handoff submit --task task_ID --to-session sess_PARENT \
   --summary-file work-products/SUMMARY.md \
   --artifact work-products/IMPLEMENTATION.md --check check_ID
 workspace handoff accept handoff_ID
 workspace workflow advance
 ```
 
-`check run` zwraca receipt; odczytaj jego `exit_code`. Rejestrowanie receipt nie oznacza
-sukcesu testu. Akceptacja sprawdza kryteria workflow, wymagane artefakty i wyniki.
-`workspace workflow advance` dotyczy wyłącznie workspace'u z wybranym workflow; tryb
-manualny używa tych samych zadań, handoffów i checks bez advance.
-[Dowody testów](docs/checks.md).
+`check run` returns a receipt; read its `exit_code`. Recording a receipt does not mean
+the test succeeded. Acceptance checks workflow criteria, required artifacts, and results.
+`workspace workflow advance` applies only to a workspace with a selected workflow;
+manual mode uses the same tasks, handoffs, and checks without advance.
+[Test evidence](docs/checks.md).
 
-Orkiestrator deleguje integrację do osobnego wykonawcy po `integration prepare`.
-`change-request prepare/publish/sync` zachowują rewizję i identyfikator CR. Po publikacji
-menu proponuje live testing z osobnym profilem i sesją w zintegrowanym worktree.
-Test albo jawne pominięcie prowadzi do oczekiwania na release. Sam merge nie kończy
-workflow; `release confirm --reference REF` zapisuje potwierdzenie użytkownika.
-`--user-confirmed` w sesji orkiestratora oznacza przekazanie rzeczywiście otrzymanej
-odpowiedzi, nie samodzielne udzielenie zgody przez model. Integracja, change requesty,
-live testing i `release confirm` są operacjami wyłącznie workflow; w trybie manualnym
-zwracają `operation_not_applicable`, a kończy go jawna operacja `complete`.
+The orchestrator delegates integration to a separate executor after `integration prepare`.
+`change-request prepare/publish/sync` preserve the revision and CR identifier. After
+publication, the menu offers live testing with a separate profile and session in the
+integrated worktree. A test or explicit skip leads to waiting for release. A merge alone
+does not complete the workflow; `release confirm --reference REF` records user
+confirmation. `--user-confirmed` in an orchestrator session means forwarding a response
+actually received from the user, not the model granting consent on its own. Integration,
+change requests, live testing, and `release confirm` are workflow-only operations; in
+manual mode they return `operation_not_applicable`, and manual mode ends with an
+explicit `complete` operation.
 
-Manualny workspace ukończysz potwierdzoną operacją, która nie wymaga release'u:
+Complete a manual workspace with a confirmed operation that does not require a release:
 
 ```sh
 workspace complete --reason "Analysis delivered" --user-confirmed --operation-key complete-1
 workspace archive
 ```
 
-## Wznowienia i stan
+## Resumption and State
 
-`agent resume NAME` zachowuje kompatybilną logiczną Session i tworzy nowy Run,
-preferując związany native thread. Zmiana agenta, task/attempt/input lineage, worktree
-lub native thread rozpoczyna nową Session. `session list` pokazuje po jednym rekordzie
-na rozmowę; `session history sess_ID` i `run list` pokazują wszystkie uruchomienia.
-`session close sess_ID --reason ...` zamyka idle context i blokuje dalsze resume.
-`pause` wstrzymuje delegowanie, `pause --interrupt` zatrzymuje aktywne runy,
-`resume` odblokowuje pracę. `reconcile` uzgadnia utracone panele i przerwane operacje.
-`archive` i `clean --dry-run` są osobne od potwierdzenia release’u; manualny workspace
-archiwizuje się po wcześniejszym `complete`.
-[Runtime, komunikacja i sprzątanie](docs/runtime.md).
+`agent resume NAME` preserves a compatible logical Session and creates a new Run,
+preferring the bound native thread. Changing the agent, task/attempt/input lineage,
+worktree, or native thread starts a new Session. `session list` shows one record per
+conversation; `session history sess_ID` and `run list` show all executions.
+`session close sess_ID --reason ...` closes the idle context and blocks further resume.
+`pause` suspends delegation, `pause --interrupt` stops active runs, and `resume` unblocks
+the work. `reconcile` reconciles lost panes and interrupted operations. `archive` and
+`clean --dry-run` are separate from release confirmation; a manual workspace is
+archived after an earlier `complete`.
+[Runtime, communication, and cleanup](docs/runtime.md).
 
-WORKSPACE.md jest kanonicznym stanem trybu i workflow; w workspace manualnym ma pusty
-workflow i etykietę fazy `manual`. `.runtime/index.json` zawiera prywatny
-rejestr operacyjny w wersji `schema_version: 4`, z osobnymi tablicami `sessions` i `runs`.
-`status --json` publikuje ten sam jawny kontrakt wersji. Starszy indeks jest migrowany
-atomowo przy pierwszym otwarciu; dawne `sess_*` pozostają trwałymi aliasami Run, więc
-checks, handoffs, artifacts i messages zachowują pochodzenie. Aktualizuj opis przez
-`state update --expected-revision N`; `state edit`
-służy do kontrolowanej edycji w stanie paused. Zmiana inputu i migracja templates
-zachowują historię i unieważniają zależne wyniki: [rewizje](docs/revisions.md).
+WORKSPACE.md is the canonical mode and workflow state; in a manual workspace it has an
+empty workflow and the `manual` phase label. `.runtime/index.json` contains a private
+operational registry at `schema_version: 5`, with separate `sessions` and `runs` arrays.
+`status --json` publishes the same explicit versioned contract. An older index is migrated
+atomically on first open; historical `sess_*` values remain durable Run aliases, so
+checks, handoffs, artifacts, and messages retain provenance. Update the description with
+`state update --expected-revision N`; `state edit` is for controlled editing while
+paused. Input changes and template migration preserve history and invalidate dependent
+results: [revisions](docs/revisions.md).
 
-`--json` zwraca pełne `{ok,data}` lub `{ok:false,error:{code,message}}` i ma pierwszeństwo
-przed `--short`. Mutacje z kluczem
-zawierają także `operation_id` i rewizję workspace. `--non-interactive` zwraca
-brakujące decyzje do rozstrzygnięcia przez użytkownika. `--operation-key` zachowuje
-wynik logicznej operacji; ponowienie z innym payloadem zwraca konflikt.
-[Kontrakt ponowień i rewizji](docs/operations.md). Nie edytuj rejestrów ani
-WORKSPACE.md poza CLI podczas aktywnej pracy.
+`--json` returns full `{ok,data}` or `{ok:false,error:{code,message}}` and takes
+precedence over `--short`. Keyed mutations also contain `operation_id` and the workspace
+revision. `--non-interactive` returns missing decisions for the user to resolve.
+`--operation-key` preserves the logical operation result; retrying with a different
+payload returns a conflict. [Retry and revision contract](docs/operations.md). Do not
+edit registries or WORKSPACE.md outside the CLI during active work.
 
-## Weryfikacja
+## Verification
 
 ```sh
 go test ./...
@@ -335,7 +343,7 @@ go build -o bin/workspace ./cmd/workspace
 python3 scripts/check-install.py bin/workspace
 ```
 
-Testy używają izolowanych repozytoriów i prywatnych serwerów tmux. Pełny test workflow
-uruchamia deterministyczne procesy agentów, rzeczywiste Git/CLI/handoff/check i testera.
-Forge oraz model są fixture’ami; testy nie publikują zewnętrznych PR ani nie zużywają
-kredytów modelowych. Test protokołu Codex sprawdza wybudzanie i native resume.
+Tests use isolated repositories and private tmux servers. The full workflow test runs
+deterministic agent processes, real Git/CLI/handoff/check flows, and the tester. Forge
+and the model are fixtures; tests do not publish external PRs or consume model credits.
+The Codex protocol test checks wake-up and native resume.

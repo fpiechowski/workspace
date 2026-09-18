@@ -1,45 +1,45 @@
-# Wskazówki dla agentów
+# Agent Guidelines
 
-Cel i zakres zmian określa bieżące polecenie użytkownika. Ten plik opisuje zasady pracy i weryfikacji.
+The current user request defines the purpose and scope of changes. This file describes working and verification rules.
 
-## Mapa dokumentacji
+## Documentation Map
 
-- [README.md](README.md) — przeczytaj przy zmianach instalacji, konfiguracji, publicznego CLI albo instrukcji dla użytkownika.
-- [PRODUCT.md](PRODUCT.md) — przeczytaj przy decyzjach o zakresie, zachowaniu produktu, workflow i doświadczeniu użytkownika.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — przeczytaj przed zmianą modelu domenowego, trwałości, współbieżności, runtime, adapterów lub granic modułów.
-- [TODO.md](TODO.md) — przeczytaj podczas planowania nowej pracy; zawiera backlog, ale nie rozszerza zakresu bieżącego zlecenia.
-- [docs/clients.md](docs/clients.md) — przeczytaj przy zmianach adapterów agentów, native resume albo dostarczania wiadomości.
-- [docs/runtime.md](docs/runtime.md) — przeczytaj przy zmianach Session/Run, tmux, supervisora, usług, recovery albo cleanup.
-- [docs/operations.md](docs/operations.md) — przeczytaj przy zmianach mutacji, idempotencji, receipts, blokad albo efektów zewnętrznych.
-- [docs/revisions.md](docs/revisions.md) — przeczytaj przy zmianach inputu, migracji workflow lub unieważniania wyników.
-- [docs/checks.md](docs/checks.md) — przeczytaj przy zmianach przechwytywania i akceptacji dowodów testowych.
-- [docs/trackers.md](docs/trackers.md) — przeczytaj przy zmianach pobierania i snapshotowania issue.
+- [README.md](README.md) — read this when changing installation, configuration, the public CLI, or user instructions.
+- [PRODUCT.md](PRODUCT.md) — read this when making decisions about scope, product behavior, workflow, or user experience.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — read this before changing the domain model, persistence, concurrency, runtime, adapters, or module boundaries.
+- [TODO.md](TODO.md) — read this when planning new work; it contains the backlog but does not expand the scope of the current request.
+- [docs/clients.md](docs/clients.md) — read this when changing agent adapters, native resume, or message delivery.
+- [docs/runtime.md](docs/runtime.md) — read this when changing Session/Run, tmux, the supervisor, services, recovery, or cleanup.
+- [docs/operations.md](docs/operations.md) — read this when changing mutations, idempotency, receipts, locks, or external effects.
+- [docs/revisions.md](docs/revisions.md) — read this when changing input, workflow migration, or result invalidation.
+- [docs/checks.md](docs/checks.md) — read this when changing test-evidence capture or acceptance.
+- [docs/trackers.md](docs/trackers.md) — read this when changing issue fetching or snapshotting.
 
-Dokumenty powinny opisywać aktualny kontrakt, nie jednorazowy stan implementacji. Po zmianie zachowania zaktualizuj dokument nadrzędny i tylko te referencje szczegółowe, których kontrakt faktycznie się zmienił.
+Documents should describe the current contract, not a one-time implementation state. When behavior changes, update the parent document and only the detailed references whose contract actually changed.
 
-## Planowanie i zakres
+## Planning and Scope
 
-- Przed edycją sprawdź stan repozytorium i przeczytaj odpowiednie pliki oraz testy. Zachowaj zastane zmiany; nie resetuj ani nie nadpisuj pracy użytkownika.
-- [TODO.md](TODO.md) zawiera backlog. Przeczytaj go podczas planowania nowej pracy; realizuj pozycje tylko wtedy, gdy obejmuje je bieżące zlecenie. Aktualizuj backlog zgodnie z ustaleniami z użytkownikiem.
-- Ograniczaj zmiany do zleconego celu i stosuj istniejące konwencje. Unikaj niezwiązanych refaktorów i nowych zależności bez uzasadnionej potrzeby.
-- Traktuj nieśledzone i ignorowane pliki jako potencjalne dane użytkownika. Nie usuwaj ich ani nie zastępuj; pliki tymczasowe i wyniki budowania zapisuj poza repozytorium, jeśli to możliwe.
-- Nie publikuj zmian ani nie wykonuj operacji na zewnętrznych usługach w ramach zwykłej weryfikacji. Rób to tylko wtedy, gdy mieści się to wprost w zleceniu.
-- Gdy wymaganie wpływa na zakres lub zgodność, a nie da się go rozstrzygnąć na podstawie kodu i testów, jasno opisz przyjęte założenie lub ograniczenie.
+- Before editing, check the repository state and read the relevant files and tests. Preserve existing changes; do not reset or overwrite the user's work.
+- [TODO.md](TODO.md) contains the backlog. Read it when planning new work; implement items only when they are covered by the current request. Update the backlog according to agreements with the user.
+- Keep changes limited to the requested goal and follow existing conventions. Avoid unrelated refactors and new dependencies without a clear justification.
+- Treat untracked and ignored files as potential user data. Do not remove or replace them; store temporary files and build outputs outside the repository when possible.
+- Do not publish changes or perform operations on external services as part of ordinary verification. Do so only when explicitly included in the request.
+- When a requirement affects scope or compatibility and cannot be resolved from the code and tests, clearly document the assumption or limitation you adopted.
 
-## Narzędzia i weryfikacja
+## Tools and Verification
 
-- Wymagana wersja Go to 1.24 lub nowsza (zob. `go.mod`). Formatuj zmienione pliki Go poleceniem `gofmt`.
-- Podczas pracy uruchamiaj testy właściwego pakietu, a przed zakończeniem zmian w Go wykonaj `go test ./...` oraz `go vet ./...`.
-- Pełny zestaw testów z tmux wymaga Linuxa lub WSL z zainstalowanym tmux. Uruchom go, gdy zmiana dotyczy procesów, współbieżności lub integracji tmux:
+- Go 1.24 or newer is required (see `go.mod`). Format changed Go files with `gofmt`.
+- Run the relevant package tests while working, and run `go test ./...` and `go vet ./...` before finishing Go changes.
+- The full tmux test suite requires Linux or WSL with tmux installed. Run it when a change affects processes, concurrency, or tmux integration:
 
   ```sh
   WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 90s
   ```
 
-- Przy zmianach instalacji lub budowania uruchom sprawdzenie instalacyjne z `README.md`: zbuduj binarium do nowej lokalizacji tymczasowej i przekaż jego ścieżkę do `python3 scripts/check-install.py <ścieżka-do-binarium>`.
-- Testy powinny korzystać z istniejących atrap i fixture’ów. Nie łącz ich z prawdziwymi usługami, kontami ani publikacją zmian.
-- Dobieraj weryfikację do zakresu: przy zmianach dokumentacji sprawdź poprawność treści i odnośników, a przy kodzie podaj wykonane testy oraz te, których nie dało się uruchomić.
+- For installation or build changes, run the installation check from `README.md`: build the binary at a new temporary location and pass its path to `python3 scripts/check-install.py <binary-path>`.
+- Tests should use existing mocks and fixtures. Do not connect them to real services or accounts or publish changes.
+- Match verification to the scope: for documentation changes, check the content and links; for code, report the tests that ran and those that could not be run.
 
-## Git w środowisku sandbox
+## Git in the Sandbox
 
-Jeśli Git zgłasza `dubious ownership`, ogranicz wyjątek do pojedynczego polecenia, np. `git -c safe.directory=<katalog-repo> status --short`. Nie zmieniaj w tym celu globalnej konfiguracji Git.
+If Git reports `dubious ownership`, limit the exception to a single command, for example `git -c safe.directory=<repo-directory> status --short`. Do not change the global Git configuration for this purpose.

@@ -1,139 +1,142 @@
-# TUI dla użytkownika — plan implementacyjny
+# User TUI — Implementation Plan
 
-Status: gotowy plan do implementacji; ten dokument nie oznacza wykonania backlogu.
-Data projektu: 2026-09-15. Baza analizy: commit `58f4cc29c0d8a62d40187c3587b2aa7824752f01`.
-Język interfejsu: angielski, zgodnie z istniejącym CLI. Dokumentacja dla implementera: polski.
+Status: ready for implementation; this document does not mean that the backlog has been completed.
+Project date: 2026-09-15. Analysis base: commit `58f4cc29c0d8a62d40187c3587b2aa7824752f01`.
+Interface language: English, consistent with the existing CLI. Implementer documentation: English.
 
-## 1. Polecenie dla implementera
+## 1. Implementer Instructions
 
-Zaimplementuj cały zakres tego dokumentu, etapami z sekcji 13. Przed pracą przeczytaj
-AGENTS.md oraz wskazane dokumenty i testy. Zachowaj zastane zmiany. Nie realizuj innych
-pozycji TODO.md. Nie publikuj zmian i nie wywołuj prawdziwych klientów modeli, trackera
-ani forge podczas weryfikacji. Nie zmieniaj modelu Task/Session/Run dla wygody interfejsu.
+Implement the full scope of this document in the stages from section 13. Before working,
+read AGENTS.md and the referenced documents and tests. Preserve existing changes. Do not
+implement other TODO.md items. Do not publish changes or invoke real model clients,
+trackers, or forges during verification. Do not change the Task/Session/Run model for
+interface convenience.
 
-Ten dokument rozstrzyga produkt, nawigację, architekturę i zachowanie recovery.
-Nazwy nowych plików i API są docelowym podziałem odpowiedzialności; drobna korekta nazwy
-jest dopuszczalna, jeśli koliduje z istniejącym symbolem. Nie pomijaj żadnego etapu
-ani kryterium akceptacji. Na końcu podaj wykonane testy i konkretne ograniczenia.
-Nie oznaczaj pozycji TODO jako ukończonej, jeśli integracja tmux nie została zweryfikowana.
+This document defines the product, navigation, architecture, and recovery behavior.
+Names of new files and APIs are the target responsibility split; a minor name correction
+is allowed if it conflicts with an existing symbol. Do not skip any stage or acceptance
+criterion. At the end, report the tests that ran and concrete limitations. Do not mark a
+TODO item complete if tmux integration has not been verified.
 
-## 2. Decyzje i zakres
+## 2. Decisions and Scope
 
-1. Nowa jawna komenda `workspace tui` uruchamia interfejs. Samo `workspace`, `open`,
-   `attach`, `menu`, istniejące komendy i formaty odpowiedzi zachowują swój kontrakt.
-2. W katalogu projektu pokazujemy wybór workspace. W workspace lub jego potomku —
-   dashboard tego workspace. Projekt z jednym workspace nadal pokazuje wybór.
-3. Główna oś nawigacji: **Workspace → Tasks → Task → Sessions / Results**.
-   Worktrees to równoległa perspektywa infrastruktury i przejście do tych samych encji.
-4. Dashboard pokazuje stan, liczniki, orkiestratora i maksymalnie pięć problemów.
-   Nie pokazuje wszystkich agentów, sesji, tasków ani worktrees.
-5. TUI korzysta bezpośrednio z typowanego core. Nie uruchamia komend `workspace ...`
-   jako subprocessów w celu pobierania JSON ani wykonania operacji domenowych.
-6. Jeden zarządzany panel TUI w oknie orkiestratora. Supervisor odtwarza utracony
-   panel. TUI nie jest Agent, Session, Run ani BackgroundService.
-7. Automatyczny panel pozostaje przydatny w paused i po zakończeniu procesów.
-   Nie blokuje archive/clean, nie zajmuje writer lease, limitów modeli ani tasków.
-8. Stan procesu, zaakceptowanie wyniku i faza workflow to osobne informacje.
-9. Interfejs działa przy 40×12 znaków; obsługuje szerszy niski panel i wąski wysoki.
-   Przy mniejszych rozmiarach pokazuje bezpieczny ekran minimalny i możliwość wyjścia.
-10. V1 obejmuje przegląd i operacje wymienione w sekcji 7. Nie implementuje całego CLI
-    w formularzach. Tworzenie tasków/person/worktrees, publikacja CR, decyzje live test,
-    release, akceptacja handoffów, migracje i usuwanie danych pozostają w istniejącym CLI.
-    Stan tych procesów i decyzje oczekujące są widoczne w TUI.
+1. The new explicit `workspace tui` command starts the interface. Bare `workspace`,
+   `open`, `attach`, `menu`, existing commands, and response formats retain their contract.
+2. In the project directory, show the workspace picker. In a workspace or its child,
+   show that workspace's dashboard. A project with one workspace still shows the picker.
+3. The primary navigation axis is **Workspace → Tasks → Task → Sessions / Results**.
+   Worktrees are a parallel infrastructure perspective and lead to the same entities.
+4. The dashboard shows state, counters, the orchestrator, and at most five issues. It
+   does not show every agent, session, task, or worktree.
+5. The TUI uses typed core directly. It does not run `workspace ...` commands as
+   subprocesses to fetch JSON or perform domain operations.
+6. One managed TUI pane lives in the orchestrator window. The supervisor restores a
+   lost pane. The TUI is not an Agent, Session, Run, or BackgroundService.
+7. The automatic pane remains useful while paused and after processes finish. It does
+   not block archive/clean or consume writer leases, model limits, or task limits.
+8. Process state, result acceptance, and workflow phase are separate pieces of information.
+9. The interface works at 40×12 characters; it supports a wider short panel and a
+   narrow tall panel. At smaller sizes it shows a safe minimal screen and an exit option.
+10. V1 covers the browsing and operations listed in section 7. It does not implement the
+    entire CLI through forms. Task/person/worktree creation, CR publication, live-test
+    decisions, release, handoff acceptance, migrations, and data deletion remain in the
+    existing CLI. The state of these processes and pending decisions is visible in the TUI.
 
-Poza zakresem: edytor kodu, terminal w terminalu, przechwytywanie klawiszy klienta
-agenta, dashboard kosztów/tokenów, zdalne workspace, osobny daemon UI, globalny fuzzy
-search po treści wszystkich plików, drag-and-drop, GUI/web, automatyczne decyzje workflow.
+Out of scope: code editor, terminal within the terminal, agent-client key capture,
+cost/token dashboard, remote workspaces, a separate UI daemon, global fuzzy search over
+all file contents, drag-and-drop, GUI/web, and automatic workflow decisions.
 
-### 2.1. Stack i wersje
+### 2.1. Stack and Versions
 
-Zachowaj `go 1.24.0`. Użyj jednej rodziny API v1:
+Keep `go 1.24.0`. Use one v1 API family:
 
-| Moduł | Wersja | Rola |
+| Module | Version | Role |
 |---|---|---|
 | `github.com/charmbracelet/bubbletea` | `v1.3.10` | Model/Update/View, event loop, terminal |
 | `github.com/charmbracelet/bubbles` | `v0.21.0` | list, viewport, textinput, help, key, spinner |
-| `github.com/charmbracelet/lipgloss` | `v1.1.0` | layout i style |
-| `github.com/charmbracelet/huh` | `v0.7.0` | osadzone formularze i potwierdzenia |
-| `github.com/charmbracelet/x/ansi` | `v0.10.1` | szerokość, zawijanie i skracanie ANSI-aware |
-| `github.com/charmbracelet/x/term` | `v0.2.1` | wykrywanie terminala |
+| `github.com/charmbracelet/lipgloss` | `v1.1.0` | layout and styles |
+| `github.com/charmbracelet/huh` | `v0.7.0` | embedded forms and confirmations |
+| `github.com/charmbracelet/x/ansi` | `v0.10.1` | ANSI-aware width, wrapping, and truncation |
+| `github.com/charmbracelet/x/term` | `v0.2.1` | terminal detection |
 
-To świadomy wybór zgodności z obecnym minimum Go. Zweryfikowano pliki go.mod tych
-wydań: Bubble Tea wymaga Go 1.24; Bubbles i Huh — Go 1.23. Huh 0.7.0 zależy od
-Bubbles 0.21.0. Huh 0.8.0 wprowadza pseudowersję Bubbles; nie wybieraj go przypadkiem.
-Aktualne gałęzie main Bubble Tea/Huh używają API v2 i nowszego Go. Nie kopiuj przykładów
-z main do implementacji v1. Nie używaj `@latest`. Po `go mod tidy` sprawdź cały graf
-modułów z `GOTOOLCHAIN=local` i Go 1.24; nie akceptuj cichego podniesienia minimum.
+This is a deliberate compatibility choice for the current Go minimum. The go.mod files
+for these releases were verified: Bubble Tea requires Go 1.24; Bubbles and Huh require
+Go 1.23. Huh 0.7.0 depends on Bubbles 0.21.0. Huh 0.8.0 introduces a pseudo-version of
+Bubbles; do not select it accidentally. Current Bubble Tea/Huh main branches use API v2
+and newer Go. Do not copy examples from main into the v1 implementation. Do not use
+`@latest`. After `go mod tidy`, check the full module graph with `GOTOOLCHAIN=local`
+and Go 1.24; do not accept a silent increase of the minimum.
 
-Glamour: **nie dodawaj w tym zakresie**. Podgląd Markdown to zawijany tekst w viewport,
-z zachowaniem nagłówków i bloków kodu. To kompletny podgląd V1. Renderowanie Markdown
-może być kolejną zmianą; nie jest warunkiem ukończenia tej pozycji.
+Glamour: **do not add it in this scope**. Markdown preview is wrapped text in a
+viewport, preserving headings and code blocks. This is the complete V1 preview. Markdown
+rendering may be a later change; it is not a completion condition for this item.
 
-Źródła wersji i API:
+Version and API sources:
 
 - [Bubble Tea 1.3.10 — go.mod](https://github.com/charmbracelet/bubbletea/blob/v1.3.10/go.mod)
 - [Bubbles 0.21.0 — go.mod](https://github.com/charmbracelet/bubbles/blob/v0.21.0/go.mod)
 - [Lip Gloss 1.1.0 — go.mod](https://github.com/charmbracelet/lipgloss/blob/v1.1.0/go.mod)
 - [Huh 0.7.0 — go.mod](https://github.com/charmbracelet/huh/blob/v0.7.0/go.mod)
-- [Bubble Tea — oddawanie terminala przez Exec](https://github.com/charmbracelet/bubbletea/blob/v1.3.10/exec.go)
+- [Bubble Tea — terminal handoff through Exec](https://github.com/charmbracelet/bubbletea/blob/v1.3.10/exec.go)
 - [Bubble Tea main — go.mod](https://github.com/charmbracelet/bubbletea/blob/main/go.mod)
 - [Huh main — go.mod](https://github.com/charmbracelet/huh/blob/main/go.mod)
-- [tmux — dokumentacja referencyjna](https://man.openbsd.org/tmux.1)
+- [tmux — reference documentation](https://man.openbsd.org/tmux.1)
 
-## 3. Co istnieje i co rzeczywiście trzeba wydzielić
+## 3. What Exists and What Actually Needs Extraction
 
-Przeczytaj [PRODUCT.md](../../PRODUCT.md), [ARCHITECTURE.md](../../ARCHITECTURE.md),
-[README.md](../../README.md), [runtime](../runtime.md), [operacje](../operations.md).
-Przy szczegółach historycznych wyników przeczytaj też [rewizje](../revisions.md),
-[checks](../checks.md) i [klientów](../clients.md).
+Read [PRODUCT.md](../../PRODUCT.md), [ARCHITECTURE.md](../../ARCHITECTURE.md),
+[README.md](../../README.md), [runtime](../runtime.md), and [operations](../operations.md).
+For historical result details, also read [revisions](../revisions.md),
+[checks](../checks.md), and [clients](../clients.md).
 
-| Obecny kod | Znaczenie dla implementacji |
+| Existing code | Implementation significance |
 |---|---|
-| `internal/core/model.go` | Workspace, Registry, Status, Session i Run; `Status()` synchronizuje projekcje sesji |
-| `internal/core/workflow_model.go` | Task wskazuje bieżący worktree/session/run; artefakty i handoffy mają pochodzenie |
-| `internal/core/project.go` | Service, DiscoverProject, InferWorkspace, With, List, Status; blokada projektu |
-| `internal/core/files.go` | loadDocument, recovery zapisu, atomowy zapis, contained; nie omijać przy odczycie |
-| `internal/core/session.go` | start/stop/resume/reconcile, lineage i runtime ownership |
+| `internal/core/model.go` | Workspace, Registry, Status, Session, and Run; `Status()` synchronizes session projections |
+| `internal/core/workflow_model.go` | Task identifies the current worktree/session/run; artifacts and handoffs have provenance |
+| `internal/core/project.go` | Service, DiscoverProject, InferWorkspace, With, List, Status; project lock |
+| `internal/core/files.go` | loadDocument, write recovery, atomic writes, contained; do not bypass it for reads |
+| `internal/core/session.go` | start/stop/resume/reconcile, lineage, and runtime ownership |
 | `internal/core/runtime.go` | Tmux, Launch, Recover, Inspect, Attach, shellQuote |
-| `internal/core/supervisor.go` | EnsureSupervisor, Tick, tickWorkspace, recovery orkiestratora |
-| `internal/core/actor.go` | pusty Actor = użytkownik; role i stale_actor egzekwuje core |
-| `internal/core/lifecycle.go` | pause/interrupt, archive i clean — TUI nie może blokować tych kontraktów |
-| `internal/cli/cli.go` | bootstrap z env/flag/CWD, wybór workspace, resume i attach częściowo realizowane w adapterze |
-| `internal/cli/help.go`, `cli_test.go` | kompletność pomocy i flag dla każdej widocznej komendy |
+| `internal/core/supervisor.go` | EnsureSupervisor, Tick, tickWorkspace, orchestrator recovery |
+| `internal/core/actor.go` | empty Actor = user; core enforces roles and stale_actor |
+| `internal/core/lifecycle.go` | pause/interrupt, archive, and clean — the TUI must not block these contracts |
+| `internal/cli/cli.go` | bootstrap from env/flag/CWD, workspace selection, resume, and attach partially implemented in the adapter |
+| `internal/cli/help.go`, `cli_test.go` | help and flag completeness for every visible command |
 
-Core już istnieje. Nie wprowadzaj repozytoriów SQL, event busa, generycznego CQRS ani
-masowego przenoszenia plików core do nowych pakietów. Wydziel konkretne fragmenty
-z CLI, których potrzebuje TUI, i dodaj spójny odczyt agregatu.
+Core already exists. Do not introduce SQL repositories, an event bus, generic CQRS, or
+massive movement of core files into new packages. Extract the specific fragments the TUI
+needs from the CLI and add a consistent aggregate read.
 
-### 3.1. Relacje agregatu
+### 3.1. Aggregate Relationships
 
 ```text
 Project
 └─ Workspace
-   ├─ Task (bieżąca Attempt, zależności, wynik zaakceptowany)
-   │  ├─ Sessions po TaskID (bieżąca i historyczne próby)
-   │  │  └─ Runs po SessionID
+    ├─ Task (current Attempt, dependencies, accepted result)
+    │  ├─ Sessions by TaskID (current and historical attempts)
+    │  │  └─ Runs by SessionID
    │  └─ Results: Handoffs / Artifacts / Checks
-   ├─ Worktree (checkout, branch, purpose, lifecycle)
-   │  ├─ Tasks: bieżące Task.WorktreeID + historia po Session.WorktreeID
+    ├─ Worktree (checkout, branch, purpose, lifecycle)
+    │  ├─ Tasks: current Task.WorktreeID + history by Session.WorktreeID
    │  ├─ Sessions → Agent persona / Runs
    │  └─ BackgroundServices
-   ├─ Orchestrator: Agent → Sessions → Runs; WorktreeID pusty
-   └─ Workflow / Decisions / Integration / ChangeRequests / LiveTest / Release
+    ├─ Orchestrator: Agent → Sessions → Runs; empty WorktreeID
+    └─ Workflow / Decisions / Integration / ChangeRequests / LiveTest / Release
 ```
 
-Okno `orchestrator` nie jest checkoutem Git i nie ma rekordu Worktree. Nie twórz
-sztucznego worktree. W nawigacji Worktrees dodaj osobny wiersz `Orchestrator · workspace
-directory`, wyraźnie oddzielony od checkoutów; otwiera tę samą stronę co kafel dashboardu.
+The `orchestrator` window is not a Git checkout and has no Worktree record. Do not
+create a synthetic worktree. In Worktree navigation, add a separate
+`Orchestrator · workspace directory` row, clearly separated from checkouts; it opens the
+same page as the dashboard tile.
 
-Jedna persona może mieć wiele sesji w historii. Sesje mogą nie mieć TaskID. Nie zakładaj
-relacji jeden task = jeden agent = jeden worktree. Indeksy buduj po ID, nie po nazwach.
-Do nazw historycznej sesji używaj AgentSnapshot, a bieżącą definicję persony pokazuj
-osobno. Historyczny Run nie jest aktualnym właścicielem panelu.
+One persona may have multiple historical sessions. Sessions may have no TaskID. Do not
+assume one task = one agent = one worktree. Build indexes by ID, not by name. Use
+AgentSnapshot for historical session names and show the current persona definition
+separately. A historical Run is not the current pane owner.
 
-## 4. Wejście, scope i zgodność CLI
+## 4. Entry, Scope, and CLI Compatibility
 
-### 4.1. Komendy
+### 4.1. Commands
 
 ```sh
 workspace tui
@@ -148,196 +151,202 @@ workspace tui hide --workspace ws_ID
 workspace tui status --workspace ws_ID --json
 ```
 
-`tui show/hide/status` dotyczą **zarządzanego panelu**, nie ręcznych instancji.
-`show` ustawia desired=true i próbuje odtworzyć panel przy istniejącej sesji tmux;
-nie startuje orkiestratora. Bez sesji zapisuje preferencję i zwraca `waiting_for_runtime`.
-`hide` ustawia desired=false i usuwa tylko zweryfikowany własny panel.
-`status` pokazuje desired, stan, pane/window ID, last_error i next_retry_at.
-Te trzy polecenia są normalnym CLI i obsługują JSON/short/non-interactive.
-Mutacje show/hide obsługują operation-key według sekcji 10.3.
+`tui show/hide/status` refer to the **managed pane**, not manual instances.
+`show` sets desired=true and attempts to restore the pane in an existing tmux session;
+it does not start the orchestrator. Without a session, it records the preference and
+returns `waiting_for_runtime`. `hide` sets desired=false and removes only the verified
+owned pane. `status` shows desired, state, pane/window ID, last_error, and next_retry_at.
+These three commands are ordinary CLI commands and support JSON/short/non-interactive.
+The show/hide mutations handle operation keys according to section 10.3.
 
-Właściwy `workspace tui` wymaga terminalowego stdin **i** stdout. Przy pipe, TERM=dumb,
-`--json`, `--short` lub `--non-interactive` zwraca `interactive_required` bez wejścia
-w raw mode i bez uruchomienia tmux/supervisora. JSON błędu zachowuje standard CLI.
-`--operation-key` dla samej pętli TUI odrzuć jako `invalid_option`: każda akcja ma swój
-klucz. Używaj wstrzykiwanych io.Reader/io.Writer, a nie ukrytego otwierania `/dev/tty`.
+The actual `workspace tui` requires terminal stdin **and** stdout. With a pipe, TERM=dumb,
+`--json`, `--short`, or `--non-interactive`, return `interactive_required` without
+entering raw mode and without starting tmux/supervisor. Error JSON keeps the standard
+CLI shape. Reject `--operation-key` for the TUI loop itself as `invalid_option`: each
+action has its own key. Use injected io.Reader/io.Writer rather than secretly opening
+`/dev/tty`.
 
-### 4.2. Rozpoznanie lokalizacji
+### 4.2. Location Resolution
 
-- Zachowaj istniejące pierwszeństwo dla ręcznego uruchomienia: flagi → WORKSPACE_*
-  → CWD. TUI pokazuje nazwę i ścieżkę rozstrzygniętego projektu/workspace w nagłówku.
-- Wspólny bootstrap tworzy Service i Actor tak samo jak obecne options.service().
-- InferWorkspace: `workspace_required` oznacza ekran projektu; inne błędy, np.
-  uszkodzony frontmatter lub odmowa dostępu, pokaż jako błąd, nie jako brak workspace.
-- Flaga --workspace w V1 przyjmuje ID, zgodnie z globalną flagą CLI. Wybór po nazwie
-  odbywa się w liście. Nie dodawaj innego resolvera nazw z innymi zasadami niejednoznaczności.
-- Zweryfikuj, że wskazane/inferowane ID należy do wybranego projektu. Nie przeskakuj
-  między projektami na podstawie odziedziczonego obcego WORKSPACE_ID.
-- Normalizuj CWD przez Abs/EvalSymlinks, użyj istniejących reguł workspaces_dir.
-- W checkoutach wewnątrz workspace działa przeszukiwanie rodziców. Dla zarejestrowanego
-  checkoutu poza tą hierarchią dodaj dopasowanie kanonicznego CWD do Worktree.Path
-  danego projektu, tylko jeśli zwykłe InferWorkspace nie znalazło workspace. Wybierz
-  najdłuższą pasującą ścieżkę; różne workspace z tym samym dopasowaniem to konflikt.
-  Nie traktuj katalogu projektu jako checkoutu workspace.
-- Brak projektu: instrukcja `workspace project init`; bez automatycznej inicjalizacji.
-- Brak workspace: ekran pusty z poleceniem create, bez automatycznego tworzenia.
+- Preserve the existing precedence for manual invocation: flags → WORKSPACE_* → CWD.
+  The TUI shows the resolved project/workspace name and path in the header.
+- Shared bootstrap creates Service and Actor in the same way as the current
+  options.service().
+- InferWorkspace: `workspace_required` means the project screen; other errors, such as
+  broken frontmatter or permission denial, must be shown as errors, not as no workspace.
+- In V1, the --workspace flag accepts an ID, consistent with the global CLI flag. Name
+  selection happens in the list. Do not add another name resolver with different
+  ambiguity rules.
+- Verify that the specified/inferred ID belongs to the selected project. Do not switch
+  between projects based on an inherited foreign WORKSPACE_ID.
+- Normalize the CWD with Abs/EvalSymlinks and use the existing workspaces_dir rules.
+- Parent searching works in checkouts inside a workspace. For a registered checkout
+  outside this hierarchy, add canonical-CWD matching against that project's Worktree.Path
+  only when ordinary InferWorkspace found no workspace. Choose the longest matching path;
+  different workspaces with the same match are a conflict. Do not treat the project
+  directory as a workspace checkout.
+- No project: instruct the user to run `workspace project init`; do not initialize automatically.
+- No workspace: show an empty screen with the create command; do not create automatically.
 
-## 5. Nawigacja i zawartość ekranów
+## 5. Navigation and Screen Content
 
-### 5.1. Ekran projektu
+### 5.1. Project Screen
 
-Nagłówek projektu, filtr `/`, lista workspace: title, status, phase, liczba aktywnych
-runów, liczba problemów, krótki ID. Szczegóły zaznaczenia: pełny ID, ścieżka, źródło
-inputu, data utworzenia. `Enter` otwiera dashboard, `a` wybiera akcję (m.in. attach).
-Domyślne sortowanie: workspace niearchiwalne przed archiwalnymi, potem CreatedAt
-malejąco, ID jako tie-breaker. Archiwalne pozostają dostępne przez filtr statusu.
-Nie zmieniaj automatycznie kolejności przy każdym heartbeat; odśwież dane zaznaczenia
-po ID i sortuj po zmianie filtrów lub jawnym `r`.
+Project header, `/` filter, workspace list: title, status, phase, active-run count,
+issue count, short ID. Selection details: full ID, path, input source, creation date.
+`Enter` opens the dashboard, and `a` selects an action (including attach). Default
+sorting: non-archived workspaces before archived ones, then descending CreatedAt, with
+ID as the tie-breaker. Archived workspaces remain available through the status filter.
+Do not reorder automatically on every heartbeat; refresh selection data by ID and sort
+after filter changes or an explicit `r`.
 
-### 5.2. Dashboard workspace
+### 5.2. Workspace Dashboard
 
-Zawsze obecne: breadcrumb, title/ID, osobno status i phase, czas ostatniego udanego
-odczytu, wskaźnik błędu/nieaktualnych danych. Treść to cztery panele:
+Always present: breadcrumb, title/ID, separate status and phase, time of the last
+successful read, and a stale-data/error indicator. The content has four panels:
 
 1. **Overview**: tasks accepted/total, running, blocked/needs_changes; active runs;
-   ready worktrees; usługi aktywne. To liczniki z rekordów, nie lista encji.
-2. **Orchestrator**: persona, lifecycle sesji, stan bieżącego/ostatniego Run, model,
-   przycisk `Jump` albo `Start/Resume` w menu akcji.
-3. **Needs attention**: PendingDecision; blocked/needs_changes tasks; niezaakceptowane
-   aktualne handoffy; failed/interrupted bieżące/ostatnie wykonania; problem supervisora,
-   runtime lub UI. Maks. pięć wierszy, potem `View all (N)`.
-4. **Activity**: maks. pięć ostatnich zdarzeń WYPROJEKTOWANYCH z dostępnych dat Run,
-   Handoff, Artifact i odpowiedzi Decision. Etykieta `Recent recorded activity`;
-   to nie pełny audit log ani nowa trwała tabela zdarzeń.
+   ready worktrees; active services. These are record counters, not an entity list.
+2. **Orchestrator**: persona, session lifecycle, current/last Run state, model, and a
+   `Jump` or `Start/Resume` button in the action menu.
+3. **Needs attention**: PendingDecision; blocked/needs_changes tasks; unaccepted
+   current handoffs; failed/interrupted current or last executions; supervisor, runtime,
+   or UI issues. At most five rows, then `View all (N)`.
+4. **Activity**: at most five recent events DERIVED from available dates on Runs,
+   Handoffs, Artifacts, and Decision responses. Label: `Recent recorded activity`; this
+   is not a full audit log or a new durable event table.
 
-Panel uwagi deduplikuje problem task/run do jednego wiersza z linkami. Stan stale
-handoff ma oddzielną etykietę, nie proponuje akceptacji. Priorytet: wymagana decyzja,
-awaria odczytu/runtime, blocked/needs_changes, aktualny handoff do review, reszta;
-w obrębie priorytetu stabilnie po ID. Widok pełny ma search.
+The attention panel deduplicates a task/run issue into one row with links. A stale
+handoff has a separate label and does not offer acceptance. Priority: required decision,
+read/runtime failure, blocked/needs_changes, current handoff for review, then the rest;
+stable by ID within each priority. The full view has search.
 
-Nawigacja główna: `1 Overview`, `2 Tasks`, `3 Worktrees`, `4 Results`, `5 More`.
-More zawiera Sessions (cały workspace), Agents, Services, Decisions, Change requests
-i Runtime. Są to jawnie wybierane strony — żadnych rozwiniętych list na dashboardzie.
-`w` otwiera selektor workspace w bieżącym projekcie, `o` stronę orkiestratora.
+Primary navigation: `1 Overview`, `2 Tasks`, `3 Worktrees`, `4 Results`, `5 More`.
+More contains Sessions (the entire workspace), Agents, Services, Decisions, Change
+requests, and Runtime. These are explicitly selected pages — no expanded lists on the
+dashboard. `w` opens the workspace selector in the current project, and `o` opens the
+orchestrator page.
 
 ### 5.3. Task
 
-Lista: nazwa/title, Task.State, attempt, badge aktywności Run, bieżący worktree.
-Szczegóły: goal, role/profile, acceptance criteria, required artifacts/checks,
-zależności z linkami, reason i accepted handoff. Sekcje otwierane Enter:
+List: name/title, Task.State, attempt, Run activity badge, current worktree. Details:
+goal, role/profile, acceptance criteria, required artifacts/checks, linked dependencies,
+reason, and accepted handoff. Sections opened with Enter:
 
-- Sessions: domyślnie bieżąca próba; przełącznik `History` pokazuje poprzednie
-  próby/input lineage. Każda sesja pokazuje agenta, model, lifecycle i Run state.
-- Worktrees: bieżący oraz historyczne powiązane przez sesje, z etykietą history.
-- Results: Handoffs, Artifacts i Checks tylko tego taska, z filtrami prób/history.
+- Sessions: current attempt by default; the `History` toggle shows previous attempts/input
+  lineage. Each session shows the agent, model, lifecycle, and Run state.
+- Worktrees: current and historical worktrees linked through sessions, with a history label.
+- Results: Handoffs, Artifacts, and Checks for this task only, with attempt/history filters.
 
-Nie przypisuj artefaktu do bieżącej próby jedynie po TaskID. Połącz go z Run/Session
-i SourceHandoff, a stary/nieustalony lineage wyświetl jako history/unknown.
-Task.accepted pozostaje zaakceptowany, nawet gdy stare wykonanie zakończyło się błędem.
+Do not assign an artifact to the current attempt using TaskID alone. Link it to the
+Run/Session and SourceHandoff, and display old/undetermined lineage as history/unknown.
+Task.accepted remains accepted even when an old execution ended with an error.
 
-### 5.4. Worktree i orkiestrator
+### 5.4. Worktree and Orchestrator
 
-Worktree: path, branch, purpose, lifecycle, writer/readers/active services, powiązane
-taski i sesje. Rozdziel `ready` (checkout istnieje według rejestru) od `active` (ma
-aktywny Run). Git dirty/HEAD badaj dopiero na tej stronie, w osobnym zapytaniu,
-z timeoutem; nie uruchamiaj git status dla każdego checkoutu co dwie sekundy.
-Wynik git jest obserwacją z własnym timestampem, nie zmianą Worktree.State.
+Worktree: path, branch, purpose, lifecycle, writer/readers/active services, and related
+tasks and sessions. Separate `ready` (the checkout exists according to the registry)
+from `active` (it has an active Run). Inspect Git dirty/HEAD only on this page, in a
+separate query with a timeout; do not run git status for every checkout every two seconds.
+The Git result is an observation with its own timestamp, not a Worktree.State change.
 
-Strona orkiestratora: bieżąca sesja + historia, katalog workspace, nadzorowany panel
-TUI, link do okna tmux i akcje. Brak udawanego branch/WorktreeID.
+Orchestrator page: current session + history, workspace directory, managed TUI pane, a
+link to the tmux window, and actions. No fabricated branch/WorktreeID.
 
 ### 5.5. Session, Run, Agent, Service
 
-- Session: AgentSnapshot, lineage TaskID/attempt/WorktreeID, lifecycle,
-  CurrentRunID/LastRunID, read-only, native thread jeśli jest; Runs w historii.
-- Run: dokładny stan, model/provider/client, czas, kod wyjścia i error, pochodzenie.
-  `Jump` tylko dla aktualnego, żywego, zweryfikowanego panelu. Stare wykonanie nie
-  przeskakuje po cichu do nowego Run; osobny link `Current session` jest dozwolony.
-- Agent: definicja i lista sesji; brak wymyślonego trwałego Agent.State.
-- Service: stan/exit code, worktree, argv jako tekst, jump i stop w menu akcji.
+- Session: AgentSnapshot, TaskID/attempt/WorktreeID lineage, lifecycle,
+  CurrentRunID/LastRunID, read-only, and native thread if present; Runs in history.
+- Run: exact state, model/provider/client, time, exit code and error, and provenance.
+  `Jump` only for the current, live, verified pane. An old execution does not silently
+  jump to a new Run; a separate `Current session` link is allowed.
+- Agent: definition and session list; no invented durable Agent.State.
+- Service: state/exit code, worktree, argv as text, jump, and stop in the action menu.
 
-### 5.6. Results i dokumenty
+### 5.6. Results and Documents
 
-Results ma zakładki Artifacts/Handoffs/Checks, wspólny filtr po nazwie/ID i opcjonalny
-filtr taska. Artefakt: metadane pochodzenia, digest, rozmiar, commit i podgląd.
-Handoff: outcome, state, stale, summary, feedback, risks, linki do artefaktów/checks.
-Check: state, exit_code, SHA, argv i podgląd outputu. `completed` check z exit != 0
-nie jest sukcesem; pokaż exit code niezależnie od stanu.
+Results has Artifacts/Handoffs/Checks tabs, a shared name/ID filter, and an optional task
+filter. Artifact: provenance metadata, digest, size, commit, and preview. Handoff:
+outcome, state, stale, summary, feedback, risks, and links to artifacts/checks. Check:
+state, exit_code, SHA, argv, and output preview. A `completed` check with exit != 0 is
+not a success; show the exit code regardless of state.
 
-Dokumenty WORKSPACE.md/WORKFLOW.md/input snapshot dostępne z Overview → Actions →
-View documents. Preview tylko lokalnie, bez otwierania URL z treści. Pliki binarne
-pokazują metadane. Limit tekstowego podglądu 256 KiB, oznaczenie ucięcia; nie odczytuj
-całego dużego pliku przed przycięciem. Przewijanie i search w widocznej liście to
-osobne mechanizmy; wyszukiwanie pełnej treści plików nie jest wymagane.
+WORKSPACE.md/WORKFLOW.md/input snapshot documents are available through Overview →
+Actions → View documents. Preview locally only; do not open URLs from content. Binary
+files show metadata. Text preview is limited to 256 KiB with a truncation marker; do not
+read the entire large file before truncating. Scrolling and search in the visible list
+are separate mechanisms; full-text file search is not required.
 
-### 5.7. Klawiatura i routing zdarzeń
+### 5.7. Keyboard and Event Routing
 
-| Klawisz | Działanie |
+| Key | Action |
 |---|---|
-| Up/Down, j/k | lista lub przewijanie aktywnego panelu |
-| Enter | otwarcie zaznaczenia; nigdy automatyczny start/stop |
-| Esc | formularz → anuluj; edycja filtra → wróć; aktywny filtr → wyczyść; inaczej poprzedni ekran |
-| Tab / Shift+Tab | następny/poprzedni panel; w formularzu pola formularza |
-| 1–5 | główne strony, tylko poza edycją tekstu |
-| / | edycja filtra aktualnej kolekcji |
-| f | menu status/history filtrów, tylko na stronach kolekcji |
-| a | menu akcji zaznaczenia/bieżącej strony |
-| g | Jump: sesja tmux / window / pane według zaznaczenia |
-| w / o | wybór workspace / orkiestrator |
-| r | odśwież odczyt; nie wykonuje reconcile |
-| ? | pomoc ze skrótami dostępnymi w tym kontekście |
-| q / Ctrl+C | wyjdź z ręcznej instancji; ukryj zarządzany panel (sekcja 10) |
-| PgUp/PgDn, Home/End | lista albo viewport |
+| Up/Down, j/k | list or scroll the active panel |
+| Enter | open the selection; never automatic start/stop |
+| Esc | form → cancel; filter editing → go back; active filter → clear; otherwise previous screen |
+| Tab / Shift+Tab | next/previous panel; form fields inside a form |
+| 1–5 | main pages, only outside text editing |
+| / | edit the current collection filter |
+| f | status/history filter menu, collection pages only |
+| a | action menu for the selection/current page |
+| g | Jump: tmux session/window/pane for the selection |
+| w / o | workspace picker / orchestrator |
+| r | refresh the read; does not reconcile |
+| ? | help with shortcuts available in this context |
+| q / Ctrl+C | exit a manual instance; hide the managed pane (section 10) |
+| PgUp/PgDn, Home/End | list or viewport |
 
-Pole tekstowe otrzymuje litery q, g, r, cyfry i spację; nie są wtedy skrótami aplikacji.
-Ctrl+C w formularzu anuluje formularz, dopiero poza nim wychodzi/ukrywa panel.
-Nie nadpisuj globalnych bindings tmux ani prefiksu użytkownika.
+The text field receives q, g, r, digits, and space; they are not application shortcuts
+while editing. Ctrl+C in a form cancels the form and exits/hides the pane only outside it.
+Do not override global tmux bindings or the user's prefix.
 
-Filtr: case-insensitive substring po title/name i ID; sesja dodatkowo po nazwie
-AgentSnapshot, Run po ID/modelu, worktree po name/branch. Znormalizuj wielkość liter,
-nie stosuj regex, nie filtruj ukrytych kolekcji. Pokazuj `N / total` i treść filtra.
-Search działa lokalnie na snapshot, bez I/O per klawisz. Pusty wynik ma jasny komunikat
-i `Esc clear`. Zapamiętuj query, ID zaznaczenia i scroll per route podczas jednej sesji TUI.
+Filter: case-insensitive substring over title/name and ID; additionally by AgentSnapshot
+name for sessions, ID/model for Runs, and name/branch for worktrees. Normalize case, do
+not use regex, and do not filter hidden collections. Show `N / total` and the filter text.
+Search works locally on the snapshot, without I/O per key. An empty result has a clear
+message and `Esc clear`. Remember the query, selection ID, and scroll position per route
+during one TUI session.
 
-## 6. Layout i theme
+## 6. Layout and Theme
 
-Użyj Lip Gloss, bez emoji i bez wymogu Nerd Fonts. Ikona + tekst, np. `[>] running`,
-`[x] failed`, `[!] blocked`, `[+] accepted`, `[-] idle`, `[#] stopped`.
-Ikony są ASCII i mają stałą szerokość; kolor jest dodatkowym kanałem informacji.
-Ramki mogą być Unicode, z wariantem ASCII przy braku odpowiedniego locale.
+Use Lip Gloss, without emoji and without requiring Nerd Fonts. Icon + text, for example,
+`[>] running`, `[x] failed`, `[!] blocked`, `[+] accepted`, `[-] idle`, `[#] stopped`.
+Icons are ASCII and have fixed width; color is an additional information channel.
+Borders may be Unicode, with an ASCII variant when the locale is unsuitable.
 
-Theme jako semantyczne tokeny: background, surface, text, muted, border, focus,
-info, success, warning, danger, selection. Dark: tło terminala, surface #1E293B,
-text #E2E8F0, muted #94A3B8, border #475569, focus/info #67E8F9, success #86EFAC,
-warning #FDE68A, danger #FDA4AF. Light: tło terminala, surface #F1F5F9, text #0F172A,
-muted #475569, border #94A3B8, focus/info #0E7490, success #166534,
-warning #92400E, danger #BE123C. Aktywny panel ma wyraźny border i znacznik `>`.
-Wariant ANSI-16 dobierz po rolach; no-color nie emituje sekwencji kolorów.
+Theme uses semantic tokens: background, surface, text, muted, border, focus, info,
+success, warning, danger, selection. Dark: terminal background, surface #1E293B, text
+#E2E8F0, muted #94A3B8, border #475569, focus/info #67E8F9, success #86EFAC,
+warning #FDE68A, danger #FDA4AF. Light: terminal background, surface #F1F5F9, text
+#0F172A, muted #475569, border #94A3B8, focus/info #0E7490, success #166534,
+warning #92400E, danger #BE123C. The active panel has a clear border and `>` marker.
+Choose the ANSI-16 variant by role; no-color emits no color sequences.
 
-`--theme auto|dark|light`, domyślnie auto; `--no-color` oraz niepuste NO_COLOR mają
-pierwszeństwo. Użyj jednego renderera/palety na instancję, bez mutowania globalnych
-stylów w testach. Auto korzysta z możliwości terminala; przy braku detekcji wybiera
-dark z przezroczystym tłem. Huh otrzymuje tę samą paletę, nie własny kontrastowy theme.
+`--theme auto|dark|light`, auto by default; `--no-color` and a non-empty NO_COLOR take
+precedence. Use one renderer/palette per instance, without mutating global styles in
+tests. Auto uses terminal capabilities; when detection is unavailable, it selects dark
+with a transparent background. Huh receives the same palette, not its own high-contrast
+theme.
 
-Reguły wymiarów (kolumny × wiersze, wymiary faktycznego panelu):
+Dimension rules (columns × rows, actual pane dimensions):
 
-- **Wide**: width >= 100 i height >= 24. Dashboard 2×2; kolekcje lista 40%, szczegóły
-  60% z minimalnymi szerokościami 32/40; główne zakładki u góry.
-- **Short**: width >= 80 i 12 <= height < 24. Nagłówek/zakładki/stopka po jednym
-  wierszu; panel Overview w dwóch krótkich kolumnach, pozostałe przez Tab.
-  Listy mają jeden wiersz na rekord; szczegóły po Enter jako osobna strona.
-- **Narrow**: pozostałe width >= 40 i height >= 12. Jedna kolumna, jeden panel treści,
-  zwarte zakładki `1 Home 2 Tasks …`; dashboard jako przewijane sekcje.
-  Szczegóły zawsze osobną stroną. Brak trwałego lewego sidebara zabierającego szerokość.
-- **Tiny**: width < 40 lub height < 12. Nazwa workspace skrócona, `Terminal too small`,
-  wskazanie 40×12 i q; tekst przycinany także przy 1×1. Bez ujemnych SetSize.
+- **Wide**: width >= 100 and height >= 24. Dashboard 2×2; collections list 40%,
+  details 60% with minimum widths 32/40; main tabs at the top.
+- **Short**: width >= 80 and 12 <= height < 24. Header/tabs/footer each take one row;
+  Overview uses two short columns, the rest through Tab. Lists use one row per record;
+  details open as a separate page with Enter.
+- **Narrow**: remaining width >= 40 and height >= 12. One column, one content panel,
+  compact tabs `1 Home 2 Tasks …`; dashboard as scrollable sections. Details are always
+  a separate page. No persistent left sidebar that consumes width.
+- **Tiny**: width < 40 or height < 12. Workspace name is shortened, with
+  `Terminal too small`, a 40×12 hint, and q; text is truncated even at 1×1. No negative SetSize.
 
-Na resize przelicz wszystkie komponenty i formularze, zachowaj route/query/focus/ID.
-Obliczenia uwzględniają ramki, padding, nagłówek i stopkę. Nie licz szerokości len(bytes).
-Długi tytuł/ścieżka nie może wypchnąć statusu poza ekran; pełny tekst w szczegółach.
-Formularze na narrow/short pokazują jedno pole/grupę naraz i przewijalne wyjaśnienie.
+On resize, recalculate all components and forms while preserving route/query/focus/ID.
+Calculations include borders, padding, header, and footer. Do not calculate width with
+len(bytes). A long title/path must not push status off-screen; show full text in details.
+Forms in narrow/short show one field/group at a time with a scrollable explanation.
 
-Przykład wide (treść poglądowa, liczby pochodzą ze snapshotu):
+Wide example (illustrative content; numbers come from the snapshot):
 
 ```text
 Project / Checkout fix       [>] active  · implementing      updated 2s ago
@@ -353,680 +362,683 @@ Project / Checkout fix       [>] active  · implementing      updated 2s ago
 Tab panel   Enter open   / filter   a actions   g jump   ? help   q quit
 ```
 
-Przykład narrow: nagłówek → zwarte zakładki → Overview z licznikami → Orchestrator →
-Needs attention, wszystko w jednej przewijanej powierzchni. Stopka pozostaje widoczna.
+Narrow example: header → compact tabs → Overview with counters → Orchestrator → Needs
+attention, all in one scrollable surface. The footer remains visible.
 
-### 6.1. Statusy: nie mieszaj osi
+### 6.1. Statuses: Keep Axes Separate
 
-| Encja | Wartości / sposób prezentacji |
+| Entity | Values / presentation |
 |---|---|
-| Workspace | active, needs_workflow, paused, blocked, needs_attention, completed, archived; phase obok |
-| Task | pending, running, awaiting_review, accepted, needs_changes, blocked; nieznane jako neutralny surowy tekst |
-| Worktree | creating, ready, failed, removing, removed; obok osobno writer/readers/services |
-| Session | LifecycleState active/idle/closed; obok current/last Run.State |
-| Run | starting, running, exited, failed, stopped, interrupted; exited = proces zakończony, nie accepted |
+| Workspace | active, needs_workflow, paused, blocked, needs_attention, completed, archived; phase beside it |
+| Task | pending, running, awaiting_review, accepted, needs_changes, blocked; unknown as neutral raw text |
+| Worktree | creating, ready, failed, removing, removed; writer/readers/services separately beside it |
+| Session | LifecycleState active/idle/closed; current/last Run.State beside it |
+| Run | starting, running, exited, failed, stopped, interrupted; exited = process ended, not accepted |
 | Service | starting, running, exited, failed, stopped, interrupted |
-| Runtime observation | present, missing, unknown/unavailable; to nie nowy stan Run w rejestrze |
+| Runtime observation | present, missing, unknown/unavailable; not a new Run state in the registry |
 
-Nie zakładaj, że tabela wyczerpuje przyszłe stany. Testuj nieznaną wartość. Licznik
-aktywnych runów bazuje na `Run.Active()` i zgodności Session.CurrentRunID; przy błędzie
-tmux oznacz go jako stan zapisany/niezweryfikowany. Nie zmieniaj runu na interrupted
-na podstawie timeoutu w samym TUI. To obowiązek core.Reconcile/supervisora.
+Do not assume the table exhausts future states. Test unknown values. The active-run count
+is based on `Run.Active()` and Session.CurrentRunID consistency; on a tmux error, mark it
+as persisted/unverified state. Do not change a run to interrupted based on a timeout in
+the TUI alone. That is the responsibility of core.Reconcile/the supervisor.
 
-## 7. Operacje V1 i ich kontrakty
+## 7. V1 Operations and Their Contracts
 
-Akcje wyświetlają nazwę, target i powód niedostępności. Core zawsze waliduje uprawnienia
-i stan ponownie. Nie traktuj menu jako autoryzacji. Mapowanie ID akcji na metodę jest
-statyczne; nie wykonuj stringów MenuAction.Command jako shell.
+Actions display the name, target, and reason for unavailability. Core always validates
+authorization and state again. Do not treat the menu as authorization. The mapping from
+an action ID to a method is static; do not execute MenuAction.Command strings as shell.
 
-| Ekran / akcja | Core / zachowanie | Formularz |
+| Screen / action | Core / behavior | Form |
 |---|---|---|
-| Workspace: Start orchestrator | nowy StartSupervisedOrchestrator → istniejący StartOrchestrator | potwierdzenie startu klienta, workspace i profil |
-| Workspace: Pause | Pause(..., false, key) | krótki confirm, aktywne runy pozostają |
-| Workspace: Pause and interrupt | Pause(..., true, key), z guardem listy runów/usług | potwierdzenie z dokładną listą zatrzymywanych wykonań |
-| Workspace: Resume workspace | SetPaused(..., false, key) | confirm; nie obiecuje wznowienia procesów |
-| Workspace: Reconcile | Reconcile(..., key) + uzgodnienie UI po zwolnieniu locka | confirm; jawna operacja, nie odświeżenie |
-| Workspace needs_workflow | SelectWorkflow(..., name, key) | wybór z WorkflowNames + confirm |
-| Task: Retry | RetryTask(..., reason, key), z guardem attempt/revision | reason + lista zależności unieważnianych przez retry |
-| Session: Resume | nowy ResumeSession (dokładna wskazana sesja) z supervision | confirm session/task/attempt/worktree/model |
-| Session: Stop current run | nowy StopRun, delegujący istniejącą logikę stop | confirm z konkretnym RunID |
+| Workspace: Start orchestrator | new StartSupervisedOrchestrator → existing StartOrchestrator | confirm client, workspace, and profile start |
+| Workspace: Pause | Pause(..., false, key) | short confirm; active runs remain |
+| Workspace: Pause and interrupt | Pause(..., true, key), guarded by the run/service list | confirmation with the exact executions to stop |
+| Workspace: Resume workspace | SetPaused(..., false, key) | confirm; does not promise process resumption |
+| Workspace: Reconcile | Reconcile(..., key) + reconcile UI after releasing the lock | confirm; explicit operation, not refresh |
+| Workspace needs_workflow | SelectWorkflow(..., name, key) | choose from WorkflowNames + confirm |
+| Task: Retry | RetryTask(..., reason, key), guarded by attempt/revision | reason + dependencies invalidated by retry |
+| Session: Resume | new ResumeSession (exact selected session) with supervision | confirm session/task/attempt/worktree/model |
+| Session: Stop current run | new StopRun delegating existing stop logic | confirm with the specific RunID |
 | Session: Close | CloseSession(..., reason, key) | idle only, reason + confirm |
-| Service: Stop | StopService(..., id, key) | confirm nazwy/worktree i ID |
-| Każdy właściwy ekran: Jump | ResolveNavigationTarget → adapter terminala | przy wielu celach selektor |
-| Runtime: Show/Hide managed TUI | SetUIPaneDesired | informacja o przywracaniu/ukryciu |
+| Service: Stop | StopService(..., id, key) | confirm name/worktree and ID |
+| Every relevant screen: Jump | ResolveNavigationTarget → terminal adapter | selector when there are multiple targets |
+| Runtime: Show/Hide managed TUI | SetUIPaneDesired | information about restoration/hiding |
 
-Bez automatycznego ACK inboxa, wysyłania wiadomości, akceptacji wyniku ani zatwierdzania
-decyzji. Dla czynności poza V1 pokaż stan i odpowiednie istniejące polecenie CLI jako
-tekst. Nie deklaruj przycisku jako działającego, jeśli kończy się tylko placeholderem.
+No automatic inbox ACK, message sending, result acceptance, or decision approval. For
+actions outside V1, show the state and the relevant existing CLI command as text. Do not
+present a button as functional if it ends in only a placeholder.
 
-### 7.1. Formy, idempotencja, konkurencja
+### 7.1. Forms, Idempotency, and Concurrency
 
-Huh działa jako zagnieżdżony model Update/View w jednym programie Bubble Tea.
-Nie uruchamiaj osobnego Form.Run(), NewProgram ani promptu stdin podczas pracy TUI.
-Anulowanie formularza nie wywołuje core. Confirm domyślnie zaznacza Cancel.
+Huh runs as a nested Update/View model in one Bubble Tea program. Do not start a separate
+Form.Run(), NewProgram, or stdin prompt while the TUI is running. Cancelling a form does
+not call core. Confirm defaults to Cancel.
 
-Gdy użytkownik otwiera akcję, zapamiętaj target ID, RunID/attempt i payload. Bezpośrednio
-przed confirm pokaż świeże dane. Zmiana znaczących pól wymaga ponownego pokazania
-formularza. Sam odczyt przed zapisem nie usuwa wyścigu — guard opisany niżej jest
-sprawdzany w core pod tą samą blokadą co właściwa mutacja.
+When the user opens an action, record the target ID, RunID/attempt, and payload. Show
+fresh data immediately before confirm. A change to significant fields requires showing
+the form again. A read before the write does not eliminate the race — the guard described
+below is checked in core under the same lock as the actual mutation.
 
-- Nowa potwierdzona intencja otrzymuje `tui_<ULID>` (można użyć core.ID("tui")).
-- Double Enter nie startuje drugiej operacji; jedna mutacja w toku na instancję TUI.
-- Timeout/launch_uncertain: pokaż kod, klucz i `Reconcile / Retry same operation`.
-  Nie generuj nowego klucza automatycznie. Retry zachowuje identyczny payload i guard.
-- Po sukcesie pobierz snapshot; receipt może przedstawiać wcześniejszy stan.
-- Nowy payload = nowa świadoma intencja i nowy klucz.
-- Nie powtarzaj mutacji w ticku i nie buduj ogólnego automatycznego retry zmian.
-- W zamknięciu programu podczas mutacji anuluj context, zaczekaj na wynik sprzątania
-  komendy; nie porzucaj goroutine trzymającej lock. Przy niepewnym wyniku wyświetl klucz
-  w komunikacie końcowym/logu i nie twierdź, że anulowanie cofnęło efekt.
+- A new confirmed intent receives `tui_<ULID>` (core.ID("tui") may be used).
+- Double Enter does not start a second operation; one mutation may be in progress per TUI instance.
+- Timeout/launch_uncertain: show the code, key, and `Reconcile / Retry same operation`.
+  Do not generate a new key automatically. Retry preserves the identical payload and guard.
+- After success, fetch a snapshot; the receipt may represent an earlier state.
+- New payload = new deliberate intent and new key.
+- Do not repeat a mutation in the tick and do not build a general automatic mutation retry.
+- When closing the program during a mutation, cancel the context and wait for command
+  cleanup; do not abandon a goroutine holding a lock. For an uncertain result, show the
+  key in the final message/log and do not claim that cancellation reverted the effect.
 
-Nowy `MutationGuard` dla TUI: ExpectedRevision (opcjonalne), ExpectedRunID,
-ExpectedAttempt oraz dla pause-interrupt zbiór aktywnych RunID/ServiceID.
-Dodaj typowane warianty guarded dla StopRun, PauseInterrupt i RetryTask. Wspólne
-prywatne helpery przeprowadzają walidację i istniejącą operację; bez wywoływania
-publicznej metody pod już zajętym s.With i bez zagnieżdżania effect z tym samym kluczem.
-Sprawdzenie już istniejącego receipt ma pierwszeństwo przed porównaniem guard ze
-stanem bieżącym, po weryfikacji aktora i zgodności payloadu. Guard należy do digestu.
-Nieudany guard zwraca `revision_conflict` lub `target_changed`, niczego nie zatrzymuje.
-CLI bez guard zachowuje dotychczasowe zachowanie. `StopRun` nie może zatrzymać nowego
-Run tej samej Session, jeśli proces zdążył się zmienić podczas formularza.
+New TUI `MutationGuard`: optional ExpectedRevision, ExpectedRunID, ExpectedAttempt, and
+for pause-interrupt the set of active RunID/ServiceID values. Add typed guarded variants
+for StopRun, PauseInterrupt, and RetryTask. Shared private helpers perform validation and
+the existing operation without calling a public method under an already-held s.With or
+nested effect with the same key. Checking an existing receipt takes precedence over
+comparing the guard with current state, after actor and payload consistency are verified.
+The guard is part of the digest. A failed guard returns `revision_conflict` or
+`target_changed` and stops nothing. The CLI without a guard retains existing behavior.
+`StopRun` must not stop a new Run of the same Session if the process changed during the form.
 
-Dla pause-interrupt nie trzymaj jednego locka przez wywołania publicznych StopSession.
-Pod effect-lock operacji: pod project lock sprawdź guard, zapisz paused i trwałą listę
-dokładnych RunID/ServiceID do zatrzymania; następnie zwolnij project lock i zatrzymuj
-wyłącznie te wykonania przez helpery z własnymi krótkimi lockami. Każdy krok ma stabilny
-podklucz z ID wykonania, a ponowienie czyta utrwaloną listę intencji. Proces już
-zakończony to ukończony krok; nowy Run nie jest automatycznie dołączany do listy.
-Zachowaj dotychczasową kolejność zatrzymania wywołującego aktora jako ostatniego.
-Receipt całej operacji powstaje po krokach; przerwana operacja zachowuje intencję.
-Wykorzystaj istniejący mechanizm effect/intencji, nie twórz drugiego systemu transakcji.
+For pause-interrupt, do not hold one lock across public StopSession calls. Under the
+operation effect lock, check the guard under the project lock, write paused, and persist
+the exact RunID/ServiceID list to stop; then release the project lock and stop only those
+executions through helpers with their own short locks. Each step has a stable subkey from
+the execution ID, and a retry reads the persisted intent list. A process already stopped
+is a completed step; a new Run is not added to the list automatically. Preserve the
+existing order that stops the invoking actor last. The receipt for the whole operation
+is created after the steps; an interrupted operation preserves its intent. Use the
+existing effect/intent mechanism; do not create a second transaction system.
 
-## 8. Architektura kodu i wspólne API
+## 8. Code Architecture and Shared API
 
 ```text
-cmd/workspace → internal/cli (Cobra, flagi, JSON/YAML, uruchomienie TUI)
+cmd/workspace → internal/cli (Cobra, flags, JSON/YAML, TUI startup)
                          ├→ internal/bootstrap (scope, Service, env)
                          ├→ internal/tui (Bubble Tea, views/forms/theme)
                          └→ internal/terminal (TTY, attach/switch, stdio)
-internal/tui ──────────────→ internal/core (typowane odczyty i operacje)
-internal/terminal ─────────→ internal/core (zweryfikowane cele runtime)
-internal/core ─────────────→ obecne pliki/Git/tmux/klienci/supervisor
+internal/tui ──────────────→ internal/core (typed reads and operations)
+internal/terminal ─────────→ internal/core (verified runtime targets)
+internal/core ─────────────→ existing files/Git/tmux/clients/supervisor
 ```
 
-Zakaz importów cli/tui/bootstrap/Charm/Cobra w core. Core może nadal zawierać obecny
-adapter tmux zgodnie z ARCHITECTURE.md. Nie przenoś wszystkich adapterów procesowych.
-Terminal nie zna ekranów ani formularzy. TUI nie parsuje frontmatter/index.json.
+No cli/tui/bootstrap/Charm/Cobra imports in core. Core may continue to contain the
+existing tmux adapter according to ARCHITECTURE.md. Do not move all process adapters.
+Terminal does not know about screens or forms. The TUI does not parse frontmatter/index.json.
 
-### 8.1. Nowe i zmieniane pliki
+### 8.1. New and Changed Files
 
-| Plik | Odpowiedzialność |
+| File | Responsibility |
 |---|---|
-| `internal/bootstrap/context.go` | flag/env/CWD → Service, Actor, wybrany scope; CLI i TUI |
-| `internal/core/query.go` | WorkspaceSnapshot, projektowe podsumowania, spójny odczyt |
-| `internal/core/query_relations.go` | indeksy task/worktree/session/run/result, liczniki i uwaga bez stylów |
-| `internal/core/preview.go` | bezpieczny ograniczony odczyt dokumentów/artefaktów/check output |
-| `internal/core/session_actions.go` | ResumeSession i nadzorowane entry points wydzielone z CLI |
-| `internal/core/navigation.go` | referencje encji, weryfikacja i rozwiązanie celu jump |
-| `internal/core/ui_runtime.go` | trwała preferencja/instancja panelu i reconciliation |
-| `internal/core/tmux_ui.go` | oznaczanie/wyszukiwanie/uruchamianie/odtwarzanie UI i okien |
-| `internal/core/runtime.go` | bezpieczny wybór panelu orkiestratora, metadata i topology |
-| `internal/core/supervisor.go` | niezależne uzgadnianie UI w Tick |
-| `internal/core/lifecycle.go`, `task.go`, `session.go` | helpery dla guarded operations, bez zmiany starych reguł |
-| `internal/terminal/navigation.go` | IO oraz attach/switch/jump; fake port do testów |
-| `internal/tui/app.go`, `model.go`, `update.go` | Run, stan aplikacji i event routing |
-| `internal/tui/backend.go`, `commands.go` | wąskie interfejsy core i asynchroniczne Cmd |
-| `internal/tui/routes.go`, `keys.go` | historia nawigacji, focus, skróty |
-| `internal/tui/layout.go`, `theme.go`, `status.go` | wymiary, paleta, badge |
-| `internal/tui/project.go`, `dashboard.go`, `collection.go`, `detail.go` | prezentacja ekranów |
-| `internal/tui/forms.go`, `preview.go` | embedded Huh i viewport |
-| `internal/cli/tui.go` | tui/show/hide/status i ukryty runner |
-| `internal/cli/cli.go`, `help.go` | rejestracja, odchudzone resume/attach/bootstrap, kompletna pomoc |
+| `internal/bootstrap/context.go` | flag/env/CWD → Service, Actor, selected scope; CLI and TUI |
+| `internal/core/query.go` | WorkspaceSnapshot, project summaries, consistent read |
+| `internal/core/query_relations.go` | task/worktree/session/run/result indexes, counters, and unstyled attention items |
+| `internal/core/preview.go` | safe bounded reads of documents/artifacts/check output |
+| `internal/core/session_actions.go` | ResumeSession and supervised entry points extracted from the CLI |
+| `internal/core/navigation.go` | entity references, validation, and jump-target resolution |
+| `internal/core/ui_runtime.go` | durable pane preference/instance and reconciliation |
+| `internal/core/tmux_ui.go` | marking/finding/starting/restoring UI and windows |
+| `internal/core/runtime.go` | safe orchestrator-pane selection, metadata, and topology |
+| `internal/core/supervisor.go` | independent UI reconciliation in Tick |
+| `internal/core/lifecycle.go`, `task.go`, `session.go` | guarded-operation helpers without changing old rules |
+| `internal/terminal/navigation.go` | I/O and attach/switch/jump; fake port for tests |
+| `internal/tui/app.go`, `model.go`, `update.go` | Run, application state, and event routing |
+| `internal/tui/backend.go`, `commands.go` | narrow core interfaces and asynchronous Cmd |
+| `internal/tui/routes.go`, `keys.go` | navigation history, focus, shortcuts |
+| `internal/tui/layout.go`, `theme.go`, `status.go` | dimensions, palette, badges |
+| `internal/tui/project.go`, `dashboard.go`, `collection.go`, `detail.go` | screen presentation |
+| `internal/tui/forms.go`, `preview.go` | embedded Huh and viewport |
+| `internal/cli/tui.go` | tui/show/hide/status and hidden runner |
+| `internal/cli/cli.go`, `help.go` | registration, slimmed resume/attach/bootstrap, complete help |
 
-Nie dziel na osobny package każdego panelu. Dopisz testy obok plików, wspólne fixtures
-TUI w `internal/tui/testdata/`. Nie buduj osobnego binarium TUI.
+Do not split every panel into its own package. Add tests next to the files and shared TUI
+fixtures in `internal/tui/testdata/`. Do not build a separate TUI binary.
 
-Do nowych możliwości runtime dodaj nazwane wąskie interfejsy: obserwacja topology,
-operacje zarządzanego panelu i nawigacja. Tmux implementuje je, testy UI mają własny
-fake z tymi możliwościami. Dotychczasowy Runtime Launch/Inspect/Stop/Attach może
-pozostać kompatybilny; brak opcjonalnej możliwości oznacza runtime_unsupported,
-a nie wywołanie prawdziwego tmux w testach. Nie twórz zależności core od fake TUI.
+For new runtime capabilities, add named narrow interfaces: topology observation, managed
+pane operations, and navigation. Tmux implements them, and UI tests have their own fake
+with these capabilities. Existing Runtime Launch/Inspect/Stop/Attach may remain
+compatible; an unavailable optional capability means runtime_unsupported, not invoking
+real tmux in tests. Do not make core depend on a fake TUI.
 
-### 8.2. Queries i DTO
+### 8.2. Queries and DTOs
 
-Dodaj do core.Service:
+Add to core.Service:
 
-- `WorkspaceSnapshot(ctx, selector)` → nowy typ zawierający Status, Body, Services,
-  Checks, Handoffs, Messages i ObservedAt. Wszystko z jednego s.With/loadDocument,
-  bez zagnieżdżonego wywołania Status/Menu/Inbox pod blokadą. Nie zwracaj *Document.
-- `ProjectOverview(ctx)` → lista lekkich podsumowań oraz błędy per workspace.
-  Nie zmieniaj fail-fast kontraktu istniejącego List. W nowym odczycie jeden uszkodzony
-  workspace pozostaje wierszem z path/error, a pozostałe są dostępne. Enumeruj według
-  tej samej konfiguracji storageRoot; nie wywołuj fail-fast workspaceDirs w pętli,
-  która ma obsłużyć uszkodzony WORKSPACE.md per element.
-- `ObserveWorkspaceRuntime(ctx, workspaceID)` → odczyt topology tmux i supervisora,
-  z osobnym timestampem; failure nie unieważnia poprawnego snapshotu dokumentu.
-- `InspectWorktree(ctx, workspaceID, worktreeID)` → HEAD/dirty/error, tylko na żądanie.
-- `ReadPreview(ctx, workspaceID, kind, resourceID)` → metadata, text, truncated,
-  binary, warning/error; kind to zamknięty enum document/artifact/check.
+- `WorkspaceSnapshot(ctx, selector)` → a new type containing Status, Body, Services,
+  Checks, Handoffs, Messages, and ObservedAt. Everything comes from one
+  s.With/loadDocument, without nested Status/Menu/Inbox calls under the lock. Do not
+  return *Document.
+- `ProjectOverview(ctx)` → a list of lightweight summaries and per-workspace errors.
+  Do not change the fail-fast contract of the existing List. In the new read, one broken
+  workspace remains a row with path/error while the others remain available. Enumerate
+  using the same storageRoot configuration; do not call fail-fast workspaceDirs in a loop
+  that must handle a broken WORKSPACE.md per item.
+- `ObserveWorkspaceRuntime(ctx, workspaceID)` → tmux and supervisor topology read with
+  a separate timestamp; failure does not invalidate a valid document snapshot.
+- `InspectWorktree(ctx, workspaceID, worktreeID)` → HEAD/dirty/error, on demand only.
+- `ReadPreview(ctx, workspaceID, kind, resourceID)` → metadata, text, truncated, binary,
+  warning/error; kind is a closed document/artifact/check enum.
 - `ResolveNavigationTarget(ctx, workspaceID, EntityRef)` → NavigationTarget.
 
-WorkspaceSnapshot jest prywatnym kontraktem współdzielenia interfejsów wewnątrz
-binarium. Nie zastępuje `status --json` i nie podnosi jego schema_version: 2.
-Nie dopisuj UI do publicznych list sessions/runs/services. Snapshot nie udostępnia
-map Mutations/Operations, tokenu supervisora ani konfiguracji sekretów.
+WorkspaceSnapshot is a private contract shared by interfaces inside the binary. It does
+not replace `status --json` or increase its schema_version: 2. Do not add UI records to
+public sessions/runs/services lists. The snapshot does not expose Mutations/Operations
+maps, the supervisor token, or secret configuration.
 
-Buduj mapy po ID raz na snapshot. DTO relacji przechowują IDs i flagi history/current,
-nie wskaźniki do mutowanego Document. TUI może wykonywać sortowanie, filtrowanie i
-formatowanie, ale reguły lineage, aktywności, uprawnień i runtime ownership są w core.
-Odczyty korzystają z loadDocument i dotychczasowego recovery/migracji. „Read” nie
-oznacza obejścia koniecznego dokończenia pending write; nie wykonuje jednak reconcile
-tmux, nowych decyzji ani startu procesów.
+Build ID maps once per snapshot. Relation DTOs store IDs and history/current flags, not
+pointers to a mutable Document. The TUI may sort, filter, and format, but lineage,
+activity, authorization, and runtime-ownership rules belong in core. Reads use
+loadDocument and existing recovery/migrations. “Read” does not bypass required completion
+of a pending write; it does not, however, reconcile tmux, create new decisions, or start processes.
 
-### 8.3. Wydzielenie istniejących przypadków użycia
+### 8.3. Extracting Existing Use Cases
 
-- Nowe `ResumeSession(ctx, selector, sessionOrLegacyRunID, key)` zawiera obecną
-  logikę session resume/emitSessionResume: resolve alias, zachowanie read-only,
-  parent/profile/task/worktree i ResumeSession; start supervisora poza lockiem,
-  potem StartSession. CLI i TUI wywołują tę samą metodę.
-- Dodaj `StartSupervisedSession`, `StartSupervisedOrchestrator`,
-  `ResumeSupervisedAgent`: EnsureSupervisor, następnie istniejąca metoda core.
-  CLI start/session start/agent resume używają tych entry points. Supervisor nadal
-  korzysta z prymitywów StartSession/ResumeAgent i nie startuje samego siebie.
-- Po udanym starcie orkiestratora spróbuj ReconcileInterface poza s.With. Niepowodzenie
-  companion UI zapisz jako UI error i pozostaw do retry; nie zamieniaj udanego Run
-  w failed i nie zwracaj błędu sugerującego, że start agenta się nie odbył.
-- Także start orkiestratora przez session start i agent/session resume musi włączyć
-  companion. Hook po powodzeniu prymitywu StartSession może to scentralizować, ale
-  dopiero po zwolnieniu jego locka, wyłącznie gdy wynik dotyczy orkiestratora i bez
-  wywoływania EnsureSupervisor z wnętrza tego hooka.
-- Move obecne sprawdzanie ownership z CLI session attach do core resolvera.
-  Stare attach/open wywołują ten sam adapter terminala co TUI, z zachowaniem ich
-  semantyki selektora i formatu błędów. Utrzymaj kompatybilne legacy Run ID.
+- New `ResumeSession(ctx, selector, sessionOrLegacyRunID, key)` contains the existing
+  session resume/emitSessionResume logic: resolve alias, preserve read-only, parent/
+  profile/task/worktree, and ResumeSession; start the supervisor outside the lock, then
+  StartSession. CLI and TUI call the same method.
+- Add `StartSupervisedSession`, `StartSupervisedOrchestrator`, and
+  `ResumeSupervisedAgent`: EnsureSupervisor, then the existing core method. CLI
+  start/session start/agent resume use these entry points. The supervisor continues to
+  use StartSession/ResumeAgent primitives and does not start itself.
+- After a successful orchestrator start, try ReconcileInterface outside s.With. Record
+  companion UI failure as a UI error and leave it for retry; do not turn a successful
+  Run into failed or return an error implying that agent start did not happen.
+- Orchestrator start through session start and agent/session resume must also enable the
+  companion. A hook after the StartSession primitive succeeds may centralize this, but
+  only after its lock is released, only when the result concerns the orchestrator, and
+  without calling EnsureSupervisor inside the hook.
+- Move the existing ownership check from CLI session attach into the core resolver.
+  Existing attach/open calls the same terminal adapter as the TUI, preserving their
+  selector semantics and error format. Keep compatible legacy Run IDs.
 
-## 9. Event loop, odczyt i błędy
+## 9. Event Loop, Reads, and Errors
 
-TUI Model zawiera: scope, route stack, selection ID, queries per route, focus,
-snapshot, runtime observation, width/height, palette, form, pending action,
-last success/error, request generations i flagi in-flight. Nie trzyma Service z
-mutowanym Actorem; wstrzyknięty backend ma stały scope/actor per operacja.
+The TUI Model contains: scope, route stack, selection ID, per-route queries, focus,
+snapshot, runtime observation, width/height, palette, form, pending action, last
+success/error, request generations, and in-flight flags. It does not hold a Service with
+a mutable Actor; the injected backend has a fixed scope/actor per operation.
 
-- Init zleca odczyt. Każde I/O to tea.Cmd z contextem; Update/View nie czytają plików
-  i nie wykonują Git/tmux. Cmd zwraca wiadomość; nie modyfikuje modelu w goroutine.
-- Jeden timer po zakończeniu odczytu; refresh co 2 s workspace, 5 s projekt.
-  Gdy odczyt trwa, nie startuj kolejnego. Timeout odczytu 3 s (lock uwzględnia context).
-- Zmiana workspace zwiększa generation; spóźnione snapshot/runtime/preview z innego
-  scope są ignorowane. Po mutacji unieważnij poprzednią generację odczytu i odśwież.
-- Runtime observation osobno, maks. jedno w toku, timeout 2 s. Preview timeout 3 s,
-  git detail timeout 3 s. Zbyt wolny proces kończy się jawnym błędem, nie blokuje UI.
-- Nie filtruj zmian jedynie po Workspace.Revision: stan runu/checków/UI może mieć
-  inny cykl zapisu. Nowy snapshot zastępuje cały zestaw powiązanych rekordów.
-- Nie zeruj formularza podczas heartbeat; po zmianie znaczącego targetu zaznacz
-  konflikt i zablokuj confirm do odświeżenia intencji.
-- Przechowuj ostatni poprawny snapshot przy błędzie. Nagłówek `Stale · last update …`
-  po nieudanym refresh; po 6 s bez udanego odczytu blokuj nowe mutacje do odświeżenia.
-- Na usunięcie zaznaczonego zasobu: informacja, przejście do rodzica i najbliższego
-  dostępnego zaznaczenia. Na usunięcie workspace: ekran projektu, bez crasha.
-- Widoki unknown/loading/empty/filtered-empty/error/stale muszą być odrębne.
-- Runtime unavailable nie blokuje przeglądania danych; jump/start są niedostępne
-  z powodem. Windows: przegląd TUI działa, tmux actions zwracają runtime_unsupported
-  z instrukcją użycia linuxowego binarium w WSL.
-- Logowanie nie trafia na stdout podczas renderowania. Błędy mają code + czytelny
-  message, details w viewport; nie spamuj toastem co heartbeat.
+- Init requests a read. Every I/O is a tea.Cmd with context; Update/View do not read files
+  or execute Git/tmux. Cmd returns a message; it does not modify the model in a goroutine.
+- One timer after a read completes; refresh every 2 s for a workspace and every 5 s for
+  a project. When a read is in progress, do not start another. Read timeout is 3 s (the
+  lock honors context).
+- Changing the workspace increments generation; late snapshot/runtime/preview from
+  another scope is ignored. After a mutation, invalidate the previous read generation and refresh.
+- Runtime observation is separate, at most one in progress, with a 2 s timeout. Preview
+  timeout is 3 s, and Git detail timeout is 3 s. A slow process ends in an explicit error
+  and does not block the UI.
+- Do not filter changes only by Workspace.Revision: run/check/UI state may have a
+  different write cycle. A new snapshot replaces the entire related-record set.
+- Do not reset a form during a heartbeat; after a significant target change, mark a
+  conflict and block confirm until the intent is refreshed.
+- Keep the last valid snapshot on error. Show `Stale · last update …` after a failed
+  refresh; after 6 s without a successful read, block new mutations until refreshed.
+- When the selected resource is removed: show information, move to the parent and the
+  nearest available selection. When a workspace is removed: go to the project screen without crashing.
+- unknown/loading/empty/filtered-empty/error/stale views must be distinct.
+- An unavailable runtime does not block browsing data; jump/start are unavailable with
+  a reason. On Windows, TUI browsing works while tmux actions return runtime_unsupported
+  with instructions to use the Linux binary in WSL.
+- Logging must not go to stdout during rendering. Errors have a code and readable
+  message, with details in the viewport; do not spam a toast on every heartbeat.
 
-### 9.1. Podgląd i bezpieczeństwo terminala
+### 9.1. Preview and Terminal Safety
 
-ReadPreview rozwiązuje ID z rejestru, nigdy dowolny path przekazany przez TUI. Dla
-dokumentów dozwolona lista WORKSPACE.md/WORKFLOW.md/Input.Snapshot; dla artefaktu
-kanoniczny katalog artifacts, dla check output zatwierdzona ścieżka core. Użyj
-istniejących kontroli containment i sprawdź symlinki przed otwarciem; regular file,
-bounded read, bez FIFO/urządzeń i ścieżek poza dozwolonym katalogiem. Błąd digestu
-artefaktu oznacz jawnie, jeśli weryfikacja jest wykonywana; nie deklaruj pełnej
-weryfikacji digestu po przeczytaniu tylko pierwszych 256 KiB.
+ReadPreview resolves the ID from the registry, never an arbitrary path supplied by the
+TUI. For documents, the allowlist is WORKSPACE.md/WORKFLOW.md/Input.Snapshot; for an
+artifact, the canonical artifacts directory; for check output, the core-approved path.
+Use existing containment checks and inspect symlinks before opening; require a regular
+file and bounded read, with no FIFO/devices or paths outside the allowed directory. Mark
+an artifact digest error explicitly when verification is performed; do not claim full
+digest verification after reading only the first 256 KiB.
 
-Każdy zewnętrzny tekst (tytuł, reason, output, argv, ścieżka) usuwa terminalowe
-sekwencje sterujące CSI/OSC/DCS/APC i niedozwolone control chars PRZED stylowaniem.
-Samo ansi.Strip sprawdź testami dla OSC52/OSC8; uzupełnij sanitizer, jeśli trzeba.
-Tekst multiline zachowuje newline/tab (tab rozwijany), lista zamienia newline na
-spację. Nie generuj automatycznych hiperłączy ani poleceń z tekstu artefaktów.
+Every external text (title, reason, output, argv, path) removes terminal control
+sequences CSI/OSC/DCS/APC and disallowed control chars BEFORE styling. Test ansi.Strip
+itself for OSC52/OSC8; extend the sanitizer if needed. Multiline text preserves
+newline/tab (tabs expanded), while a list replaces newlines with spaces. Do not generate
+automatic hyperlinks or commands from artifact text.
 
-## 10. Zarządzany panel i reconciliation tmux
+## 10. Managed Pane and Tmux Reconciliation
 
-### 10.1. Właściciel, dane i pożądany stan
+### 10.1. Owner, Data, and Desired State
 
-Dodaj osobny plik `<workspace>/.runtime/ui.json`, schema_version 1. Nie zmieniaj
-WORKSPACE.md ani Registry/Status schema tylko z powodu UI. Minimalny rekord:
+Add a separate `<workspace>/.runtime/ui.json` file, schema_version 1. Do not change
+WORKSPACE.md or Registry/Status schema solely because of the UI. Minimal record:
 
 - workspace_id, project_id;
-- desired (bool), ui_id (trwałe `ui_...`), generation (int);
-- launch_token (unikalny na generację), state;
+- desired (bool), ui_id (durable `ui_...`), generation (int);
+- launch_token (unique per generation), state;
 - pane_id, window_id, anchor_run_id;
 - last_error, failures, next_retry_at, started_at, updated_at;
-- receipts show/hide: key → digest, result (mały, jawny kontrakt tego pliku).
+- receipts show/hide: key → digest, result (small, explicit contract for this file).
 
-Stany UI: disabled, waiting_for_runtime, starting, running, backoff.
-desired=false dominuje nad stanem procesu. Brak pliku oznacza default desired=true,
-ale plik i panel tworzy się dopiero, gdy workspace ma historię orkiestratora oraz
-istnieje jego sesja tmux. Sam odczyt TUI/project list nie tworzy UI ani tmux.
+UI states: disabled, waiting_for_runtime, starting, running, backoff.
+desired=false takes precedence over process state. No file means default desired=true,
+but the file and pane are created only when the workspace has orchestrator history and
+its tmux session exists. TUI/project-list reads alone create neither UI nor tmux.
 
-Wszystkie odczyty/zapisy ui.json realizuje core pod istniejącym project lock;
-atomicWrite. Nie zwiększaj Workspace.Revision od heartbeat, focus ani odbudowy UI.
-Nieznany schema_version lub uszkodzony ui.json: błąd, żadnego nadpisania/nowego panelu.
+Core performs all ui.json reads/writes under the existing project lock using
+atomicWrite. Do not increment Workspace.Revision for heartbeats, focus, or UI recovery.
+Unknown schema_version or corrupt ui.json: error, with no overwrite/new pane.
 
 Metadata tmux:
 
 - session: `@workspace_project_id`, `@workspace_id`;
-- window: `@workspace_kind=orchestrator|worktree`, `@workspace_worktree_id` gdy dotyczy;
+- window: `@workspace_kind=orchestrator|worktree`, `@workspace_worktree_id` when applicable;
 - UI pane: `@workspace_kind=tui`, `@workspace_id`, `@workspace_ui_id`,
   `@workspace_ui_generation`, `@workspace_ui_token`;
-- agent pane: `@workspace_kind=agent` + istniejące session_id/run_id;
-- service pane: `@workspace_kind=service` + dotychczasowa tożsamość usługi.
+- agent pane: `@workspace_kind=agent` + existing session_id/run_id;
+- service pane: `@workspace_kind=service` + existing service identity.
 
-Nazwa okna to etykieta; identyfikatorem jest @window_id. Workspace tmux session nadal
-ma nazwę TmuxName(workspaceID). Nowe pola Pane/Launch muszą być dodawane ze sprawdzeniem
-wszystkich konstruktorów, fakeRuntime i testów. Legacy paneOwns nadal działa dla agentów;
-UI nigdy nie dostaje @workspace_session_id ani @workspace_run_id.
+The window name is a label; @window_id is the identifier. The workspace tmux session
+continues to use the TmuxName(workspaceID) name. New Pane/Launch fields must be added
+after checking all constructors, fakeRuntime, and tests. Legacy paneOwns continues to
+work for agents; the UI never receives @workspace_session_id or @workspace_run_id.
 
-### 10.2. Krytyczna naprawa launch orkiestratora
+### 10.2. Critical Orchestrator Launch Fix
 
-Obecne Launch robi display-message na `name:orchestrator`, a następnie respawn-pane -k
-na otrzymanym panelu. Gdy aktywny będzie TUI, zabije TUI. Zmień to PRZED dodaniem UI.
+The current Launch runs display-message on `name:orchestrator` and then respawn-pane -k
+on the returned pane. If the TUI is active, it will kill the TUI. Change this BEFORE
+adding the UI.
 
-Algorytm wyboru panelu agenta:
+Agent-pane selection algorithm:
 
-1. Odszukaj dedykowane okno po metadata lub zweryfikowanych Runach orkiestratora.
-   Dla legacy bez metadata użyj istniejących pane IDs/runner command i dopiero
-   potwierdzone powiązanie oznacz nowymi metadata. Sama nazwa okna nie dowodzi ownership.
-2. Jeżeli pasujący panel nowego Run już istnieje (Recover), odzyskaj go.
-3. Jeśli istnieje nieaktywny panel poprzedniego Run orkiestratora, wolno respawn tylko
-   po porównaniu poprzedniego session/run ownership i sprawdzeniu braku aktywnej
-   rezerwacji. Przekaż spod locka jawne ReplacePaneID/ReplaceSessionID/ReplaceRunID
-   w Launch; nie wybieraj arbitralnie dowolnego panelu z rodziny agent.
-4. Inaczej utwórz nowy panel przez split w tym oknie, albo nowe okno, jeśli go brak.
-   Gdy tworzysz nową sesję tmux, uruchom właściwy runner bezpośrednio jako jej pierwszy
-   panel; nie pozostawiaj nieoznaczonego shell placeholdera do późniejszego zabicia.
-5. Nigdy nie respawn panelu kind=tui/service, obcego shell lub aktywnego innego Run.
-6. Brak całego okna orkiestratora przy żyjącym oknie workera musi być obsłużony przez
-   utworzenie okna, nie zakończenie błędem przy display-message.
+1. Find the dedicated window through metadata or verified orchestrator Runs. For legacy
+   state without metadata, use existing pane IDs/runner command and add new metadata
+   only after confirming the relationship. The window name alone does not prove ownership.
+2. If a matching pane for the new Run already exists (Recover), recover it.
+3. If an inactive pane from the previous orchestrator Run exists, respawn only after
+   comparing previous session/run ownership and confirming that no active reservation
+   remains. Pass explicit ReplacePaneID/ReplaceSessionID/ReplaceRunID from under the
+   lock into Launch; do not arbitrarily choose any pane from the agent family.
+4. Otherwise create a new pane with a split in this window, or a new window if it is
+   missing. When creating a new tmux session, start the correct runner directly as its
+   first pane; do not leave an unmarked shell placeholder to kill later.
+5. Never respawn a pane with kind=tui/service, a foreign shell, or another active Run.
+6. A missing orchestrator window while a worker window is alive must be handled by
+   creating the window, not by failing at display-message.
 
-Pozostałe tworzenie okien worktree również oznacz ID. Przy duplikatach nazw nie
-wybieraj ostatniego wiersza list-windows. Legacy rozstrzygaj po żywych panelach
-powiązanych z WorktreeID; przy niejednoznaczności zgłoś konflikt. Reconcile i stop
-zawsze ponownie weryfikują ownership przed użyciem zapisanego pane_id.
+Other worktree-window creation must also mark IDs. With duplicate names, do not choose
+the last list-windows row. Resolve legacy state through live panes linked to WorktreeID;
+report a conflict when ambiguous. Reconcile and stop always verify ownership again before
+using a stored pane_id.
 
-### 10.3. Cykl życia panelu
+### 10.3. Pane Lifecycle
 
-Ukryty runner: `workspace ... _tui-exec <ui-id> <generation> <token>`.
-Komenda uruchomienia zawiera bezwzględny Executable, --project, --workspace,
---tmux-socket. Każdy argument przechodzi shellQuote, tak jak runner agentowy.
-Pełny unikalny command umożliwia Recover po awarii pomiędzy split a set-option/save.
+Hidden runner: `workspace ... _tui-exec <ui-id> <generation> <token>`.
+The launch command contains the absolute Executable, --project, --workspace, and
+--tmux-socket. Every argument passes through shellQuote, like the agent runner.
+The fully unique command enables Recover after a failure between split and set-option/save.
 
-`_tui-exec` pod lockiem sprawdza ui_id/generation/token/desired, zapisuje running
-dopiero po skutecznym claim. Jeśli zastał inną generację lub desired=false — kończy
-się bez renderowania i bez zapisywania stanu nowej generacji. Claim jest pojedynczy:
-drugi proces z tym samym tokenem nie może nadpisać żywego właściciela. PID nie stanowi
-samodzielnego dowodu ownership; sprawdzaj aktualny TMUX_PANE i metadata/command.
+`_tui-exec` checks ui_id/generation/token/desired under the lock and writes running only
+after a successful claim. If it finds another generation or desired=false, it exits
+without rendering and without writing state for the new generation. Claim is single-use:
+a second process with the same token cannot overwrite the live owner. PID alone is not
+proof of ownership; check the current TMUX_PANE and metadata/command.
 
-Pane TUI jest interfejsem użytkownika. Launcher usuwa odziedziczone tożsamości
-WORKSPACE_AGENT_ID/SESSION_ID/RUN_ID/TASK_ID/ROLE/PARENT_* i ORCHESTRATOR_* z jego
-środowiska (nie usuwa TERM/TMUX/TMUX_PANE/PATH). Handler po zweryfikowanym claim
-tworzy Service z pustym Actor i jawnym projektem/workspace/socket. Nie zmieniaj
-globalnie os.Environ w procesie supervisora. Ręczny `workspace tui` zachowuje Actor
-z bootstrap i pokazuje ograniczenia roli; nie podnosi jej przez wyczyszczenie env.
+The TUI pane is a user interface. The launcher removes inherited identities
+WORKSPACE_AGENT_ID/SESSION_ID/RUN_ID/TASK_ID/ROLE/PARENT_* and ORCHESTRATOR_* from its
+environment (it does not remove TERM/TMUX/TMUX_PANE/PATH). After a verified claim, the
+handler creates a Service with an empty Actor and explicit project/workspace/socket. Do
+not change os.Environ globally in the supervisor process. Manual `workspace tui` keeps
+the Actor from bootstrap and shows role limitations; it does not elevate it by clearing env.
 
 `SetUIPaneDesired(ctx, selector, desired, key)`:
 
-1. requireUser, project lock, resolve/loadDocument i ui.json.
-2. Receipt replay po key/digest przed nową zmianą. Inny desired z tym samym key = conflict.
-3. Zapis desired i receipt atomowo razem w ui.json. Hide jest skuteczne nawet jeśli
-   tmux jest niedostępny; efekt zabicia własnego panelu jest uzgadniany później.
-4. Po puszczeniu locka uruchom ReconcileInterface; wynik show/hide ma stan efektu UI.
-   Powtórzony receipt nie tworzy drugiego panelu. Oddziel od domenowych receipts
-   opisanych w operations.md; nie wkładaj ui.json do Document.PendingFiles.
+1. requireUser, project lock, resolve/loadDocument, and ui.json.
+2. Replay the receipt by key/digest before a new change. Different desired with the same key = conflict.
+3. Write desired and receipt atomically together in ui.json. Hide is effective even when
+   tmux is unavailable; the effect of killing the owned pane is reconciled later.
+4. After releasing the lock, run ReconcileInterface; the show/hide result has the UI
+   effect state. A replayed receipt does not create a second pane. Keep it separate from
+   domain receipts described in operations.md; do not put ui.json in Document.PendingFiles.
 
-Receipt ma własne operation_id i nie ma Workspace.Revision. Rozdziel niezmienny
-wynik ustawienia desired od bieżącej obserwacji panelu: replay zwraca ten sam zapisany
-wynik intencji; aktualny stan pobiera `tui status`. W JSON show/hide zwracaj operation_id
-w standardowej kopercie, bez udawanej rewizji dokumentu. Dodaj typowaną ścieżkę emit
-z przekazanym OperationMetadata dla tych komend; nie szukaj ich kluczy w
-Registry.Operations przez obecne options.emit. Pozostałe komendy emit pozostają bez zmian.
+The receipt has its own operation_id and no Workspace.Revision. Separate the immutable
+desired-setting result from the current pane observation: replay returns the same saved
+intent result; `tui status` reads the current state. In show/hide JSON, return operation_id
+in the standard envelope, without a fabricated document revision. Add a typed emit path
+with the supplied OperationMetadata for these commands; do not look up their keys in
+Registry.Operations through the existing options.emit. Other emit commands remain unchanged.
 
-Zarządzane `q`/Ctrl+C: najpierw zapisz desired=false, potem opuść raw/alt screen i
-zakończ program. Stopka ma `q hide`, ręczne TUI ma `q quit`. Nie zabijaj własnego
-panelu z wnętrza procesu przed zakończeniem zapisu i odtworzeniem terminala;
-supervisor usuwa jego dead pane po zweryfikowaniu ownership. Nieudany zapis hide
-pokazuje błąd i pozostawia program uruchomiony. `tui show` włącza go ponownie.
-Zewnętrzne kill-pane, SIGKILL, awaria TUI = utrata, desired pozostaje true → recovery.
+Managed `q`/Ctrl+C: first write desired=false, then leave raw/alt screen and exit the
+program. The footer has `q hide`; manual TUI has `q quit`. Do not kill the owned pane
+from inside the process before the write completes and the terminal is restored; the
+supervisor removes its dead pane after verifying ownership. A failed hide write shows an
+error and leaves the program running. `tui show` enables it again. External kill-pane,
+SIGKILL, or a TUI crash means loss; desired remains true → recovery.
 
-### 10.4. Algorytm ReconcileInterface
+### 10.4. ReconcileInterface Algorithm
 
-Oddzielna metoda, wywoływana przez Tick i jawny reconcile oraz po starcie orkiestratora.
-Nie wołaj s.With pod istniejącym project lock. Korzystaj z prywatnego helpera
-operującego na już odczytanym stanie. Wszystkie starty UI serializuj project lockiem;
-tmux ma krótki timeout, nie trzymaj locka podczas działania TUI ani oczekiwania na claim.
+Separate method, called by Tick and explicit reconcile and after orchestrator start. Do
+not call s.With under an existing project lock. Use a private helper operating on already
+read state. Serialize all UI starts with the project lock; tmux has a short timeout, and
+do not hold the lock while the TUI runs or while waiting for a claim.
 
-1. Odczytaj workspace/ui.json. Przy archived wymuś brak zarządzanego panelu; usuń
-   tylko należący do niego pane. Ui.json/historia pozostają. Zrób to również, gdy
-   tickWorkspace zwykle wcześnie wraca dla archived.
-2. Odczytaj topology wskazanego socketu. Transient tmux error = zachowaj IDs i
-   rezerwację, zapisz bounded diagnostic/backoff; NIE traktuj jako braku panelu.
-3. desired=false → usuń tylko zweryfikowane UI pane; nie dotykaj agentów i usług.
-4. Brak sesji tmux → waiting_for_runtime. UI samo nie odtwarza całej sesji, nie
-   startuje orkiestratora ani nie restartuje przerwanego paused/completed workspace.
-5. Brak historii orkiestratora → waiting_for_runtime; nie twórz okna tylko dla UI.
-6. Odzyskaj zgodny UI pane po metadata lub dokładnym runnerCommand/token. Ponowne
-   wywołanie po utracie odpowiedzi ze split musi adoptować istniejący panel.
-7. Żywy poprawny panel → running. Przemieszczenie/resize przez użytkownika nie
-   powoduje ciągłego narzucania layoutu. Zmienione ID okna aktualizuj po weryfikacji.
-8. Zweryfikowany dead/missing UI: jeśli nie ma niepewnej rezerwacji i minął backoff,
-   zapisz nową generation/token + starting przed split/respawn. Dotychczasowy dead
-   panel można respawn, jeśli nadal jest własny i znajduje się w docelowym oknie.
-9. Docelowe okno: aktualne okno Run orkiestratora; jeśli brak aktywnego Run — jego
-   oznaczone okno historyczne. Jeśli okno zniknęło i nie ma Run do odtworzenia,
-   waiting_for_runtime; nie uruchamiaj shell/orkiestratora tylko dla TUI.
-10. Split jest detached i nie kradnie focusu. Preferuj po prawej, gdy dostępne
-    width >= 120: TUI 40%, min. 40 kolumn; inaczej na dole, gdy height >= 30:
-    TUI 35%, min. 12 wierszy. Jeśli żaden wariant nie daje minimum przy zachowaniu
-    używalnego panelu agenta, waiting_for_runtime z powodem `not enough pane space`.
-    Supervisor ponawia po zmianie wymiarów. Nie zmniejszaj agentowi panelu do 1 wiersza.
-11. Po utworzeniu zapisz pane/window IDs i metadata. Awaria po split to starting
-    z niepewnym efektem; kolejny tick najpierw Recover. Nie rezerwuj nowej generacji
-    dopóki nie potwierdzisz braku starego polecenia.
-12. Przy wielu własnych UI pane adoptuj pasujący do aktualnej rezerwacji; stare
-    generacje usuń wyłącznie po potwierdzeniu workspace/ui ownership. Niejednoznaczne
-    obce panele zostaw i pokaż konflikt.
+1. Read workspace/ui.json. For archived, require no managed pane; remove only its pane.
+   Keep Ui.json/history. Do this even when tickWorkspace normally returns early for archived.
+2. Read the topology of the selected socket. A transient tmux error means preserve IDs
+   and reservation and write bounded diagnostics/backoff; do NOT treat it as a missing pane.
+3. desired=false → remove only a verified UI pane; do not touch agents or services.
+4. No tmux session → waiting_for_runtime. UI itself does not restore the entire session,
+   start the orchestrator, or restart an interrupted paused/completed workspace.
+5. No orchestrator history → waiting_for_runtime; do not create a window only for UI.
+6. Recover a compatible UI pane from metadata or the exact runnerCommand/token. A retry
+   after losing the split response must adopt the existing pane.
+7. A live valid pane → running. User movement/resize does not cause layout to be imposed
+   continuously. Update a changed window ID after verification.
+8. Verified dead/missing UI: if there is no uncertain reservation and backoff has elapsed,
+   write a new generation/token + starting before split/respawn. An existing dead pane may
+   be respawned if it is still owned and is in the target window.
+9. Target window: the current orchestrator Run window; if no Run is active, its marked
+   historical window. If the window disappeared and no Run can be restored,
+   waiting_for_runtime; do not start a shell/orchestrator just for the TUI.
+10. The split is detached and does not steal focus. Prefer the right side when available
+    at width >= 120: TUI 40%, min. 40 columns; otherwise the bottom when height >= 30:
+    TUI 35%, min. 12 rows. If no variant meets the minimum while preserving a usable
+    agent pane, use waiting_for_runtime with reason `not enough pane space`. The supervisor
+    retries after a size change. Do not shrink the agent pane to one row.
+11. After creation, write pane/window IDs and metadata. A failure after split is starting
+    with an uncertain effect; the next tick must Recover first. Do not reserve a new
+    generation until the old command is confirmed absent.
+12. With multiple owned UI panes, adopt the one matching the current reservation; remove
+    old generations only after confirming workspace/UI ownership. Leave ambiguous foreign
+    panes in place and show a conflict.
 
-Backoff awarii/krótkich crashy: 2, 4, 8, 16, 30, 60 s, potem maks. 60 s; reset po
-30 s stabilnego running. `tui show` jako nowa intencja może wyzerować backoff.
-Nie zapisuj ui.json co tick, gdy nic się nie zmieniło. Upadek renderera nie może
-prowadzić do setek nowych paneli. Nie ma restartowania workerów w ramach tego algorytmu.
+Backoff for failures/short crashes: 2, 4, 8, 16, 30, 60 s, then a maximum of 60 s;
+reset after 30 s of stable running. `tui show` as a new intent may reset backoff.
+Do not write ui.json every tick when nothing changed. A renderer crash must not lead to
+hundreds of new panes. This algorithm does not restart workers.
 
-Nowo tworzona detached sesja tmux dostaje początkowo 160×48 (`new-session -x/-y`),
-aby start z nieterminalowego CLI mógł od razu stworzyć oba panele. Dotyczy to tylko
-nowej sesji; nie zmieniaj wymiarów istniejących klientów/okien. Po attach tmux
-dostosowuje rozmiar, a TUI przechodzi w właściwy layout, w skrajnym przypadku Tiny.
-Brak miejsca na NOWY split nie oznacza usuwania już istniejącego panelu po resize.
-Panel w starting nie staje się running tylko dlatego, że jest żywy: musi wykonać
-claim. Jeśli przez 10 s pozostaje starting, pokaż błąd startu; kolejny krok recovery
-może zatrzymać tylko zweryfikowany własny runner tej generacji i wejść w backoff.
+A newly created detached tmux session initially receives 160×48 (`new-session -x/-y`),
+so a start from a non-terminal CLI can create both panes immediately. This applies only
+to a new session; do not change existing client/window dimensions. After attach, tmux
+adjusts the size and the TUI moves to the correct layout, possibly Tiny. Lack of space
+for a NEW split does not mean removing an existing pane after resize. A starting pane
+does not become running merely because it is alive: it must claim. If it remains
+starting for 10 s, show a start error; the next recovery step may stop only the verified
+owned runner for that generation and enter backoff.
 
-Tick: uzgodnij agentów według obecnych reguł, wykonaj recovery orkiestratora, następnie
-UI. Dostarczanie wiadomości i UI uruchamiaj tak, by błąd jednego nie pomijał drugiego;
-zbierz błędy (errors.Join). TUI nigdy nie jest jedynym procesem odpowiedzialnym za
-odtworzenie samego siebie. Zatrzymany supervisor oznacza brak automatycznego recovery;
-pokazuj ten stan, nie startuj supervisora z samego read/refresh TUI.
+Tick: reconcile agents according to current rules, perform orchestrator recovery, then
+UI. Run message delivery and UI so that one error does not skip the other; collect errors
+(errors.Join). The TUI is never the only process responsible for restoring itself. A
+stopped supervisor means no automatic recovery; show this state and do not start the
+supervisor from a TUI read/refresh alone.
 
-Paused: UI żyje/odtwarza się przy istniejącej sesji i oknie, także po pause --interrupt.
-Completed: UI żyje do archive lub hide, ułatwia przegląd wyników. Archived: brak
-zarządzanego UI; ręczne `workspace tui --workspace …` może czytać archiwum.
-Clean nie liczy UI jako aktywnego procesu domenowego i nie usuwa ui.json jako worktree.
+Paused: UI remains/restores with an existing session and window, including after pause
+--interrupt. Completed: UI remains until archive or hide and helps review results.
+Archived: no managed UI; manual `workspace tui --workspace …` may read the archive.
+Clean does not count the UI as an active domain process and does not remove ui.json as a worktree.
 
-### 10.5. Migracja i zgodność
+### 10.5. Migration and Compatibility
 
-Brak ui.json w starym workspace nie wymaga migracji Registry. Metadata okien/paneli
-uzupełniaj tylko po udowodnieniu tożsamości istniejącymi rekordami/runner command.
-Reconcile jest bezpieczny dla mieszanki starych i nowych paneli. Nie zmieniaj aliasów
-sess_* ani numeru publicznego status schema. Starsze binarium nie zna nowego panelu;
-README ostrzega, że downgrade z aktywnym UI wymaga `tui hide` przed podmianą binarium,
-bo stary launcher orkiestratora nie rozróżnia paneli.
+No ui.json in an old workspace requires no Registry migration. Add window/pane metadata
+only after proving identity through existing records/runner command. Reconcile is safe
+for a mix of old and new panes. Do not change sess_* aliases or the public status schema
+number. An older binary does not know the new pane; the README warns that downgrading
+with active UI requires `tui hide` before replacing the binary because the old
+orchestrator launcher does not distinguish panes.
 
-## 11. Jump do tmux i oddawanie terminala
+## 11. Jump to Tmux and Terminal Handoff
 
-`EntityRef` ma Kind + ID (workspace/worktree/session/run/service/orchestrator/ui).
-`NavigationTarget` ma workspaceID, rzeczywistą nazwę/ID sesji tmux, windowID, paneID,
-oraz oczekiwane session/run/service/ui ownership i server socket. Nie przyjmuje
-dowolnego tmux target-string z formularza użytkownika.
+`EntityRef` has Kind + ID (workspace/worktree/session/run/service/orchestrator/ui).
+`NavigationTarget` has workspaceID, the real tmux session name/ID, windowID, paneID,
+expected session/run/service/ui ownership, and server socket. It does not accept an
+arbitrary tmux target string from a user form.
 
 Resolver:
 
-- Workspace → istniejąca sesja tmux, bez tworzenia; wybór: session/orchestrator/UI.
-- Worktree → okno po @workspace_worktree_id, fallback po zweryfikowanych panelach
-  sesji/usług tego worktree. Brak okna = informacja, nie automatyczny start.
-- Session → wyłącznie CurrentRunID, Run.Active i żywy panel należący do tego Run.
-- Run → tylko gdy nadal jest current danej sesji; historyczny ma niedostępny Jump.
-- Service/UI → sprawdzona własna tożsamość i żywy panel.
-- Jeżeli jest wiele sensownych celów, jawny selektor; nigdy „pierwszy pasujący model”.
+- Workspace → existing tmux session, without creation; choose session/orchestrator/UI.
+- Worktree → window by @workspace_worktree_id, falling back to verified panes of this
+  worktree's sessions/services. A missing window is information, not automatic start.
+- Session → only CurrentRunID, Run.Active, and a live pane belonging to that Run.
+- Run → only while it remains current for the session; a historical Run has Jump disabled.
+- Service/UI → verified own identity and live pane.
+- If multiple targets are plausible, use an explicit selector; never choose the “first
+  matching model”.
 
-Oddziel `Select` (nieinteraktywne select-window/select-pane/switch-client) od `Attach`
-(proces potrzebujący stdin/stdout). Adapter terminala używa argv i timeoutów, nie
-shell strings. Dla attach zwolnij terminal przez tea.Exec z własnym ExecCommand
-albo tea.ExecProcess; powrót/detach/błąd odtwarza terminal i odświeża widok.
-Wewnątrz tmux zwykły jump odbywa się przez tea.Cmd i nie zatrzymuje pętli TUI.
+Separate `Select` (non-interactive select-window/select-pane/switch-client) from `Attach`
+(a process requiring stdin/stdout). The terminal adapter uses argv and timeouts, not shell
+strings. For attach, release the terminal through tea.Exec with a custom ExecCommand or
+tea.ExecProcess; return/detach/error restores the terminal and refreshes the view.
+Inside tmux, ordinary jump uses tea.Cmd and does not stop the TUI loop.
 
-Rozróżnij klienta i serwer tmux:
+Distinguish the tmux client and server:
 
-- Poza tmux: attach do jawnego socketu/session z przekazanym stdio; TUI wraca po detach.
-- W tym samym serwerze: znajdź klienta po TMUX_PANE i list-clients/client_tty,
-  jawnie wskaż `switch-client -c CLIENT`. Gdy wielu klientów ogląda to samo źródłowe
-  okno/pane i nie da się wskazać jednego, pokaż wybór klientów zamiast zgadywać.
-- W innym serwerze (np. --tmux-socket wskazuje izolowany serwer): zwróć czytelny
-  `tmux_server_mismatch` i instrukcję attach z terminala poza bieżącym tmux.
-  V1 nie robi zagnieżdżonego attach i nie przełącza losowego klienta innego serwera.
-- Brak klienta attachowanego do managed UI: jump informuje `no attached client`.
-  Nie startuje nowego terminala i nie przełącza cudzej sesji.
-- Waliduj przynależność pane do session/window tuż przed select. Nie da się objąć
-  plików i tmux jedną transakcją; błędy wyścigu pokazuj i odśwież, nie stosuj fallbacku
-  do niesprawdzonego panelu. Własne operacje start/stop/focus serializuj odpowiednio
-  krótką blokadą core; nie trzymaj blokady przez interaktywny attach.
+- Outside tmux: attach to an explicit socket/session with passed stdio; the TUI returns after detach.
+- In the same server: find the client by TMUX_PANE and list-clients/client_tty, and
+  explicitly use `switch-client -c CLIENT`. When multiple clients view the same source
+  window/pane and one cannot be identified, show a client selector instead of guessing.
+- On another server (for example, --tmux-socket points to an isolated server), return
+  readable `tmux_server_mismatch` and instructions to attach from a terminal outside
+  the current tmux. V1 does not perform nested attach or switch a random client on
+  another server.
+- With no client attached to managed UI, jump reports `no attached client`. It does not
+  start a new terminal or switch someone else's session.
+- Validate pane membership in session/window immediately before select. Files and tmux
+  cannot share one transaction; show race errors and refresh, without falling back to an
+  unchecked pane. Serialize owned start/stop/focus operations with a short core lock;
+  do not hold the lock during interactive attach.
 
-Nie ustawiaj globalnego keybinding powrotu. W pomocy opisz standardowy wybór okna/panelu
-tmux oraz `workspace tui show`. Samo przejście do innego window nie zmienia route
-działającego w tle panelu TUI. Po ponownym zaznaczeniu panel pokazuje świeży snapshot.
+Do not set a global return keybinding. In help, describe standard tmux window/pane
+selection and `workspace tui show`. Moving to another window does not change the route of
+the TUI pane running in the background. After selecting the pane again, it shows a fresh snapshot.
 
-## 12. Testy i weryfikacja
+## 12. Tests and Verification
 
-Nie wystarczy screenshot jednego ekranu. Testuj przejścia, ownership i failure windows.
-W unit testach użyj fake backend/runtime/clock i deterministycznych IDs/dat; żadnych
-sieciowych klientów ani zależności od terminala dewelopera. Nie zapisuj tysięcy
-identycznych goldenów; poniżej minimalny zestaw mający znaczenie.
+One screenshot of one screen is insufficient. Test transitions, ownership, and failure
+windows. In unit tests use fake backend/runtime/clock and deterministic IDs/dates; no
+network clients or dependencies on the developer's terminal. Do not write thousands of
+identical goldens; the minimum meaningful set follows.
 
-### 12.1. Core / bootstrap / kompatybilność
+### 12.1. Core / Bootstrap / Compatibility
 
-- Scope: root projektu, podkatalog projektu, workspace, podkatalog checkoutu,
-  external workspaces_dir, symlink, explicit flags, odziedziczony inny workspace,
-  brak config, uszkodzony frontmatter, konflikt projektu i workspace.
-- Snapshot: wiele sesji tej samej persony, historyczne próby, sesja bez taska,
-  reader+writer, services, wyniki bez możliwości ustalenia lineage; brak duplikatów.
-- ProjectOverview pokazuje zdrowe workspace obok uszkodzonego; List zachowuje dawny
-  fail-fast kontrakt. Runtime timeout nie psuje snapshotu trwałego stanu.
-- ResumeSession: read-only, snapshot persony, legacy Run alias, closed/active/invalid
-  lineage, operation replay; CLI i TUI dają taki sam stan i błędy.
-- Guarded stop: Run zmienia się między formularzem a operacją → nowy Run nietknięty.
-  Retry zmienionej attempt i pause-interrupt zmienionego zbioru → konflikt.
-  Replay po sukcesie z historycznym guard nadal zwraca receipt, nie konflikt rewizji.
-- ReadPreview: symlink/traversal/FIFO/binary/duży plik/brak pliku/znaki ANSI/OSC52;
-  limit dotyczy odczytu, a nie tylko renderowania.
-- `status/list/session list/run list/menu --json/--short` nie dostają UI rekordów
-  ani nowej wersji schematu. Zachowaj bieżące testy CLI.
+- Scope: project root, project subdirectory, workspace, checkout subdirectory, external
+  workspaces_dir, symlink, explicit flags, inherited foreign workspace, missing config,
+  broken frontmatter, project/workspace conflict.
+- Snapshot: multiple sessions for the same persona, historical attempts, session without
+  a task, reader+writer, services, results with undetermined lineage; no duplicates.
+- ProjectOverview shows a healthy workspace beside a broken one; List keeps its old
+  fail-fast contract. Runtime timeout does not corrupt the persisted-state snapshot.
+- ResumeSession: read-only, persona snapshot, legacy Run alias, closed/active/invalid
+  lineage, operation replay; CLI and TUI produce the same state and errors.
+- Guarded stop: Run changes between form and operation → new Run untouched. Retrying a
+  changed attempt and pause-interrupt with a changed set → conflict. Replay after success
+  with a historical guard still returns a receipt, not a revision conflict.
+- ReadPreview: symlink/traversal/FIFO/binary/large file/missing file/ANSI/OSC52;
+  the limit applies to reads, not only rendering.
+- `status/list/session list/run list/menu --json/--short` receive no UI records or new
+  schema version. Preserve current CLI tests.
 
-### 12.2. Model TUI
+### 12.2. TUI Model
 
-- Enter/Esc/Tab/1–5 i link task → session → run → back zachowują zaznaczenie/query.
-- Search substring, różne wielkości liter, powtarzające się nazwy, ID, pusty wynik;
-  q/g/cyfry w input nie wykonują akcji; Huh otrzymuje wyłącznie należne mu zdarzenia.
-- Generacja A → workspace B → spóźniony snapshot A nie podmienia ekranu B.
-- Jedna operacja/refresh w toku; double submit, retry z tym samym kluczem,
-  anulowanie form, zmiana targetu, error/stale i odzyskanie odczytu.
+- Enter/Esc/Tab/1–5 and the task → session → run → back link preserve selection/query.
+- Substring search, case differences, duplicate names, IDs, empty results; q/g/digits in
+  input do not perform actions; Huh receives only the events intended for it.
+- Generation A → workspace B → a late snapshot from A does not replace screen B.
+- One operation/refresh in flight; double submit, same-key retry, form cancellation,
+  target change, error/stale, and read recovery.
 - `exited` vs `accepted`, idle + interrupted, ready + active writer, unknown state,
-  failed check z exit code; nie mieszaj statusów.
-- Sanitizer chroni wszystkie renderowane pola; test długich Unicode/CJK/combining
-  chars i wielowierszowych nazw bez przekroczenia szerokości.
-- Test rendered width/height (po usunięciu ANSI) dla 160×48, 120×18, 80×24,
-  60×40, 40×12, 30×8 i 1×1. Golden dla dashboard/task/form w wide/narrow/short,
-  osobno podstawowa paleta light/no-color. Test resize wielokrotnie w obu kierunkach.
-- Fake terminal adapter: jump success/failure, attach zwraca terminal, cross-server,
-  wybór klienta przy niejednoznaczności. Program przywraca terminal po quit/cancel/error.
+  failed check with exit code; do not mix statuses.
+- Sanitizer protects every rendered field; test long Unicode/CJK/combining chars and
+  multi-line names without exceeding width.
+- Test rendered width/height (after removing ANSI) at 160×48, 120×18, 80×24, 60×40,
+  40×12, 30×8, and 1×1. Golden tests for dashboard/task/form in wide/narrow/short,
+  plus the base light/no-color palette. Test resize repeatedly in both directions.
+- Fake terminal adapter: jump success/failure, attach returns the terminal, cross-server,
+  client selection on ambiguity. The program restores the terminal after quit/cancel/error.
 
-### 12.3. Recovery UI — fake runtime
+### 12.3. UI Recovery — Fake Runtime
 
-- Default bez orkiestratora nie startuje niczego. Po starcie dokładnie jeden UI pane.
-- Dwa równoległe wywołania ensure/reconcile → jeden panel i jeden token claim.
-- Awaria przed split, po split/przed metadata, po metadata/przed zapisem IDs,
-  przed claim i po claim. Powtórzenie adoptuje istniejący panel, nie duplikuje.
-- Inny pane pod tym samym pane_id, zły token/generation/workspace → brak kill/respawn.
-- timeout/niepewny tmux ≠ missing. Backoff ogranicza crash loop.
-- q/hide jest trwałe; zewnętrzny kill odtwarza. Stary runner nie nadpisuje nowej
-  generacji. Show/hide receipts i konkurencja hide vs launch.
-- paused/completed działają według tabeli; archived sprząta tylko UI. UI nie liczy
-  się do limitów/writer/service_active/session_active/clean.
-- Błąd UI nie blokuje recovery/delivery agentów i odwrotnie; supervisor stop nie
-  zatrzymuje paneli. Odczyt TUI nie uruchamia supervisora.
+- Default without an orchestrator starts nothing. After start, exactly one UI pane.
+- Two concurrent ensure/reconcile calls → one pane and one claim token.
+- Failure before split, after split/before metadata, after metadata/before ID write,
+  before claim, and after claim. A retry adopts the existing pane, not a duplicate.
+- Another pane under the same pane_id, wrong token/generation/workspace → no kill/respawn.
+- timeout/uncertain tmux ≠ missing. Backoff limits the crash loop.
+- q/hide is durable; an external kill is restored. An old runner does not overwrite a
+  new generation. Show/hide receipts and hide-vs-launch concurrency.
+- paused/completed follow the table; archived cleans only UI. UI does not count toward
+  limits/writer/service_active/session_active/clean.
+- UI failure does not block agent recovery/delivery and vice versa; supervisor stop does
+  not stop panes. TUI reads do not start the supervisor.
 
-### 12.4. Prawdziwe tmux, Linux/WSL
+### 12.4. Real Tmux, Linux/WSL
 
-Rozszerz istniejące fixture i prywatny socket z tmux_integration_test.go,
-supervisor_test.go, workflow_tmux_test.go. Binarium buduj w t.TempDir, także w ścieżce
-ze spacją i apostrofem. Domyślny testowy klient jest lokalnym procesem fixture.
+Extend the existing fixture and private socket from tmux_integration_test.go,
+supervisor_test.go, and workflow_tmux_test.go. Build the binary in t.TempDir, including
+in a path with a space and apostrophe. The default test client is a local fixture process.
 
-1. Start orkiestratora tworzy jego panel i TUI w tym samym window; focus pozostaje
-   na orkiestratorze. Capture-pane TUI zawiera title/status/Overview.
-2. Ustaw aktywnym TUI, zakończ/utrac orkiestratora i wznów. Panel TUI nie jest
-   respawn jako agent; nowy Run ma poprawne IDs, orkiestrator działa obok niego.
-3. Kill UI pane → supervisor odtwarza jeden; kill całego okna → recovery orkiestratora
-   i UI, gdy workspace aktywny. Nie startuj workerów od nowa.
-4. Zamień/usuń metadata UI w oknie z obcym pane; obcy shell nie jest zabijany.
-5. q w TUI → desired=false i brak odtworzenia; tui show → jeden panel ponownie.
-6. Pause --interrupt → agent i service zatrzymani, UI działa. Archived po spełnieniu
-   istniejących gate → UI znika i nie blokuje archive/clean.
-7. Zmień wymiary okna na szeroki niski i wąski wysoki; capture-pane mieści tekst,
-   zachowuje stronę, input i widoczny status. Małe rozmiary nie powodują crasha.
-8. Dwa klienty tmux + inny socket: jump wybiera właściwy klient/okno/pane;
-   cross-server nie przełącza obcego klienta. Attach/detach testuj z pseudo-TTY.
-9. Reconcile nie kradnie focusu i nie zmienia ręcznie poprawionego layoutu co tick.
-10. Uruchom także dotychczasowe testy Session/Run/replay/readonly/supervisor/workflow.
+1. Orchestrator start creates its pane and the TUI in the same window; focus remains on
+   the orchestrator. TUI capture-pane contains title/status/Overview.
+2. Make the TUI active, end/lose the orchestrator, and resume it. The TUI pane is not
+   respawned as an agent; the new Run has correct IDs, and the orchestrator runs beside it.
+3. Kill the UI pane → supervisor restores one; kill the entire window → orchestrator and
+   UI recovery when the workspace is active. Do not restart workers.
+4. Replace/remove UI metadata in a window with a foreign pane; the foreign shell is not killed.
+5. q in TUI → desired=false and no restoration; tui show → one pane again.
+6. Pause --interrupt → agent and service stopped, UI running. Archived after existing
+   gates are met → UI disappears and does not block archive/clean.
+7. Resize the window to wide/short and narrow/tall; capture-pane fits text, preserves the
+   page, input, and visible status. Small sizes do not crash.
+8. Two tmux clients + another socket: jump selects the correct client/window/pane;
+   cross-server does not switch a foreign client. Test attach/detach with a pseudo-TTY.
+9. Reconcile does not steal focus or change a manually corrected layout on every tick.
+10. Also run the existing Session/Run/replay/readonly/supervisor/workflow tests.
 
-Testy czekają na stan z deadline, nie na arbitralne długie sleep. Przy błędzie
-capture-pane/log supervisora trafiają do diagnostyki testu. Prywatny socket i procesy
-sprzątaj przez t.Cleanup. Użycie send-keys w testach do sterowania samym TUI jest
-dozwolone; aplikacja nie dostarcza w ten sposób wiadomości do agentów.
+Tests wait for a state with a deadline, not arbitrary long sleeps. On failure, capture-pane
+and supervisor logs go into test diagnostics. Clean up the private socket and processes
+through t.Cleanup. Using send-keys in tests to control the TUI itself is allowed; the
+application does not deliver messages to agents this way.
 
-### 12.5. Wymagane komendy końcowe
+### 12.5. Required Final Commands
 
 ```sh
-gofmt -w <zmienione-pliki-Go>
+gofmt -w <changed-Go-files>
 go test ./...
 go vet ./...
 WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 90s
 ```
 
-W Linux/WSL zbuduj binarium do nowego katalogu tymczasowego i uruchom:
+On Linux/WSL, build the binary in a new temporary directory and run:
 
 ```sh
 go build -o "$TEMP_BUILD_DIR/workspace" ./cmd/workspace
 python3 scripts/check-install.py "$TEMP_BUILD_DIR/workspace"
 ```
 
-TEMP_BUILD_DIR musi wskazywać nowy katalog utworzony dla tej weryfikacji poza repo.
-Sprawdź też `GOTOOLCHAIN=local` przy Go 1.24 oraz build/test core i TUI na Windows.
-Jeśli środowisko nie ma WSL/tmux, wykonaj dostępne testy, dokładnie odnotuj brak
-integracji i nie deklaruj kryteriów tmux jako zaliczonych.
+TEMP_BUILD_DIR must point to a new directory created for this verification outside the
+repository. Also check `GOTOOLCHAIN=local` with Go 1.24 and build/test core and TUI on
+Windows. If the environment has no WSL/tmux, run the available tests, record the missing
+integration precisely, and do not declare tmux criteria passed.
 
-## 13. Kolejność prac dla implementera
+## 13. Implementation Order
 
-Etapy są sekwencyjne; każdy pozostawia kompilujący się kod. Nie twórz całego TUI w
-jednym wielkim pliku. Po każdym etapie uruchom testy zmienionych pakietów.
+Stages are sequential; each leaves compiling code. Do not create the entire TUI in one
+large file. Run tests for changed packages after each stage.
 
-### Etap 0 — inwentaryzacja i punkt odniesienia
+### Stage 0 — Inventory and Baseline
 
-- [ ] git status, przeczytanie wskazanych dokumentów i tests; sprawdzenie różnic od bazy planu.
-- [ ] Zanotowanie bieżącego wyniku go test ./... oraz dostępności Go/WSL/tmux.
-- [ ] Odszukanie wszystkich wywołań Runtime.Attach/Launch, konstruktorów Pane/Launch,
-      session resume, EnsureSupervisor, testów z liczbą paneli.
+- [ ] git status, read the referenced documents and tests; check differences from the plan baseline.
+- [ ] Record the current go test ./... result and Go/WSL/tmux availability.
+- [ ] Find all Runtime.Attach/Launch calls, Pane/Launch constructors, session resume,
+      EnsureSupervisor, and tests that count panes.
 
-Gotowe, gdy znane są aktualne punkty integracji i nie nadpisano zastanej pracy.
+Complete when the current integration points are known and existing work has not been overwritten.
 
-### Etap 1 — wspólny core i bootstrap
+### Stage 1 — Shared Core and Bootstrap
 
-- [ ] query.go/query_relations.go i spójny snapshot, projekcje/testy relacji.
-- [ ] Preview i testy ograniczeń odczytu.
-- [ ] Bootstrap z preserve CLI semantics; ekstrakcja ResumeSession i supervised entry points.
-- [ ] Core resolver celu i wspólne helpery guardów; testy replay i konkurencji.
-- [ ] CLI korzysta z wydzielonych przypadków użycia; stare formaty nadal przechodzą testy.
+- [ ] query.go/query_relations.go and consistent snapshot, projections/relation tests.
+- [ ] Preview and read-limitation tests.
+- [ ] Bootstrap with preserved CLI semantics; extract ResumeSession and supervised entry points.
+- [ ] Core target resolver and shared guard helpers; replay and concurrency tests.
+- [ ] CLI uses extracted use cases; old formats continue to pass tests.
 
-Gotowe, gdy core bez importów UI wystarcza do obsługi tabeli akcji i odczytu ekranów.
+Complete when core without UI imports is sufficient to support the action table and screen reads.
 
-### Etap 2 — bezpieczny tmux przed drugim pane
+### Stage 2 — Safe Tmux Before the Second Pane
 
-- [ ] Metadata sesji/windows/panes i odczyt topology.
-- [ ] Naprawa wyboru panelu orkiestratora, tworzenia brakującego okna i recovery.
-- [ ] Rozwiązanie/nawigacja ID-based; adapter terminala z wyborem klienta/stdio.
-- [ ] Test legacy pane oraz aktywny obcy panel w oknie orkiestratora.
+- [ ] Session/window/pane metadata and topology read.
+- [ ] Fix orchestrator-pane selection, missing-window creation, and recovery.
+- [ ] ID-based resolution/navigation; terminal adapter with client/stdio selection.
+- [ ] Test legacy pane and active foreign pane in the orchestrator window.
 
-Gotowe, gdy start/resume nie może nadpisać panelu innej roli i dotychczasowy runtime działa.
+Complete when start/resume cannot overwrite a pane of another role and existing runtime works.
 
-### Etap 3 — shell TUI i layout
+### Stage 3 — TUI Shell and Layout
 
-- [ ] Przypięte zależności, go mod tidy, kontrola Go 1.24.
-- [ ] `workspace tui`, walidacja TTY/flag, app/model/update/routes/keys/theme/layout.
-- [ ] Project picker + Dashboard na fake backend i prawdziwym WorkspaceSnapshot.
-- [ ] Async refresh, stale/error/loading i generation fences; zero mutacji z ticka.
-- [ ] Testy wide/narrow/short/tiny, input, focus, no-color i terminal restore.
+- [ ] Pinned dependencies, go mod tidy, Go 1.24 check.
+- [ ] `workspace tui`, TTY/flag validation, app/model/update/routes/keys/theme/layout.
+- [ ] Project picker + Dashboard on a fake backend and real WorkspaceSnapshot.
+- [ ] Async refresh, stale/error/loading, and generation fences; no mutation from the tick.
+- [ ] Wide/narrow/short/tiny, input, focus, no-color, and terminal-restore tests.
 
-Gotowe, gdy ręczne TUI daje używalny dashboard projektu/workspace przy obu orientacjach.
+Complete when manual TUI provides a usable project/workspace dashboard in both orientations.
 
-### Etap 4 — wszystkie widoki i przejścia
+### Stage 4 — All Views and Transitions
 
-- [ ] Tasks/detail/sessions/runs/results i powroty z history/query preservation.
-- [ ] Worktrees/orchestrator, usługi, More/Agents/Decisions/CR/Runtime.
-- [ ] Filtry/name search i preview; odrębne stany i prawidłowe liczniki.
-- [ ] Jump z każdego wymaganego poziomu oraz obsługa braku/utraty celu.
+- [ ] Tasks/detail/sessions/runs/results and returns with history/query preservation.
+- [ ] Worktrees/orchestrator, services, More/Agents/Decisions/CR/Runtime.
+- [ ] Filters/name search and preview; separate states and correct counters.
+- [ ] Jump from every required level and handling missing/lost targets.
 
-Gotowe, gdy żadna wymagana encja nie jest ukryta bez ścieżki nawigacji i dashboard
-nie zalewa pełnymi listami. Wszystkie strony mają empty/error cases.
+Complete when no required entity is hidden without a navigation path and the dashboard
+is not flooded with full lists. Every page has empty/error cases.
 
-### Etap 5 — akcje i formularze
+### Stage 5 — Actions and Forms
 
-- [ ] Embedded Huh, statyczny dispatch tabeli akcji z sekcji 7.
-- [ ] Potwierdzenia, reason, current target guards, właściwe klucze i same-key retry.
-- [ ] Error details, blokada double submit i refresh po wyniku.
-- [ ] Sprawdzenie roli aktora w core i testy stale_actor/forbidden/read-only.
+- [ ] Embedded Huh, static dispatch of the action table from section 7.
+- [ ] Confirmations, reason, current-target guards, correct keys, and same-key retry.
+- [ ] Error details, double-submit blocking, and refresh after the result.
+- [ ] Actor-role check in core and stale_actor/forbidden/read-only tests.
 
-Gotowe, gdy wszystkie akcje V1 działają z tym samym core co CLI i są testowane
-na fake backend oraz przynajmniej reprezentatywnych rzeczywistych operacjach core.
+Complete when all V1 actions use the same core as the CLI and are tested on a fake backend
+and at least representative real core operations.
 
-### Etap 6 — zarządzany panel
+### Stage 6 — Managed Pane
 
-- [ ] ui.json, SetUIPaneDesired/receipts, ukryty _tui-exec i generation claim.
-- [ ] ReconcileInterface, recovery po command/token, backoff, split/layout bez focus steal.
-- [ ] Hook po starcie orkiestratora i Tick; niezależność błędów UI/delivery.
-- [ ] show/hide/status CLI, q hide, paused/completed/archived i concurrency tests.
+- [ ] ui.json, SetUIPaneDesired/receipts, hidden _tui-exec, and generation claim.
+- [ ] ReconcileInterface, command/token recovery, backoff, split/layout without focus steal.
+- [ ] Hook after orchestrator start and Tick; independent UI/delivery errors.
+- [ ] show/hide/status CLI, q hide, paused/completed/archived, and concurrency tests.
 
-Gotowe, gdy ręczne TUI i zarządzane mogą współistnieć, ale supervisor zarządza tylko
-jednym pane na workspace; utrata oraz świadome ukrycie mają różne zachowanie.
+Complete when manual and managed TUI can coexist, but the supervisor manages only one pane
+per workspace; loss and deliberate hiding have different behavior.
 
-### Etap 7 — integracja i dokumentacja kontraktów
+### Stage 7 — Integration and Contract Documentation
 
-- [ ] Wszystkie testy z sekcji 12, w szczególności real tmux i race.
-- [ ] README: wejście, scope, skróty, theme, wymagania wymiarów, q hide vs quit,
-      show/hide/status, Windows/WSL, downgrade i zachowanie attach.
-- [ ] PRODUCT: TUI jako istniejący interfejs i nawigacja task-first.
-- [ ] ARCHITECTURE: dwa adaptery UI, bootstrap/terminal, queries, osobny ui.json.
-- [ ] docs/runtime.md: ownership paneli, supervisor recovery UI, wyjście i pause/archive.
-- [ ] docs/operations.md: guards, keys/retry TUI i oddzielne receipts UI.
-- [ ] docs/tui.md: zwięzły bieżący kontrakt ekranów, keymap i macierz layoutu;
-      nie kopiuj całego planu jako dokumentacji aktualnej implementacji.
-- [ ] help.go: opisy/argumenty/flagi nowych widocznych komend; test kompletności.
-- [ ] TODO.md: oznacz pierwszą pozycję dopiero po wszystkich kryteriach; nie zmieniaj releasów.
-- [ ] Raport końcowy: co działa, testy, faktyczne ograniczenia, bez deklaracji z samego planu.
+- [ ] All tests from section 12, especially real tmux and race.
+- [ ] README: entry, scope, shortcuts, theme, dimension requirements, q hide vs quit,
+      show/hide/status, Windows/WSL, downgrade, and attach behavior.
+- [ ] PRODUCT: TUI as an existing interface and task-first navigation.
+- [ ] ARCHITECTURE: two UI adapters, bootstrap/terminal, queries, separate ui.json.
+- [ ] docs/runtime.md: pane ownership, supervisor UI recovery, exit, and pause/archive.
+- [ ] docs/operations.md: guards, TUI keys/retry, and separate UI receipts.
+- [ ] docs/tui.md: concise current screen contract, keymap, and layout matrix; do not
+      copy the entire plan as current-implementation documentation.
+- [ ] help.go: descriptions/arguments/flags for new visible commands; completeness test.
+- [ ] TODO.md: mark the first item only after all criteria; do not change releases.
+- [ ] Final report: what works, tests, actual limitations, without claims based only on the plan.
 
-## 14. Definicja ukończenia — macierz wymagań użytkownika
+## 14. Definition of Done — User-Requirement Matrix
 
-| Wymaganie | Dowód ukończenia |
+| Requirement | Completion evidence |
 |---|---|
-| Projekt → wybór workspace | test scope + działający project picker, także 0/1/wiele workspace |
-| Workspace → dashboard | poprawny snapshot i dashboard także external storage/CWD |
-| Nawigacja po agregacie | task → sessions → runs/results; worktree → tasks/sessions/services; orphan/history dostępne |
-| Brak zalewu encji | dashboard tylko liczniki + maks. 5 uwag/5 activity; pełne listy po wyborze |
-| Statusy | odrębne Task/Session/Run/Worktree, active vs failed/stopped/interrupted/accepted |
-| Search po nazwie | wszystkie kolekcje, substring case-insensitive, zachowanie query i selection |
-| Estetyczne panele/theme | wide/short/narrow, focus, dark/light/no-color i tekstowe badge |
-| Poziomy/pionowy pane | automatyczne layouty, testy render width/height + real tmux resize |
-| Skok tmux session/window/pane | zweryfikowane cele/klient/socket, attach/detach i błędy wyścigu |
-| Automatyczny TUI obok orkiestratora | real start/resume z aktywnym TUI nie niszczy jego pane |
-| Reconciliation utraconego UI | kill/recover, concurrent ensure, crash windows, backoff i q hide |
-| Wspólny core CLI/TUI | brak shell-out workspace, wspólne resume/guards/queries/navigation |
-| Zachowanie dotychczasowego CLI | wszystkie obecne testy, stare komendy, schema i formaty bez regresji |
+| Project → workspace selection | scope test + working project picker, including 0/1/multiple workspaces |
+| Workspace → dashboard | correct snapshot and dashboard, including external storage/CWD |
+| Aggregate navigation | task → sessions → runs/results; worktree → tasks/sessions/services; orphan/history available |
+| No entity flood | dashboard counters only + max. 5 attention/5 activity; full lists after selection |
+| Statuses | distinct Task/Session/Run/Worktree, active vs failed/stopped/interrupted/accepted |
+| Name search | all collections, case-insensitive substring, query and selection preservation |
+| Polished panels/theme | wide/short/narrow, focus, dark/light/no-color, and textual badges |
+| Wide/short and narrow/tall pane | automatic layouts, render width/height tests + real tmux resize |
+| Tmux session/window/pane jump | verified targets/client/socket, attach/detach, and race errors |
+| Automatic TUI beside orchestrator | real start/resume with active TUI does not destroy its pane |
+| Lost UI reconciliation | kill/recover, concurrent ensure, crash windows, backoff, and q hide |
+| Shared CLI/TUI core | no workspace shell-out, shared resume/guards/queries/navigation |
+| Existing CLI behavior | all current tests, old commands, schema, and formats without regression |
 
-W przypadku rozbieżności kodu z bazą analizy zachowaj kontrakt tego planu, adaptując
-punkty integracji do aktualnego kodu. Jeśli brakuje możliwości weryfikacji runtime,
-opisz dokładnie niewykonane scenariusze. Nie zastępuj ich deklaracją „powinno działać”.
+If the code differs from the analysis base, preserve this plan's contract while adapting
+integration points to the current code. If runtime verification is unavailable, describe
+the unexecuted scenarios precisely. Do not replace them with a claim that it “should work”.

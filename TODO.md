@@ -1,25 +1,25 @@
-# Roadmapa / backlog
+# Roadmap / backlog
 
-Lista planowanych usprawnień. Pozycje są ułożone według priorytetu.
+List of planned improvements. Items are ordered by priority.
 
-## Planowane
+## Planned
 
-- [ ] **Komenda `workspace prime`** — dodać polecenie CLI dostarczające agentowi aktualne instrukcje operacyjne.
-- [ ] **TUI jako sidebar dla tmuxa** — przemyśleć jedną instancję TUI obsługującą wszystkie workspace’y w danym projekcie; rozważyć zagnieżdżenie tmuxa, gdzie jedna instancja pełni rolę selektora projektów, a druga selektora workspace’ów.
-- [ ] **Status serwera w TUI** — dodać wskaźnik stanu procesu supervisora i powiązanych usług w TUI (zielona/czerwona kropka).
-- [ ] **Issues jako element pierwszej klasy** — dodać widok Issues na poziomie projektu w TUI; umożliwić tworzenie workspace’ów dla issue, traktując issue jako wejście do ich tworzenia, oraz pokazywać tę relację w widoku listy.
-- [ ] **Statystyki monitoringu współbieżności** — dodać monitoring liczby równolegle działających agentów i sesji.
-- [ ] **Wskaźnik odświeżania w TUI** — zastąpić bieżące powiadomienie o odświeżeniu ikoną sygnalizującą, że odświeżanie jest w toku.
-- [ ] **Status `idle` sesji** — rozszerzyć statusy sesji o `idle` i wykrywać go, gdy agent nic nie wykonuje.
+- [ ] **`workspace prime` command** — add a CLI command that provides the agent with current operational instructions.
+- [ ] **TUI as a tmux sidebar** — consider one TUI instance serving all workspaces in a project; consider nested tmux, with one instance acting as the project selector and the other as the workspace selector.
+- [ ] **Server status in the TUI** — add an indicator for the supervisor process and related service status in the TUI (green/red dot).
+- [ ] **Issues as a first-class entity** — add an Issues view at project level in the TUI; allow creating workspaces for an issue, treating the issue as their input, and show this relationship in the list view.
+- [ ] **Concurrency monitoring statistics** — add monitoring for the number of agents and sessions running in parallel.
+- [ ] **Refresh indicator in the TUI** — replace the current refresh notification with an icon indicating that a refresh is in progress.
+- [ ] **`idle` session status** — extend session statuses with `idle` and detect it when the agent is not doing work.
 
-- [x] **TUI dla użytkownika** — dodać terminalowy interfejs oparty na Bubble Tea i Bubbles.
-  - **Cel:** ułatwić człowiekowi przeglądanie stanu i obsługę projektu. Obecne CLI udostępnia YAML/JSON, co dobrze sprawdza się w pracy agentów i skryptów, ale jest mniej wygodne do codziennego użycia przez człowieka.
-  - **Pierwszy zakres:** czytelny przegląd workspace’ów i ich zadań/sesji, widok szczegółów wybranego elementu oraz możliwość uruchamiania najczęstszych istniejących operacji z klawiatury.
-  - **Kryteria ukończenia:** TUI obsługuje nawigację klawiaturą i zmianę rozmiaru terminala, pokazuje stany oraz błędy w zrozumiały sposób, a logikę operacji współdzieli z istniejącym CLI. Dotychczasowe polecenia i wyjście YAML/JSON pozostają dostępne dla agentów i automatyzacji.
+- [x] **User TUI** — add a terminal interface based on Bubble Tea and Bubbles.
+  - **Goal:** make it easier for a person to inspect state and operate the project. The existing CLI exposes YAML/JSON, which works well for agents and scripts but is less convenient for everyday human use.
+  - **Initial scope:** a readable overview of workspaces and their tasks/sessions, a detail view for the selected item, and the ability to run the most common existing operations from the keyboard.
+  - **Completion criteria:** the TUI supports keyboard navigation and terminal resizing, presents states and errors clearly, and shares operation logic with the existing CLI. Existing commands and YAML/JSON output remain available to agents and automation.
 
-- [ ] **Releasy, dystrybucja i aktualizacje** — uprościć instalowanie i uaktualnianie `workspace`.
-  - **Cel:** użytkownik może szybko zainstalować narzędzie i utrzymywać je w aktualnej wersji bez ręcznego budowania binarium.
-  - **Instalacja:** przygotować one-liner w README, który pobiera właściwe wydanie i instaluje je na maszynie użytkownika.
-  - **Aktualizacja:** dodać polecenie `workspace upgrade`, które pobiera i instaluje nowsze wydanie.
-  - **Proces wydań:** automatycznie budować i publikować wersjonowane paczki/binaria dla wspieranych platform; dokumentować obsługiwane systemy i architektury.
-  - **Kryteria ukończenia:** nowy użytkownik może zainstalować `workspace` poleceniem z README, a istniejący — zaktualizować przez `workspace upgrade`, bez ręcznej podmiany binarium.
+- [ ] **Releases, distribution, and upgrades** — simplify installing and upgrading `workspace`.
+  - **Goal:** users can quickly install the tool and keep it up to date without manually building the binary.
+  - **Installation:** prepare a one-liner in the README that downloads the appropriate release and installs it on the user's machine.
+  - **Upgrade:** add a `workspace upgrade` command that downloads and installs a newer release.
+  - **Release process:** automatically build and publish versioned packages/binaries for supported platforms; document supported systems and architectures.
+  - **Completion criteria:** a new user can install `workspace` with the command from the README, and an existing user can upgrade through `workspace upgrade`, without manually replacing the binary.

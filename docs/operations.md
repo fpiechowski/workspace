@@ -1,67 +1,80 @@
-# Ponowienia operacji
+# Operation Retries
 
-Używaj `--operation-key` jako identyfikatora jednej logicznej mutacji. Powtórz ten
-sam klucz przy utracie odpowiedzi. Zmienione argumenty lub treść pliku wejściowego
-z tym samym kluczem powodują `operation_conflict`. Nowa decyzja, poprawiony payload
-lub kolejna próba pracy wymagają nowego klucza.
+Use `--operation-key` as the identifier for one logical mutation. Repeat the same
+key when a response is lost. Changed arguments or input-file content with the same
+key produce `operation_conflict`. A new decision, corrected payload, or another
+attempt at the work requires a new key.
 
-Mutacje workspace obejmują tworzenie zasobów i zadań, start/resume/stop sesji,
-wiadomości i ACK, handoffy i ich ocenę, workflow, aktualizacje stanu, migracje,
-integrację, CR, decyzje, release, `complete` manualnego workspace'u, pause/resume,
-reconcile, archive i clean.
-`project init`, `skill install` i `server stop` zapisują receipts w zakresie projektu.
-Odczyty, `clean --dry-run`, interaktywne attach oraz stale działający `serve` nie
-są jednorazowymi mutacjami wymagającymi receipt.
+Workspace mutations include creating resources and tasks, starting/resuming/stopping
+sessions, messages and ACKs, handoffs and their evaluation, workflows, state updates,
+migrations, integration, CRs, decisions, release, `complete` for a manual workspace,
+pause/resume, reconcile, archive, and clean.
+`project init`, `skill install`, and `server stop` write project-scoped receipts.
+Reads, `clean --dry-run`, interactive attach, and the continuously running `serve`
+command are not one-shot mutations that require a receipt.
 
-Udane ponowienie zwraca zachowany wynik. Może on opisywać starszy stan: ponowienie
-`session start` po zatrzymaniu sesji zwraca wcześniejszą odpowiedź i nie uruchamia
-jej ponownie. Bieżący stan odczytaj przez `status`, `session list` lub właściwe `list`.
-Identyfikatory zasobów i numer operacji pozostają stałe.
+A successful retry returns the preserved result. It may describe an older state: retrying
+`session start` after the session was stopped returns the earlier response and does not
+start it again. Read the current state through `status`, `session list`, or the relevant
+`list` command. Resource identifiers and the operation number remain stable.
 
-JSON mutacji z kluczem zawiera `operation_id` i, dla workspace, `revision` operacji.
-Rewizja ta odnosi się do utrwalonego wyniku. `data.workspace.revision` w odpowiedzi
-`status` jest bieżącą rewizją do następnego `state update --expected-revision`.
-Projekt nie ma wspólnej rewizji WORKSPACE.md, więc jego receipts nie zawierają tego pola.
+Mutation JSON with a key contains `operation_id` and, for a workspace, the operation
+`revision`. This revision refers to the persisted result. `data.workspace.revision` in
+the `status` response is the current revision for the next
+`state update --expected-revision`. A project has no shared WORKSPACE.md revision, so its receipts do
+not contain this field.
 
-Zmiana dokumentu i jej wynik są zatwierdzane razem przez write-ahead record. Błąd
-walidacji nie utrwala częściowej aktualizacji. Równoległe wywołania z tym samym
-kluczem nie wykonują tej zmiany dwa razy. Autoryzacja roli jest sprawdzana także przy
-odczycie utrwalonego wyniku.
+The document change and its result are committed together through a write-ahead record.
+A validation error does not persist a partial update. Concurrent calls with the same key
+do not perform the change twice. Role authorization is also checked when reading a
+persisted result.
 
-Operacje zewnętrzne zapisują intencję przed wywołaniem procesu lub sieci i korzystają
-z oddzielnej blokady operacji. Po awarii rezultat pozostaje niepewny do uzgodnienia:
-PR jest wyszukiwany przed kolejną próbą publikacji; sesja zachowuje zarezerwowaną
-identyfikację; usunięcie worktree jest uzgadniane z Git. Zajęta blokada nie oznacza,
-że poprzednie wykonanie się zakończyło. Historyczny receipt nie zastępuje polecenia
-reconcile w celu odczytania aktualnego stanu runtime.
+External operations record their intent before invoking a process or network and use a
+separate operation lock. After a failure, the result remains uncertain until reconciled:
+the PR is looked up before another publication attempt; the session keeps its reserved
+identity; worktree removal is reconciled with Git. A busy lock does not mean that the
+previous execution has finished. A historical receipt does not replace a `reconcile`
+command for reading the current runtime state.
 
-Dane z wczesnej wersji rejestru, bez zapisanego snapshotu odpowiedzi, zachowują
-odwołanie do utworzonego zasobu. Ich replay może pokazać jego aktualny stan.
+Data from an early registry version without a saved response snapshot retains a reference
+to the created resource. Replaying it may show the resource's current state.
 
-## Operacje TUI
+Message and handoff operation digests include their exact `ToSession` address. The
+compatibility `--to` form is resolved to one eligible open Session before the mutation
+is recorded; it never selects the latest Session and an idle target remains pending.
+Replies preserve the original `FromSession`. A notification receipt is not a delivery
+receipt, so `NotifiedSessionID` never makes a message delivered or acknowledged.
 
-Mutacje uruchamiane z TUI korzystają z tych samych przypadków użycia core co CLI.
-Potwierdzenie zachowuje rewizję workspace, attempt taska albo dokładny bieżący Run jako
-guard; „Pause and interrupt” zapisuje i porównuje dokładny zbiór aktywnych Runów oraz
-usług przed zatrzymaniem któregokolwiek procesu. Zmiana targetu po otwarciu formularza
-kończy się konfliktem zamiast wykonania akcji na nowym stanie. Retry taska pokazuje
-zależne zadania i wymaga powodu.
+The runtime registry is currently schema version 5. Reads apply staged migrations before
+returning state: parent Session links and message/handoff targets are backfilled only
+from strong evidence, while ambiguous legacy records retain an empty `ToSession`.
+OpenCode snapshots are normalized by adapter plus empty custom `deliver_argv`; missing
+native Run endpoints are restored only from valid loopback server flags in immutable argv.
 
-Każda potwierdzona operacja otrzymuje klucz `tui_<ULID>`. Powtórzenie po niepewnej
-odpowiedzi używa tego samego klucza i payloadu; podwójne zatwierdzenie nie wykonuje
-mutacji ponownie. `tui show` i `tui hide` zapisują osobne receipts w `.runtime/ui.json`,
-nie w rejestrze Session/Run. `q` w zarządzanym panelu zapisuje ten sam trwały zamiar hide
-przed przywróceniem terminala i zakończeniem procesu; usunięcie panelu wykonuje później
-supervisor po zweryfikowaniu jego tożsamości.
+## TUI Operations
 
-Delete w TUI wymaga przepisania pełnego ID. Task i Session są logicznie usuwane przez
-audytowalny tombstone; receipt pozostaje w rejestrze workspace'u, a guard obejmuje
-rewizję oraz odpowiednio attempt lub ostatni Run. Fizyczne Delete Workspace korzysta
-z project-scoped receipt poza katalogiem docelowym, więc ten sam klucz i payload można
-bezpiecznie ponowić po usunięciu katalogu. Nie wymaga archive/release: zatrzymuje runtime,
-wymusza usunięcie worktrees (także brudnych) i lokalnych gałęzi `workspace/<id>/…`, po
-czym usuwa cały stan. Zmiana rewizji albo targetu kończy się konfliktem. Archive z TUI
-jest niedestrukcyjne, ma własny guard rewizji i zachowuje dotychczasowe bramki lifecycle.
-`complete` manualnego workspace'u jest osobną, idempotentną mutacją z guardem rewizji
-i kluczem operacji; archive respektuje potwierdzony release dla workflow albo wcześniejsze
-`complete` dla trybu manualnego.
+Mutations started from the TUI use the same core use cases as the CLI. Confirmation
+captures the workspace revision, task attempt, or exact current Run as a guard; “Pause
+and interrupt” records and compares the exact set of active Runs and services before
+stopping any process. A target change after opening the form ends in a conflict instead
+of performing the action against the new state. Task retry shows dependent tasks and
+requires a reason.
+
+Each confirmed operation receives a `tui_<ULID>` key. A retry after an uncertain response
+uses the same key and payload; double confirmation does not perform the mutation again.
+`tui show` and `tui hide` write separate receipts to `.runtime/ui.json`, not to the
+Session/Run registry. `q` in a managed panel records the same durable hide intent before
+restoring the terminal and ending the process; the supervisor removes the panel later
+after verifying its identity.
+
+Delete in the TUI requires retyping the full ID. A Task and Session are logically deleted
+through an auditable tombstone; the receipt remains in the workspace registry, and the
+guard covers the revision and, respectively, the attempt or last Run. Physical Delete
+Workspace uses a project-scoped receipt outside the target directory, so the same key
+and payload can safely be retried after the directory is removed. It does not require
+archive/release: it stops the runtime, forcibly removes worktrees (including dirty ones)
+and local `workspace/<id>/…` branches, and then removes all state. A revision or target
+change ends in a conflict. Archive from the TUI is non-destructive, has its own revision
+guard, and preserves the existing lifecycle gates. `complete` for a manual workspace is
+a separate idempotent mutation with a revision guard and operation key; archive respects
+the confirmed release for a workflow or an earlier `complete` for manual mode.
