@@ -63,7 +63,7 @@ func taskCommands(o *options) *cobra.Command {
 	return group
 }
 func messageCommands(o *options) *cobra.Command {
-	group := &cobra.Command{Use: "message", Short: "Send durable messages to agent identities"}
+	group := &cobra.Command{Use: "message", Short: "Send durable messages to exact logical Sessions"}
 	var opt core.MessageOptions
 	var file string
 	send := command("send", "Send a note, question or answer", func(c *cobra.Command, _ []string) error {
@@ -85,7 +85,8 @@ func messageCommands(o *options) *cobra.Command {
 	})
 	f := send.Flags()
 	f.StringVar(&file, "body-file", "", "Message body file")
-	f.StringVar(&opt.To, "to", "", "Recipient agent ID or name")
+	f.StringVar(&opt.To, "to", "", "Compatibility recipient agent ID or name; resolves only when exactly one eligible Session exists")
+	f.StringVar(&opt.ToSession, "to-session", "", "Exact logical recipient Session ID")
 	f.StringVar(&opt.Kind, "kind", "note", "note, question, answer, status")
 	f.StringVar(&opt.ReplyTo, "reply-to", "", "Original message ID")
 	group.AddCommand(send)
@@ -95,51 +96,62 @@ func inboxCommands(o *options) *cobra.Command {
 	group := &cobra.Command{Use: "inbox", Short: "Read and acknowledge durable messages"}
 	var recipient string
 	var all bool
+	var session string
 	list := command("list", "List pending messages", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err
 		}
-		v, err := s.Inbox(c.Context(), id, recipient, all)
+		v, err := s.InboxScoped(c.Context(), id, recipient, session, all)
 		if err != nil {
 			return err
 		}
 		return o.emit(v)
 	})
-	list.Flags().StringVar(&recipient, "agent", "", "Inbox owner (defaults to current agent/orchestrator)")
+	list.Flags().StringVar(&recipient, "agent", "", "Explicit agent-wide historical inbox owner")
+	list.Flags().StringVar(&session, "session", "", "Exact logical Session to inspect")
 	list.Flags().BoolVar(&all, "all", false, "Include acknowledged messages")
 	group.AddCommand(list)
 	for _, verb := range []string{"read", "ack"} {
 		verb := verb
+		var session string
 		c := command(verb+" <message>", "Read a message; ack records receipt, not task acceptance", func(c *cobra.Command, args []string) error {
 			s, id, err := o.scope()
 			if err != nil {
 				return err
 			}
-			v, err := s.ReadMessage(c.Context(), id, args[0], verb == "ack", o.key)
+			var v core.Message
+			if session == "" {
+				v, err = s.ReadMessage(c.Context(), id, args[0], verb == "ack", o.key)
+			} else {
+				v, err = s.ReadMessageForSession(c.Context(), id, args[0], session, verb == "ack", o.key)
+			}
 			if err != nil {
 				return err
 			}
 			return o.emit(v)
 		})
 		c.Args = cobra.ExactArgs(1)
+		c.Flags().StringVar(&session, "session", "", "Exact logical Session to inspect or acknowledge")
 		group.AddCommand(c)
 	}
 	var timeout int
 	var waitRecipient string
+	var waitSession string
 	wait := command("wait", "Wait for messages without holding a project lock", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err
 		}
-		v, err := s.WaitInbox(c.Context(), id, waitRecipient, time.Duration(timeout)*time.Second)
+		v, err := s.WaitInboxScoped(c.Context(), id, waitRecipient, waitSession, time.Duration(timeout)*time.Second)
 		if err != nil {
 			return err
 		}
 		return o.emit(v)
 	})
 	wait.Flags().IntVar(&timeout, "timeout", 30, "Timeout in seconds")
-	wait.Flags().StringVar(&waitRecipient, "agent", "", "Inbox owner")
+	wait.Flags().StringVar(&waitRecipient, "agent", "", "Explicit agent-wide historical inbox owner")
+	wait.Flags().StringVar(&waitSession, "session", "", "Exact logical Session to await")
 	group.AddCommand(wait)
 	return group
 }
@@ -174,7 +186,8 @@ func handoffCommands(o *options) *cobra.Command {
 		return o.emit(v)
 	})
 	f := submit.Flags()
-	f.StringVar(&opt.To, "to", "", "Parent/orchestrator agent ID")
+	f.StringVar(&opt.To, "to", "", "Compatibility parent/orchestrator agent ID; resolves only with one eligible Session")
+	f.StringVar(&opt.ToSession, "to-session", "", "Exact parent/orchestrator logical Session ID")
 	f.StringVar(&opt.Task, "task", "", "Task ID/name")
 	f.StringVar(&opt.Session, "session", "", "Producing session (inferred for agents)")
 	f.StringVar(&opt.Outcome, "outcome", "succeeded", "succeeded, blocked, failed")

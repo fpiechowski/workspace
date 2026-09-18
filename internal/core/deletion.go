@@ -263,6 +263,11 @@ func (s *Service) DeleteTask(ctx context.Context, selector, id, key string, guar
 			if session.TaskID == task.ID && session.Active() {
 				return fail("task_delete_refused", "stop session %s before deleting the task", session.ID)
 			}
+			if session.TaskID == task.ID && session.DeletedAt == nil {
+				if err := sessionDeletionReferences(d, session.ID); err != nil {
+					return fail("task_delete_refused", "task session %s is still referenced: %v", session.ID, err)
+				}
+			}
 		}
 		now := nowUTC()
 		task.DeletedAt, task.State, task.Reason = &now, "deleted", "deleted by user"
@@ -337,27 +342,52 @@ func (s *Service) DeleteSession(ctx context.Context, selector, id, key string, g
 }
 
 func sessionDeletionReferences(d *Document, id string) error {
+	for _, session := range d.Registry.Sessions {
+		if sessionReferenceMatches(d, session.ParentSessionID, id) {
+			return fail("session_delete_refused", "session %s is the parent of child Session %s", id, session.ID)
+		}
+	}
 	for _, handoff := range d.Registry.Handoffs {
-		if handoff.FromSession == id {
+		if sessionReferenceMatches(d, handoff.FromSession, id) || sessionReferenceMatches(d, handoff.ToSession, id) || runBelongsToSession(d, handoff.FromRun, id) {
 			return fail("session_delete_refused", "session has recorded handoff %s", handoff.ID)
 		}
 	}
 	for _, artifact := range d.State.Artifacts {
-		if artifact.SessionID == id {
+		if sessionReferenceMatches(d, artifact.SessionID, id) || runBelongsToSession(d, artifact.RunID, id) {
 			return fail("session_delete_refused", "session has recorded artifact %s", artifact.ID)
 		}
 	}
 	for _, check := range d.Registry.Checks {
-		if check.SessionID == id {
+		if sessionReferenceMatches(d, check.SessionID, id) || runBelongsToSession(d, check.RunID, id) {
 			return fail("session_delete_refused", "session has recorded check %s", check.ID)
 		}
 	}
 	for _, message := range d.Registry.Messages {
-		if message.FromSession == id || message.DeliveredSessionID == id || message.NotifiedSessionID == id {
+		if sessionReferenceMatches(d, message.FromSession, id) || sessionReferenceMatches(d, message.ToSession, id) || sessionReferenceMatches(d, message.DeliveredSessionID, id) || sessionReferenceMatches(d, message.NotifiedSessionID, id) ||
+			runBelongsToSession(d, message.FromRun, id) || runBelongsToSession(d, message.DeliveredRunID, id) || runBelongsToSession(d, message.NotifiedRunID, id) {
 			return fail("session_delete_refused", "session is referenced by message %s", message.ID)
 		}
 	}
 	return nil
+}
+
+func sessionReferenceMatches(d *Document, reference, sessionID string) bool {
+	if reference == "" {
+		return false
+	}
+	if reference == sessionID {
+		return true
+	}
+	session, err := findSession(d, reference)
+	return err == nil && session.ID == sessionID
+}
+
+func runBelongsToSession(d *Document, runID, sessionID string) bool {
+	if runID == "" {
+		return false
+	}
+	run, err := findRun(d, runID)
+	return err == nil && run.SessionID == sessionID
 }
 
 func containsString(values []string, target string) bool {

@@ -5,7 +5,7 @@ Workers can capture a real command without a shell wrapper:
 ```sh
 workspace check run --operation-key test:attempt-1 -- npm test
 workspace check list --json
-workspace handoff submit --task "$WORKSPACE_TASK_ID" \
+workspace handoff submit --to-session "$WORKSPACE_PARENT_SESSION_ID" --task "$WORKSPACE_TASK_ID" \
   --summary-file work-products/SUMMARY.md \
   --artifact work-products/IMPLEMENTATION.md --check check_RETURNED_ID
 ```

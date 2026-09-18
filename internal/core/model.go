@@ -184,26 +184,27 @@ type Worktree struct {
 	State      string `json:"state" yaml:"state"`
 }
 type Session struct {
-	ID             string     `json:"id" yaml:"id"`
-	AgentID        string     `json:"agent_id" yaml:"agent_id"`
-	AgentSnapshot  Agent      `json:"agent_snapshot" yaml:"agent_snapshot"`
-	ParentAgentID  string     `json:"parent_agent_id,omitempty" yaml:"parent_agent_id,omitempty"`
-	WorktreeID     string     `json:"worktree_id,omitempty" yaml:"worktree_id,omitempty"`
-	TaskID         string     `json:"task_id,omitempty" yaml:"task_id,omitempty"`
-	TaskAttempt    int        `json:"task_attempt,omitempty" yaml:"task_attempt,omitempty"`
-	InputDigest    string     `json:"input_digest,omitempty" yaml:"input_digest,omitempty"`
-	ClientSnapshot Client     `json:"client_snapshot" yaml:"client_snapshot"`
-	ClientThreadID string     `json:"client_thread_id,omitempty" yaml:"client_thread_id,omitempty"`
-	ReadOnly       bool       `json:"read_only" yaml:"read_only"`
-	CreatedAt      time.Time  `json:"created_at" yaml:"created_at"`
-	DeletedAt      *time.Time `json:"deleted_at,omitempty" yaml:"deleted_at,omitempty"`
-	ClosedAt       *time.Time `json:"closed_at,omitempty" yaml:"closed_at,omitempty"`
-	CloseReason    string     `json:"close_reason,omitempty" yaml:"close_reason,omitempty"`
-	LifecycleState string     `json:"lifecycle_state" yaml:"lifecycle_state"`
-	CurrentRunID   string     `json:"current_run_id,omitempty" yaml:"current_run_id,omitempty"`
-	LastRunID      string     `json:"last_run_id,omitempty" yaml:"last_run_id,omitempty"`
-	RunCount       int        `json:"run_count" yaml:"run_count"`
-	LastActiveAt   time.Time  `json:"last_active_at" yaml:"last_active_at"`
+	ID              string     `json:"id" yaml:"id"`
+	AgentID         string     `json:"agent_id" yaml:"agent_id"`
+	AgentSnapshot   Agent      `json:"agent_snapshot" yaml:"agent_snapshot"`
+	ParentAgentID   string     `json:"parent_agent_id,omitempty" yaml:"parent_agent_id,omitempty"`
+	ParentSessionID string     `json:"parent_session_id,omitempty" yaml:"parent_session_id,omitempty"`
+	WorktreeID      string     `json:"worktree_id,omitempty" yaml:"worktree_id,omitempty"`
+	TaskID          string     `json:"task_id,omitempty" yaml:"task_id,omitempty"`
+	TaskAttempt     int        `json:"task_attempt,omitempty" yaml:"task_attempt,omitempty"`
+	InputDigest     string     `json:"input_digest,omitempty" yaml:"input_digest,omitempty"`
+	ClientSnapshot  Client     `json:"client_snapshot" yaml:"client_snapshot"`
+	ClientThreadID  string     `json:"client_thread_id,omitempty" yaml:"client_thread_id,omitempty"`
+	ReadOnly        bool       `json:"read_only" yaml:"read_only"`
+	CreatedAt       time.Time  `json:"created_at" yaml:"created_at"`
+	DeletedAt       *time.Time `json:"deleted_at,omitempty" yaml:"deleted_at,omitempty"`
+	ClosedAt        *time.Time `json:"closed_at,omitempty" yaml:"closed_at,omitempty"`
+	CloseReason     string     `json:"close_reason,omitempty" yaml:"close_reason,omitempty"`
+	LifecycleState  string     `json:"lifecycle_state" yaml:"lifecycle_state"`
+	CurrentRunID    string     `json:"current_run_id,omitempty" yaml:"current_run_id,omitempty"`
+	LastRunID       string     `json:"last_run_id,omitempty" yaml:"last_run_id,omitempty"`
+	RunCount        int        `json:"run_count" yaml:"run_count"`
+	LastActiveAt    time.Time  `json:"last_active_at" yaml:"last_active_at"`
 
 	// The fields below are a compatibility/status projection of current_run (or
 	// last_run when idle). They are never the source of runtime ownership.

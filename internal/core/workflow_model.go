@@ -56,6 +56,7 @@ type Handoff struct {
 	FromSession string    `yaml:"from_session" json:"from_session"`
 	FromRun     string    `yaml:"from_run" json:"from_run"`
 	ToAgent     string    `yaml:"to_agent" json:"to_agent"`
+	ToSession   string    `yaml:"to_session,omitempty" json:"to_session,omitempty"`
 	TaskID      string    `yaml:"task_id" json:"task_id"`
 	Attempt     int       `yaml:"attempt" json:"attempt"`
 	InputDigest string    `yaml:"input_digest" json:"input_digest"`
@@ -78,6 +79,7 @@ type Message struct {
 	FromSession        string     `yaml:"from_session,omitempty" json:"from_session,omitempty"`
 	FromRun            string     `yaml:"from_run,omitempty" json:"from_run,omitempty"`
 	ToAgent            string     `yaml:"to_agent" json:"to_agent"`
+	ToSession          string     `yaml:"to_session,omitempty" json:"to_session,omitempty"`
 	Kind               string     `yaml:"kind" json:"kind"`
 	Body               string     `yaml:"body" json:"body"`
 	HandoffID          string     `yaml:"handoff_id,omitempty" json:"handoff_id,omitempty"`

@@ -22,8 +22,10 @@ type WorktreeRelation struct {
 }
 
 type SessionRelation struct {
-	SessionID string   `json:"session_id"`
-	RunIDs    []string `json:"run_ids,omitempty"`
+	SessionID  string   `json:"session_id"`
+	RunIDs     []string `json:"run_ids,omitempty"`
+	MessageIDs []string `json:"message_ids,omitempty"`
+	HandoffIDs []string `json:"handoff_ids,omitempty"`
 }
 
 type WorkspaceRelations struct {
@@ -203,6 +205,20 @@ func buildWorkspaceRelations(d *Document) WorkspaceRelations {
 	for _, handoff := range d.Registry.Handoffs {
 		if i, ok := taskIndex[handoff.TaskID]; ok {
 			out.Tasks[i].HandoffIDs = appendUnique(out.Tasks[i].HandoffIDs, handoff.ID)
+		}
+		if i, ok := sessionIndex[handoff.ToSession]; ok && handoff.ToSession != "" {
+			out.Sessions[i].HandoffIDs = appendUnique(out.Sessions[i].HandoffIDs, handoff.ID)
+		}
+		if i, ok := sessionIndex[handoff.FromSession]; ok && handoff.FromSession != "" {
+			out.Sessions[i].HandoffIDs = appendUnique(out.Sessions[i].HandoffIDs, handoff.ID)
+		}
+	}
+	for _, message := range d.Registry.Messages {
+		if i, ok := sessionIndex[message.ToSession]; ok && message.ToSession != "" {
+			out.Sessions[i].MessageIDs = appendUnique(out.Sessions[i].MessageIDs, message.ID)
+		}
+		if i, ok := sessionIndex[message.FromSession]; ok && message.FromSession != "" {
+			out.Sessions[i].MessageIDs = appendUnique(out.Sessions[i].MessageIDs, message.ID)
 		}
 	}
 	for _, artifact := range d.State.Artifacts {

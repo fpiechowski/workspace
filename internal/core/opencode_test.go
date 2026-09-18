@@ -108,10 +108,9 @@ func configureOpenCodeTest(t *testing.T, s *Service) {
 		t.Fatal(err)
 	}
 	cfg.Clients["test"] = Client{
-		Adapter:     "opencode",
-		LaunchArgv:  []string{exe, "-test.run=TestOpenCodeProcess", "--", "{prompt_file}"},
-		ResumeArgv:  []string{exe, "-test.run=TestOpenCodeProcess", "--session", "{thread_id}", "--", "{prompt_file}"},
-		DeliverArgv: []string{"echo", `{"accepted":true}`},
+		Adapter:    "opencode",
+		LaunchArgv: []string{exe, "-test.run=TestOpenCodeProcess", "--", "{prompt_file}"},
+		ResumeArgv: []string{exe, "-test.run=TestOpenCodeProcess", "--session", "{thread_id}", "--", "{prompt_file}"},
 	}
 	b, err := yaml.Marshal(cfg)
 	if err != nil {

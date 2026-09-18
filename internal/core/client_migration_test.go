@@ -89,7 +89,7 @@ func TestRegistryV3OpenCodeMigrationIsStagedAndIdempotent(t *testing.T) {
 	if !migrateRegistry(d) {
 		t.Fatal("schema-v3 registry was not migrated")
 	}
-	if d.Registry.SchemaVersion != 4 || len(d.Registry.Sessions[0].ClientSnapshot.DeliverArgv) != 0 || !d.Registry.Sessions[0].ClientSnapshot.NativeDelivery {
+	if d.Registry.SchemaVersion != 5 || len(d.Registry.Sessions[0].ClientSnapshot.DeliverArgv) != 0 || !d.Registry.Sessions[0].ClientSnapshot.NativeDelivery {
 		t.Fatalf("legacy snapshot was not upgraded: %+v", d.Registry.Sessions[0].ClientSnapshot)
 	}
 	if !reflect.DeepEqual(beforeRuns, d.Registry.Runs) {
@@ -99,13 +99,13 @@ func TestRegistryV3OpenCodeMigrationIsStagedAndIdempotent(t *testing.T) {
 		t.Fatalf("custom OpenCode wrapper changed: %+v", d.Registry.Sessions[1].ClientSnapshot)
 	}
 	if migrateRegistry(d) {
-		t.Fatal("schema-v4 migration was not idempotent")
+		t.Fatal("schema-v5 migration was not idempotent")
 	}
 
 	older := &Document{State: Workspace{Tasks: []Task{{ID: "task", SessionID: "legacy-run"}}}, Registry: Registry{
 		Sessions: []Session{{ID: "legacy-run", AgentID: "agent", ClientSnapshot: Client{Adapter: "command"}, State: "exited"}},
 	}}
-	if !migrateRegistry(older) || older.Registry.SchemaVersion != 4 || len(older.Registry.Runs) != 1 || older.Registry.Runs[0].ID != "legacy-run" || older.State.Tasks[0].RunID != "legacy-run" {
+	if !migrateRegistry(older) || older.Registry.SchemaVersion != 5 || len(older.Registry.Runs) != 1 || older.Registry.Runs[0].ID != "legacy-run" || older.State.Tasks[0].RunID != "legacy-run" {
 		t.Fatalf("older registry did not pass through staged migrations: %+v", older)
 	}
 }

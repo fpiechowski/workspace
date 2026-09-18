@@ -267,9 +267,11 @@ func (s *Service) tickWorkspaceAgents(ctx context.Context, status Status) error 
 		return err
 	}
 	var messages []Message
+	sessions := map[string]Session{}
 	latest := map[string]Session{}
 	if err := s.With(ctx, status.Workspace.ID, func(d *Document) error {
 		for _, p := range d.Registry.Sessions {
+			sessions[p.ID] = p
 			if prior, ok := latest[p.AgentID]; !ok || p.LastActiveAt.After(prior.LastActiveAt) || p.LastActiveAt.Equal(prior.LastActiveAt) && p.ID > prior.ID {
 				latest[p.AgentID] = p
 			}
@@ -279,7 +281,7 @@ func (s *Service) tickWorkspaceAgents(ctx context.Context, status Status) error 
 	}); err != nil {
 		return err
 	}
-	if err := s.autoBindOpenCodeThreads(ctx, status.Workspace.ID, latest); err != nil {
+	if err := s.autoBindOpenCodeThreads(ctx, status.Workspace.ID, sessions); err != nil {
 		return err
 	}
 	// A verified lost pane can be replaced; silence or a transient tmux
@@ -291,20 +293,39 @@ func (s *Service) tickWorkspaceAgents(ctx context.Context, status Status) error 
 		if err != nil {
 			return err
 		}
+		sessions[resumed.ID] = resumed
 		latest[orch.AgentID] = resumed
 	}
 	for _, message := range messages {
 		if message.AcknowledgedAt != nil {
 			continue
 		}
-		p, ok := latest[message.ToAgent]
+		var p Session
+		var ok bool
+		if message.ToSession != "" {
+			// Session-addressed messages never fall back to another Session of
+			// the same Agent. An idle target simply remains pending.
+			p, ok = sessions[message.ToSession]
+		} else {
+			// Explicit compatibility path for pre-migration agent-addressed
+			// messages. New messages never enter this branch.
+			p, ok = latest[message.ToAgent]
+			if ok {
+				if updated, exists := sessions[p.ID]; exists {
+					p = updated
+				}
+			}
+		}
 		if !ok {
+			continue
+		}
+		if p.DeletedAt != nil || p.ClosedAt != nil {
 			continue
 		}
 		if p.Active() && p.ClientSnapshot.Adapter == "codex" {
 			continue
 		} // The bridge owns this native connection.
-		if p.Active() && p.ClientSnapshot.Adapter == "opencode" && p.ClientSnapshot.NativeDelivery {
+		if p.Active() && usesNativeOpenCodeDelivery(p.ClientSnapshot) {
 			if message.DeliveredRunID == p.CurrentRunID {
 				continue
 			}
@@ -399,7 +420,7 @@ func (s *Service) notifyPendingMessage(ctx context.Context, selector string, ses
 		if err != nil {
 			return err
 		}
-		if p.CurrentRunID != session.CurrentRunID || r.ID != session.CurrentRunID || !r.Active() || m.DeliveredRunID == r.ID || m.NotifiedRunID == r.ID {
+		if !messageAddressMatchesRun(*m, *p, *r) || p.CurrentRunID != session.CurrentRunID || r.ID != session.CurrentRunID || !r.Active() || m.DeliveredRunID == r.ID || m.NotifiedRunID == r.ID {
 			return nil
 		}
 		eligible = true
@@ -435,7 +456,7 @@ func (s *Service) notifyPendingMessage(ctx context.Context, selector string, ses
 		if err != nil {
 			return err
 		}
-		if p.CurrentRunID != session.CurrentRunID || r.ID != session.CurrentRunID || !r.Active() || m.DeliveredRunID == r.ID || m.NotifiedRunID == r.ID {
+		if !messageAddressMatchesRun(*m, *p, *r) || p.CurrentRunID != session.CurrentRunID || r.ID != session.CurrentRunID || !r.Active() || m.DeliveredRunID == r.ID || m.NotifiedRunID == r.ID {
 			return nil
 		}
 		m.NotifiedSessionID = p.ID
@@ -444,16 +465,16 @@ func (s *Service) notifyPendingMessage(ctx context.Context, selector string, ses
 	})
 }
 
-func (s *Service) autoBindOpenCodeThreads(ctx context.Context, selector string, latest map[string]Session) error {
+func (s *Service) autoBindOpenCodeThreads(ctx context.Context, selector string, sessions map[string]Session) error {
 	byExecutable := make(map[string][]openCodeSession)
 	failedExecutables := make(map[string]struct{})
 	claimed := make(map[string]struct{})
-	for _, session := range latest {
+	for _, session := range sessions {
 		if session.Active() && session.ClientSnapshot.Adapter == "opencode" && session.ClientThreadID != "" {
 			claimed[session.ClientThreadID] = struct{}{}
 		}
 	}
-	for agentID, session := range latest {
+	for _, session := range sessions {
 		if session.State != "running" || session.ClientSnapshot.Adapter != "opencode" || session.ClientThreadID != "" {
 			continue
 		}
@@ -483,7 +504,7 @@ func (s *Service) autoBindOpenCodeThreads(ctx context.Context, selector string, 
 		}
 		claimed[thread] = struct{}{}
 		session.ClientThreadID = thread
-		latest[agentID] = session
+		sessions[session.ID] = session
 	}
 	return nil
 }

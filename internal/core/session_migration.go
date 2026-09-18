@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	logicalRegistrySchemaVersion = 3
-	registrySchemaVersion        = 4
+	logicalRegistrySchemaVersion  = 3
+	opencodeRegistrySchemaVersion = 4
+	registrySchemaVersion         = 5
 )
 
 func migratedSessionID(key string) string {
@@ -44,7 +45,7 @@ func migrateRegistryV2(d *Document) bool {
 				groups[key] = sid
 				d.Registry.Sessions = append(d.Registry.Sessions, Session{
 					ID: sid, AgentID: old.AgentID, AgentSnapshot: old.AgentSnapshot,
-					ParentAgentID: old.ParentAgentID, WorktreeID: old.WorktreeID,
+					ParentAgentID: old.ParentAgentID, ParentSessionID: old.ParentSessionID, WorktreeID: old.WorktreeID,
 					TaskID: old.TaskID, TaskAttempt: old.TaskAttempt, InputDigest: old.InputDigest,
 					ClientSnapshot: old.ClientSnapshot, ClientThreadID: old.ClientThreadID,
 					ReadOnly: old.ReadOnly, CreatedAt: old.CreatedAt, LifecycleState: "idle",
@@ -67,6 +68,9 @@ func migrateRegistryV2(d *Document) bool {
 		}
 		for i := range d.Registry.Sessions {
 			p := &d.Registry.Sessions[i]
+			if sid := legacyToLogical[p.ParentSessionID]; sid != "" {
+				p.ParentSessionID = sid
+			}
 			indices := make([]int, 0)
 			for j := range d.Registry.Runs {
 				if d.Registry.Runs[j].SessionID == p.ID {
@@ -139,6 +143,9 @@ func migrateRegistryV2(d *Document) bool {
 			}
 		}
 		for i := range d.Registry.Handoffs {
+			if sid := legacyToLogical[d.Registry.Handoffs[i].ToSession]; sid != "" {
+				d.Registry.Handoffs[i].ToSession = sid
+			}
 			if sid := legacyToLogical[d.Registry.Handoffs[i].FromSession]; sid != "" {
 				d.Registry.Handoffs[i].FromRun = d.Registry.Handoffs[i].FromSession
 				d.Registry.Handoffs[i].FromSession = sid
@@ -152,6 +159,9 @@ func migrateRegistryV2(d *Document) bool {
 		}
 		for i := range d.Registry.Messages {
 			m := &d.Registry.Messages[i]
+			if sid := legacyToLogical[m.ToSession]; sid != "" {
+				m.ToSession = sid
+			}
 			if sid := legacyToLogical[m.FromSession]; sid != "" {
 				m.FromRun, m.FromSession = m.FromSession, sid
 			}
@@ -180,7 +190,7 @@ func migrateRegistryV2(d *Document) bool {
 // migrateRegistryV3 upgrades only persisted Session client snapshots. Runs
 // and all references to concrete executions are intentionally untouched.
 func migrateRegistryV3(d *Document) bool {
-	if d.Registry.SchemaVersion >= registrySchemaVersion {
+	if d.Registry.SchemaVersion >= opencodeRegistrySchemaVersion {
 		d.syncSessions()
 		return false
 	}
@@ -199,9 +209,263 @@ func migrateRegistryV3(d *Document) bool {
 		}
 		d.Registry.Sessions[i].ClientSnapshot = client
 	}
-	d.Registry.SchemaVersion = registrySchemaVersion
+	d.Registry.SchemaVersion = opencodeRegistrySchemaVersion
 	d.syncSessions()
 	return true
+}
+
+func validSessionTarget(d *Document, sessionID, agentID string) bool {
+	if agentID == "" {
+		return false
+	}
+	_, ok := canonicalSessionTarget(d, sessionID, agentID)
+	return ok
+}
+
+func canonicalSessionTarget(d *Document, sessionID, agentID string) (string, bool) {
+	if sessionID == "" {
+		return "", false
+	}
+	session, err := findSession(d, sessionID)
+	if err != nil {
+		return "", false
+	}
+	if agentID != "" {
+		if agent, agentErr := findAgent(d, agentID); agentErr == nil {
+			agentID = agent.ID
+		}
+		if session.AgentID != agentID {
+			return "", false
+		}
+	}
+	return session.ID, true
+}
+
+// inferParentSession uses only a single unambiguous open Session belonging to
+// the recorded parent Agent. It intentionally leaves ambiguous ancestry
+// legacy rather than selecting a latest Session.
+func inferParentSession(d *Document, child Session) string {
+	if child.ParentAgentID == "" {
+		return ""
+	}
+	candidates := openSessionCandidates(d, child.ParentAgentID)
+	history := sessionHistoryCandidates(d, child.ParentAgentID)
+	filtered := make([]Session, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.ID == child.ID {
+			continue
+		}
+		if !child.CreatedAt.IsZero() && !candidate.CreatedAt.IsZero() && candidate.CreatedAt.After(child.CreatedAt) {
+			continue
+		}
+		filtered = append(filtered, candidate)
+	}
+	if len(filtered) == 1 && len(history) == 1 {
+		return filtered[0].ID
+	}
+	return ""
+}
+
+func sessionHistoryCandidates(d *Document, agentID string) []Session {
+	var out []Session
+	for _, session := range d.Registry.Sessions {
+		if session.AgentID == agentID {
+			out = append(out, session)
+		}
+	}
+	return out
+}
+
+func uniqueHistoricalOpenSession(d *Document, agentID string) string {
+	if agent, err := findAgent(d, agentID); err == nil {
+		agentID = agent.ID
+	}
+	open := openSessionCandidates(d, agentID)
+	if len(open) == 1 && len(sessionHistoryCandidates(d, agentID)) == 1 {
+		return open[0].ID
+	}
+	return ""
+}
+
+func historicalMessageTarget(d *Document, message Message) string {
+	if target, ok := canonicalSessionTarget(d, message.DeliveredSessionID, ""); ok {
+		return target
+	}
+	if target, ok := canonicalSessionTarget(d, message.NotifiedSessionID, ""); ok {
+		return target
+	}
+	if message.HandoffID != "" {
+		if handoff, err := findHandoff(d, message.HandoffID); err == nil {
+			if target, ok := canonicalSessionTarget(d, handoff.ToSession, ""); ok {
+				return target
+			}
+		}
+	}
+	return uniqueHistoricalOpenSession(d, message.ToAgent)
+}
+
+// migrateRegistryV4 adds session-targeted communication and repairs native
+// OpenCode transport metadata. The stage preserves ambiguous historical
+// agent-addressed records as legacy records with an empty ToSession.
+func migrateRegistryV4(d *Document) bool {
+	if d.Registry.SchemaVersion >= registrySchemaVersion {
+		d.syncSessions()
+		return false
+	}
+	if d.Registry.SchemaVersion != opencodeRegistrySchemaVersion {
+		return false
+	}
+	changed := true
+
+	for i := range d.Registry.Sessions {
+		session := &d.Registry.Sessions[i]
+		if agent, err := findAgent(d, session.ParentAgentID); err == nil {
+			session.ParentAgentID = agent.ID
+		}
+		if session.ParentSessionID != "" {
+			if canonical, ok := canonicalSessionTarget(d, session.ParentSessionID, session.ParentAgentID); ok {
+				session.ParentSessionID = canonical
+				if parent, err := findSession(d, canonical); err == nil && session.ParentAgentID == "" {
+					session.ParentAgentID = parent.AgentID
+				}
+			} else {
+				// Keep ParentAgentID as immutable historical ownership, but make an
+				// invalid session pointer explicitly legacy instead of trusting it.
+				session.ParentSessionID = ""
+			}
+		}
+		if session.ParentSessionID == "" {
+			session.ParentSessionID = inferParentSession(d, *session)
+		}
+		if session.ClientSnapshot.Adapter == "opencode" {
+			if normalized, err := normalizeClient(session.ClientSnapshot); err == nil {
+				if payloadDigest(normalized) != payloadDigest(session.ClientSnapshot) {
+					session.ClientSnapshot = normalized
+				}
+			}
+		}
+	}
+
+	for i := range d.Registry.Messages {
+		message := &d.Registry.Messages[i]
+		if agent, err := findAgent(d, message.ToAgent); err == nil {
+			message.ToAgent = agent.ID
+		}
+		if message.ToSession != "" {
+			if canonical, ok := canonicalSessionTarget(d, message.ToSession, ""); ok {
+				message.ToSession = canonical
+				if target, err := findSession(d, canonical); err == nil {
+					message.ToAgent = target.AgentID
+				}
+			} else {
+				message.ToSession = ""
+			}
+		}
+		if message.ToSession == "" {
+			message.ToSession = historicalMessageTarget(d, *message)
+			if target, err := findSession(d, message.ToSession); err == nil {
+				message.ToAgent = target.AgentID
+			}
+		} else if target, err := findSession(d, message.ToSession); err == nil {
+			message.ToAgent = target.AgentID
+		}
+	}
+	for i := range d.Registry.Handoffs {
+		handoff := &d.Registry.Handoffs[i]
+		if agent, err := findAgent(d, handoff.ToAgent); err == nil {
+			handoff.ToAgent = agent.ID
+		}
+		if handoff.ToSession != "" {
+			if canonical, ok := canonicalSessionTarget(d, handoff.ToSession, ""); ok {
+				handoff.ToSession = canonical
+				if target, err := findSession(d, canonical); err == nil {
+					handoff.ToAgent = target.AgentID
+				}
+			} else {
+				handoff.ToSession = ""
+			}
+		}
+		if handoff.ToSession == "" {
+			candidate := ""
+			ambiguous := false
+			for _, message := range d.Registry.Messages {
+				if message.HandoffID != handoff.ID || message.ToSession == "" || message.ToAgent != handoff.ToAgent {
+					continue
+				}
+				if candidate != "" && candidate != message.ToSession {
+					ambiguous = true
+					break
+				}
+				candidate = message.ToSession
+			}
+			if !ambiguous && candidate != "" {
+				handoff.ToSession = candidate
+			} else if candidate := uniqueHistoricalOpenSession(d, handoff.ToAgent); candidate != "" {
+				handoff.ToSession = candidate
+			}
+		}
+		if handoff.ToSession != "" {
+			if target, err := findSession(d, handoff.ToSession); err == nil {
+				handoff.ToAgent = target.AgentID
+			}
+		}
+	}
+
+	for i := range d.Registry.Runs {
+		run := &d.Registry.Runs[i]
+		if run.OpenCodeEndpoint != "" {
+			continue
+		}
+		session, err := findSession(d, run.SessionID)
+		if err != nil || !usesNativeOpenCodeDelivery(session.ClientSnapshot) {
+			continue
+		}
+		if endpoint, err := openCodeEndpointFromArgv(run.Argv); err == nil && endpoint != "" {
+			run.OpenCodeEndpoint = endpoint
+		}
+	}
+
+	d.Registry.SchemaVersion = registrySchemaVersion
+	d.syncSessions()
+	return changed
+}
+
+// repairPersistedRuntime keeps the repair invariant active for a registry that
+// already reached the current schema. This is intentionally limited to
+// deterministic OpenCode metadata; it does not infer a new conversation or
+// rewrite immutable provenance.
+func repairPersistedRuntime(d *Document) bool {
+	changed := false
+	for i := range d.Registry.Sessions {
+		session := &d.Registry.Sessions[i]
+		if session.ClientSnapshot.Adapter != "opencode" {
+			continue
+		}
+		normalized, err := normalizeClient(session.ClientSnapshot)
+		if err == nil && payloadDigest(normalized) != payloadDigest(session.ClientSnapshot) {
+			session.ClientSnapshot = normalized
+			changed = true
+		}
+	}
+	for i := range d.Registry.Runs {
+		run := &d.Registry.Runs[i]
+		if run.OpenCodeEndpoint != "" {
+			continue
+		}
+		session, err := findSession(d, run.SessionID)
+		if err != nil || !usesNativeOpenCodeDelivery(session.ClientSnapshot) {
+			continue
+		}
+		endpoint, err := openCodeEndpointFromArgv(run.Argv)
+		if err == nil && endpoint != "" {
+			run.OpenCodeEndpoint = endpoint
+			changed = true
+		}
+	}
+	if changed {
+		d.syncSessions()
+	}
+	return changed
 }
 
 // migrateRegistry applies private registry migrations in source-version
@@ -216,6 +480,8 @@ func migrateRegistry(d *Document) bool {
 			stepChanged = migrateRegistryV2(d)
 		case logicalRegistrySchemaVersion:
 			stepChanged = migrateRegistryV3(d)
+		case opencodeRegistrySchemaVersion:
+			stepChanged = migrateRegistryV4(d)
 		default:
 			return changed
 		}

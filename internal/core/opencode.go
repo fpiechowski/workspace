@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -228,8 +229,63 @@ func openCodePrompt(message Message) string {
 	return fmt.Sprintf("\n\n--- workspace handoff ---\n%s\nType: %s\nFrom: %s\nHandoff: %s\n\n%s\n\nRead the durable inbox record before acting: message_id=%s.\n--- end workspace handoff ---\n\n", marker, message.Kind, message.FromAgent, message.HandoffID, message.Body, message.ID)
 }
 
+// reconcileOpenCodeRun restores transport metadata from the immutable Run
+// argv immediately before delivery. This closes the gap where an unrelated
+// Session mutation had persisted a Run without OpenCodeEndpoint while the
+// server was still reachable at the recorded loopback flags.
+func (s *Service) reconcileOpenCodeRun(ctx context.Context, selector, runID string) (Session, Run, error) {
+	var session Session
+	var run Run
+	err := s.With(ctx, selector, func(d *Document) error {
+		r, err := findRun(d, runID)
+		if err != nil {
+			return err
+		}
+		p, err := findSession(d, r.SessionID)
+		if err != nil {
+			return err
+		}
+		if p.CurrentRunID != r.ID || !r.Active() {
+			return fail("stale_run", "run no longer owns the session runtime")
+		}
+		changed := false
+		if r.ClientThreadID == "" && p.ClientThreadID != "" {
+			r.ClientThreadID = p.ClientThreadID
+			changed = true
+		}
+		if r.OpenCodeEndpoint != "" && !validOpenCodeEndpoint(r.OpenCodeEndpoint) {
+			// Never use a persisted endpoint that is not a loopback HTTP server.
+			r.OpenCodeEndpoint = ""
+			changed = true
+		}
+		if r.OpenCodeEndpoint == "" {
+			endpoint, deriveErr := openCodeEndpointFromArgv(r.Argv)
+			if deriveErr == nil && endpoint != "" {
+				r.OpenCodeEndpoint = endpoint
+				changed = true
+			}
+		}
+		if changed {
+			d.syncSession(p)
+			if err := saveDocument(d); err != nil {
+				return err
+			}
+		}
+		session, run = *p, *r
+		return nil
+	})
+	return session, run, err
+}
+
 func (s *Service) deliverOpenCodeMessage(ctx context.Context, selector string, session Session, run Run, message Message) error {
-	_ = session
+	var err error
+	session, run, err = s.reconcileOpenCodeRun(ctx, selector, run.ID)
+	if err != nil {
+		return err
+	}
+	if !messageAddressMatchesRun(message, session, run) {
+		return fail("forbidden", "delivery recipient mismatch for message %s", message.ID)
+	}
 	if run.OpenCodeEndpoint == "" || run.ClientThreadID == "" {
 		deliveryErr := "active OpenCode Run has no Run-scoped endpoint or session; stop and resume the Session"
 		if err := s.setDeliveryPhase(ctx, selector, message.ID, run.ID, "restart_required", deliveryErr); err != nil {
@@ -346,31 +402,129 @@ func allocateOpenCodeEndpoint() (string, error) {
 }
 
 func withOpenCodeServerFlags(argv []string, endpoint string) []string {
-	result := append([]string(nil), argv...)
-	host, port, _ := strings.Cut(strings.TrimPrefix(endpoint, "http://"), ":")
+	parsed, err := url.Parse(endpoint)
+	host, port := "", ""
+	if err == nil {
+		host, port = parsed.Hostname(), parsed.Port()
+	}
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	if i := argIndex(result, "--hostname"); i >= 0 && i+1 < len(result) {
-		result[i+1] = host
-	} else {
-		result = append(result, "--hostname", host)
-	}
-	if i := argIndex(result, "--port"); i >= 0 && i+1 < len(result) {
-		result[i+1] = port
-	} else {
-		result = append(result, "--port", port)
-	}
-	return result
+	result := replaceOpenCodeFlag(argv, "--hostname", host)
+	return replaceOpenCodeFlag(result, "--port", port)
 }
 
-func argIndex(argv []string, value string) int {
-	for i, arg := range argv {
-		if arg == value {
-			return i
+func replaceOpenCodeFlag(argv []string, flag, value string) []string {
+	result := append([]string(nil), argv...)
+	for i, arg := range result {
+		if arg == flag {
+			if i+1 < len(result) && !strings.HasPrefix(result[i+1], "--") {
+				result[i+1] = value
+				return result
+			}
+			next := make([]string, 0, len(result)+1)
+			next = append(next, result[:i+1]...)
+			next = append(next, value)
+			next = append(next, result[i+1:]...)
+			return next
+		}
+		if strings.HasPrefix(arg, flag+"=") {
+			result[i] = flag + "=" + value
+			return result
 		}
 	}
-	return -1
+	return append(result, flag, value)
+}
+
+// openCodeEndpointFromArgv recovers only the loopback server endpoint that
+// workspace itself placed in an immutable Run argv. Missing flags are not an
+// error (the caller may use the documented restart-required path); malformed,
+// partial or non-loopback flags are rejected and never turned into a guessed
+// endpoint.
+func openCodeEndpointFromArgv(argv []string) (string, error) {
+	var hostname, portText string
+	hostFound, portFound := false, false
+	for i := 0; i < len(argv); i++ {
+		arg := argv[i]
+		if openCodeValueFlag(arg) {
+			i++
+			continue
+		}
+		for _, flag := range []string{"--hostname", "--port"} {
+			if arg == flag {
+				if i+1 >= len(argv) || strings.TrimSpace(argv[i+1]) == "" || strings.HasPrefix(argv[i+1], "--") {
+					return "", fail("opencode_endpoint_invalid", "%s has no valid value in Run argv", flag)
+				}
+				if flag == "--hostname" {
+					if hostFound {
+						return "", fail("opencode_endpoint_invalid", "Run argv contains duplicate --hostname flags")
+					}
+					hostname, hostFound = argv[i+1], true
+				} else {
+					if portFound {
+						return "", fail("opencode_endpoint_invalid", "Run argv contains duplicate --port flags")
+					}
+					portText, portFound = argv[i+1], true
+				}
+				i++
+				break
+			}
+			prefix := flag + "="
+			if strings.HasPrefix(arg, prefix) {
+				value := strings.TrimPrefix(arg, prefix)
+				if strings.TrimSpace(value) == "" {
+					return "", fail("opencode_endpoint_invalid", "%s has no valid value in Run argv", flag)
+				}
+				if flag == "--hostname" {
+					if hostFound {
+						return "", fail("opencode_endpoint_invalid", "Run argv contains duplicate --hostname flags")
+					}
+					hostname, hostFound = value, true
+				} else {
+					if portFound {
+						return "", fail("opencode_endpoint_invalid", "Run argv contains duplicate --port flags")
+					}
+					portText, portFound = value, true
+				}
+				break
+			}
+		}
+	}
+	if !hostFound && !portFound {
+		return "", nil
+	}
+	if !hostFound || !portFound {
+		return "", fail("opencode_endpoint_invalid", "Run argv must contain both --hostname and --port")
+	}
+	hostname = strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(hostname, "]"), "["))
+	ip := net.ParseIP(hostname)
+	if ip == nil || !ip.IsLoopback() {
+		return "", fail("opencode_endpoint_invalid", "OpenCode hostname %q is not loopback", hostname)
+	}
+	port, err := strconv.Atoi(strings.TrimSpace(portText))
+	if err != nil || port < 1 || port > 65535 {
+		return "", fail("opencode_endpoint_invalid", "OpenCode port %q is invalid", portText)
+	}
+	return "http://" + net.JoinHostPort(ip.String(), strconv.Itoa(port)), nil
+}
+
+func openCodeValueFlag(arg string) bool {
+	switch arg {
+	case "--model", "--prompt", "--session", "--agent", "--cwd":
+		return true
+	default:
+		return false
+	}
+}
+
+func validOpenCodeEndpoint(endpoint string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil || parsed.Scheme != "http" || parsed.User != nil || parsed.Hostname() == "" || parsed.Path != "" && parsed.Path != "/" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return false
+	}
+	ip := net.ParseIP(parsed.Hostname())
+	port, err := strconv.Atoi(parsed.Port())
+	return ip != nil && ip.IsLoopback() && err == nil && port >= 1 && port <= 65535
 }
 
 const (

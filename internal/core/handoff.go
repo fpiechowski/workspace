@@ -68,11 +68,11 @@ func readArtifact(root, path string) ([]byte, string, error) {
 }
 
 type HandoffOptions struct {
-	CheckIDs                                          []string
-	To, Task, Session, Outcome, Summary, OperationKey string
-	Artifacts                                         []string
-	Checks                                            []Check
-	Risks                                             []string
+	CheckIDs                                                     []string
+	To, ToSession, Task, Session, Outcome, Summary, OperationKey string
+	Artifacts                                                    []string
+	Checks                                                       []Check
+	Risks                                                        []string
 }
 
 func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt HandoffOptions) (Handoff, error) {
@@ -134,16 +134,41 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 		if opt.Task != "" && opt.Task != t.ID && opt.Task != t.Name {
 			return fail("task_mismatch", "session is assigned to another task")
 		}
-		to := opt.To
-		if to == "" {
-			to = p.ParentAgentID
+		toAgent := strings.TrimSpace(opt.To)
+		toSession := strings.TrimSpace(opt.ToSession)
+		legacyTarget := false
+		if toSession == "" && toAgent == "" {
+			toSession = p.ParentSessionID
+			if toSession == "" {
+				// Keep unparented, pre-lineage Sessions usable as a legacy
+				// compatibility path. Any explicit --to agent selector still goes
+				// through the strict unambiguous Session resolver.
+				toAgent = p.ParentAgentID
+				if toAgent == "" {
+					toAgent = d.State.OrchestratorAgentID
+				}
+				legacyTarget = true
+			}
 		}
-		a, err := findAgent(d, to)
+		var target Session
+		if legacyTarget {
+			a, targetErr := findAgent(d, toAgent)
+			if targetErr != nil {
+				return targetErr
+			}
+			target = Session{AgentID: a.ID}
+		} else {
+			target, err = resolveTargetSession(d, toAgent, toSession)
+			if err != nil {
+				return err
+			}
+		}
+		if target.AgentID != p.ParentAgentID && target.AgentID != d.State.OrchestratorAgentID {
+			return fail("invalid_recipient", "send task results to the delegating Session or orchestrator Session")
+		}
+		a, err := findAgent(d, target.AgentID)
 		if err != nil {
 			return err
-		}
-		if a.ID != p.ParentAgentID && a.ID != d.State.OrchestratorAgentID {
-			return fail("invalid_recipient", "send task results to the delegating agent or orchestrator")
 		}
 		w, err := findWorktree(d, p.WorktreeID)
 		if err != nil {
@@ -164,7 +189,7 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 		if err != nil {
 			return err
 		}
-		out = Handoff{ID: ID("handoff"), FromAgent: p.AgentID, FromSession: p.ID, FromRun: run.ID, ToAgent: a.ID, TaskID: t.ID, Attempt: p.TaskAttempt, InputDigest: p.InputDigest, Outcome: opt.Outcome, Summary: opt.Summary, State: "submitted", BaseCommit: w.BaseCommit, HeadCommit: head, Dirty: dirty != "", Checks: append([]Check(nil), opt.Checks...), Risks: opt.Risks, CreatedAt: time.Now().UTC()}
+		out = Handoff{ID: ID("handoff"), FromAgent: p.AgentID, FromSession: p.ID, FromRun: run.ID, ToAgent: a.ID, ToSession: target.ID, TaskID: t.ID, Attempt: p.TaskAttempt, InputDigest: p.InputDigest, Outcome: opt.Outcome, Summary: opt.Summary, State: "submitted", BaseCommit: w.BaseCommit, HeadCommit: head, Dirty: dirty != "", Checks: append([]Check(nil), opt.Checks...), Risks: opt.Risks, CreatedAt: time.Now().UTC()}
 		out.Stale = p.TaskAttempt != t.Attempt || p.InputDigest != t.InputDigest || t.RunID != run.ID || t.State == "accepted"
 		artifacts := []Artifact{}
 		bytes := [][]byte{}
@@ -221,7 +246,11 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 		}
 		d.State.Artifacts = append(d.State.Artifacts, artifacts...)
 		d.Registry.Handoffs = append(d.Registry.Handoffs, out)
-		addMessage(d, p.AgentID, p.ID, a.ID, "handoff", out.Summary, out.ID, "")
+		if legacyTarget {
+			addMessage(d, p.AgentID, p.ID, a.ID, "handoff", out.Summary, out.ID, "")
+		} else {
+			addTargetedMessage(d, p.AgentID, p.ID, a.ID, target.ID, "handoff", out.Summary, out.ID, "")
+		}
 		if !out.Stale {
 			t.State = "awaiting_review"
 		}
@@ -331,6 +360,24 @@ func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept
 		if err != nil {
 			return err
 		}
+		targetSession := h.ToSession
+		if targetSession != "" {
+			if canonical, ok := canonicalSessionTarget(d, targetSession, h.ToAgent); ok {
+				targetSession = canonical
+			}
+		} else {
+			targetSession = inferHandoffReviewSession(d, *h)
+		}
+		if actor, actorErr := s.actor(d); actorErr != nil {
+			return actorErr
+		} else if actor != nil {
+			if targetSession == "" {
+				return fail("session_required", "handoff has no unambiguous target Session")
+			}
+			if actor.ID != targetSession {
+				return fail("forbidden", "handoff review requires the exact target Session %s", targetSession)
+			}
+		}
 		t, err := findTask(d, h.TaskID)
 		if err != nil {
 			return err
@@ -390,17 +437,58 @@ func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept
 		out = *h
 		for i := range d.Registry.Messages {
 			m := &d.Registry.Messages[i]
-			if m.HandoffID == h.ID && m.ToAgent == d.State.OrchestratorAgentID {
-				now := time.Now().UTC()
-				m.AcknowledgedAt = &now
+			if m.HandoffID != h.ID || m.ToAgent != h.ToAgent {
+				continue
 			}
+			if h.ToSession != "" {
+				if m.ToSession != targetSession {
+					continue
+				}
+			} else {
+				if targetSession == "" && m.ToSession != "" {
+					continue
+				}
+				if targetSession != "" && m.ToSession != "" && m.ToSession != targetSession {
+					continue
+				}
+			}
+			now := time.Now().UTC()
+			m.AcknowledgedAt = &now
 		}
 		fromSession := s.Actor.SessionID
 		if actor, actorErr := s.actor(d); actorErr == nil && actor != nil {
 			fromSession = actor.ID
 		}
-		addMessage(d, d.State.OrchestratorAgentID, fromSession, h.FromAgent, "review", "Handoff "+h.ID+" "+h.State+". "+feedback, h.ID, "")
+		if h.FromSession != "" {
+			addTargetedMessage(d, d.State.OrchestratorAgentID, fromSession, h.FromAgent, h.FromSession, "review", "Handoff "+h.ID+" "+h.State+". "+feedback, h.ID, "")
+		} else {
+			addMessage(d, d.State.OrchestratorAgentID, fromSession, h.FromAgent, "review", "Handoff "+h.ID+" "+h.State+". "+feedback, h.ID, "")
+		}
 		return saveDocument(d)
 	})
 	return out, err
+}
+
+func inferHandoffReviewSession(d *Document, handoff Handoff) string {
+	candidate := ""
+	for _, message := range d.Registry.Messages {
+		if message.HandoffID != handoff.ID || message.ToSession == "" || message.ToAgent != handoff.ToAgent {
+			continue
+		}
+		if candidate != "" && candidate != message.ToSession {
+			return ""
+		}
+		candidate = message.ToSession
+	}
+	if candidate != "" {
+		if canonical, ok := canonicalSessionTarget(d, candidate, handoff.ToAgent); ok {
+			return canonical
+		}
+		return ""
+	}
+	target, err := resolveTargetSession(d, handoff.ToAgent, "")
+	if err != nil {
+		return ""
+	}
+	return target.ID
 }

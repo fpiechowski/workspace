@@ -46,14 +46,15 @@ func (s *Service) ResumeSession(ctx context.Context, selector, sessionOrRunID, k
 			return fail("session_deleted", "session %s was deleted", session.ID)
 		}
 		opt = SessionOptions{
-			Agent:         session.AgentID,
-			Worktree:      session.WorktreeID,
-			Parent:        session.ParentAgentID,
-			Profile:       session.Profile,
-			Task:          session.TaskID,
-			ResumeSession: session.ID,
-			ReadOnly:      session.ReadOnly,
-			OperationKey:  key,
+			Agent:           session.AgentID,
+			Worktree:        session.WorktreeID,
+			Parent:          session.ParentAgentID,
+			ParentSessionID: session.ParentSessionID,
+			Profile:         session.Profile,
+			Task:            session.TaskID,
+			ResumeSession:   session.ID,
+			ReadOnly:        session.ReadOnly,
+			OperationKey:    key,
 		}
 		return nil
 	})

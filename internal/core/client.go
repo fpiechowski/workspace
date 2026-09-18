@@ -14,6 +14,13 @@ var legacyOpenCodeDeliverArgv = []string{
 	"{message_id}",
 }
 
+// usesNativeOpenCodeDelivery is the single transport predicate. The optional
+// persisted NativeDelivery bit is only a compatibility projection; an
+// OpenCode snapshot without a custom delivery argv is native by definition.
+func usesNativeOpenCodeDelivery(client Client) bool {
+	return client.Adapter == "opencode" && len(client.DeliverArgv) == 0
+}
+
 // upgradeLegacyOpenCodeClient recognizes only the bundled delivery wrapper
 // shipped by the historical project configuration. It deliberately compares
 // argv values rather than checking whether a path exists: the registry must
@@ -57,7 +64,7 @@ func normalizeClient(client Client) (Client, error) {
 		// OpenCode is native by default. A non-empty delivery wrapper is an
 		// explicit external transport and remains external, even if an older
 		// config also set NativeDelivery.
-		client.NativeDelivery = len(client.DeliverArgv) == 0
+		client.NativeDelivery = usesNativeOpenCodeDelivery(client)
 	case "command":
 	default:
 		return client, fail("invalid_config", "unknown client adapter %q", client.Adapter)
@@ -74,7 +81,7 @@ func normalizeClient(client Client) (Client, error) {
 		if len(client.ResumeArgv) > 0 {
 			client.Capabilities = append(client.Capabilities, "resume")
 		}
-		if client.Adapter == "opencode" && client.NativeDelivery {
+		if usesNativeOpenCodeDelivery(client) {
 			client.Capabilities = append(client.Capabilities, "deliver", "observe")
 		} else if len(client.DeliverArgv) > 0 {
 			client.Capabilities = append(client.Capabilities, "deliver")
@@ -92,6 +99,13 @@ func (s *Service) setDeliveryPhase(ctx context.Context, selector, messageID, run
 		p, err := findSession(d, run.SessionID)
 		if err != nil {
 			return err
+		}
+		message, err := findMessage(d, messageID)
+		if err != nil {
+			return err
+		}
+		if !messageAddressMatchesRun(*message, *p, *run) {
+			return fail("forbidden", "delivery recipient mismatch for message %s", messageID)
 		}
 		if p.CurrentRunID != run.ID || !run.Active() {
 			return fail("stale_run", "run no longer owns the session runtime")
@@ -196,7 +210,7 @@ func (s *Service) markDelivered(ctx context.Context, selector, session string, i
 			if err != nil {
 				return err
 			}
-			if m.ToAgent != p.AgentID {
+			if !messageAddressMatchesRun(*m, *p, *r) {
 				return fail("forbidden", "delivery recipient mismatch")
 			}
 			now := nowUTC()

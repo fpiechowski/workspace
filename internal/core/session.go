@@ -14,10 +14,12 @@ import (
 )
 
 type SessionOptions struct {
-	Agent, Worktree, Parent, Profile, OperationKey, Task, PromptTemplate, ResumeSession string
-	ReadOnly                                                                            bool
+	Agent, Worktree, Parent, ParentSession, ParentSessionID, Profile, OperationKey, Task, PromptTemplate, ResumeSession string
+	ReadOnly                                                                                                            bool
 }
-type promptData struct{ WorkspaceID, WorkspaceDir, AgentID, SessionID, RunID, ParentAgentID, BaseCommit string }
+type promptData struct {
+	WorkspaceID, WorkspaceDir, AgentID, SessionID, RunID, ParentAgentID, ParentSessionID, BaseCommit string
+}
 
 // defaultMaxParallelTasks is the bounded worker fallback. It applies both to a
 // configured workflow without an explicit limit and to an intentionally
@@ -51,6 +53,10 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 	var out Session
 	err := s.With(ctx, selector, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		actor, err := s.actor(d)
+		if err != nil {
 			return err
 		}
 		requestOpt := opt
@@ -94,6 +100,9 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			if opt.Parent == "" {
 				opt.Parent = resumePrior.ParentAgentID
 			}
+			if opt.ParentSession == "" && opt.ParentSessionID == "" {
+				opt.ParentSessionID = resumePrior.ParentSessionID
+			}
 			if opt.Task == "" {
 				opt.Task = resumePrior.TaskID
 			}
@@ -120,17 +129,55 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			return decisionRequired("select a workflow before delegation", "plan-first")
 		}
 		parent := opt.Parent
+		parentSession := opt.ParentSessionID
+		if parentSession == "" {
+			parentSession = opt.ParentSession
+		}
 		if parent == "" && a.Role != "orchestrator" {
 			parent = d.State.OrchestratorAgentID
 		}
 		if parent != "" {
-			p, err := findAgent(d, parent)
+			parentAgent, parentErr := findAgent(d, parent)
+			if parentErr != nil {
+				return parentErr
+			}
+			parent = parentAgent.ID
+		}
+		if a.Role != "orchestrator" && actor != nil && resumePrior == nil {
+			if parent != "" && parent != actor.AgentID {
+				return fail("invalid_parent", "a delegated child must retain its actor's parent Agent")
+			}
+			if parentSession != "" && parentSession != actor.ID {
+				return fail("invalid_parent", "a delegated child must retain its actor's exact parent Session")
+			}
+			parent, parentSession = actor.AgentID, actor.ID
+		}
+		if parent != "" {
+			if parent == a.ID {
+				return fail("invalid_parent", "agent cannot delegate to itself")
+			}
+		}
+		if parentSession == "" && actor == nil && resumePrior == nil && a.Role != "orchestrator" && parent != "" {
+			// A user-launched worker can still inherit the exact orchestrator
+			// Session when the workspace has one unambiguous open parent. If there
+			// are several, leave the relationship explicit rather than guessing.
+			if candidates := openSessionCandidates(d, parent); len(candidates) == 1 {
+				parentSession = candidates[0].ID
+			}
+		}
+		if parentSession != "" {
+			parentLogical, err := findSession(d, parentSession)
 			if err != nil {
 				return err
 			}
-			parent = p.ID
-			if parent == a.ID {
-				return fail("invalid_parent", "agent cannot delegate to itself")
+			if parent == "" || parentLogical.AgentID != parent {
+				return fail("invalid_parent", "parent Session %s does not belong to parent Agent %s", parentLogical.ID, parent)
+			}
+			if parentLogical.DeletedAt != nil {
+				return fail("session_deleted", "parent Session %s was deleted", parentLogical.ID)
+			}
+			if parentLogical.ClosedAt != nil {
+				return fail("session_closed", "parent Session %s is closed", parentLogical.ID)
 			}
 		}
 		cwd, wtID, wtName, base := d.Dir, "", "", d.State.Base.Commit
@@ -203,7 +250,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			if prior.ClosedAt != nil {
 				return fail("session_closed", "logical session is closed")
 			}
-			if prior.WorktreeID != wtID || prior.TaskID != opt.Task || prior.ParentAgentID != parent || prior.ReadOnly != opt.ReadOnly {
+			if prior.WorktreeID != wtID || prior.TaskID != opt.Task || prior.ParentAgentID != parent || prior.ParentSessionID != parentSession || prior.ReadOnly != opt.ReadOnly {
 				return fail("invalid_resume", "resume context differs from the logical session")
 			}
 			if prior.TaskID != "" {
@@ -240,7 +287,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				// Older registries predate native OpenCode delivery. Upgrade the
 				// default snapshot on resume; an explicit generic delivery wrapper
 				// remains backward-compatible.
-				if priorClient.Adapter == "opencode" && !priorClient.NativeDelivery && len(priorClient.DeliverArgv) == 0 {
+				if usesNativeOpenCodeDelivery(priorClient) {
 					priorClient.NativeDelivery = true
 				}
 				cfg.Clients[prior.Route.Client] = priorClient
@@ -315,7 +362,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			prompt.Write(instructions)
 			prompt.WriteString("\n\n")
 		}
-		if err = t.Execute(&prompt, promptData{d.State.ID, d.Dir, a.ID, id, runID, parent, base}); err != nil {
+		if err = t.Execute(&prompt, promptData{WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, AgentID: a.ID, SessionID: id, RunID: runID, ParentAgentID: parent, ParentSessionID: parentSession, BaseCommit: base}); err != nil {
 			return err
 		}
 		prompt.WriteString("\n\nAgent definition instructions:\n" + a.Instructions + "\n")
@@ -364,7 +411,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			argv[i] = replace.Replace(arg)
 		}
 		openCodeEndpoint := ""
-		if client.Adapter == "opencode" && client.NativeDelivery {
+		if usesNativeOpenCodeDelivery(client) {
 			openCodeEndpoint, err = allocateOpenCodeEndpoint()
 			if err != nil {
 				return err
@@ -377,13 +424,17 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		}
 		created := time.Now().UTC()
 		if logical == nil {
-			out = Session{ID: id, AgentID: a.ID, AgentSnapshot: a, ParentAgentID: parent, WorktreeID: wtID, ClientSnapshot: client, ClientThreadID: thread, ReadOnly: opt.ReadOnly, CreatedAt: created, LifecycleState: "idle"}
+			out = Session{ID: id, AgentID: a.ID, AgentSnapshot: a, ParentAgentID: parent, ParentSessionID: parentSession, WorktreeID: wtID, ClientSnapshot: client, ClientThreadID: thread, ReadOnly: opt.ReadOnly, CreatedAt: created, LifecycleState: "idle"}
 			logical = &out
 		} else {
 			out = *logical
 			// A client without resume support receives a fresh bootstrap; do not
 			// leave the previous native thread attached to the logical context.
 			out.ClientThreadID = thread
+			// Persist the normalized snapshot as part of the resumed logical
+			// Session. Otherwise a normal resume can retain NativeDelivery=false
+			// while the successor Run receives native OpenCode server flags.
+			out.ClientSnapshot = client
 		}
 		// bindTask validates the checkout before the Run is appended; expose the
 		// pending run snapshot through the compatibility projection for that gate.
@@ -533,7 +584,7 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 			cmd.Env = append(cmd.Env, e)
 		}
 	}
-	cmd.Env = append(cmd.Env, "WORKSPACE_PROJECT_DIR="+s.Root, "WORKSPACE_PROJECT_ID="+state.ProjectID, "WORKSPACE_ID="+state.ID, "WORKSPACE_DIR="+dir, "WORKSPACE_AGENT_ID="+session.AgentID, "WORKSPACE_SESSION_ID="+session.ID, "WORKSPACE_RUN_ID="+run.ID, "WORKSPACE_ORCHESTRATOR_ID="+state.OrchestratorAgentID, "WORKSPACE_PARENT_AGENT_ID="+session.ParentAgentID, "WORKSPACE_WORKTREE_ID="+session.WorktreeID, "WORKSPACE_ROLE="+session.AgentSnapshot.Role)
+	cmd.Env = append(cmd.Env, "WORKSPACE_PROJECT_DIR="+s.Root, "WORKSPACE_PROJECT_ID="+state.ProjectID, "WORKSPACE_ID="+state.ID, "WORKSPACE_DIR="+dir, "WORKSPACE_AGENT_ID="+session.AgentID, "WORKSPACE_SESSION_ID="+session.ID, "WORKSPACE_RUN_ID="+run.ID, "WORKSPACE_ORCHESTRATOR_ID="+state.OrchestratorAgentID, "WORKSPACE_PARENT_AGENT_ID="+session.ParentAgentID, "WORKSPACE_PARENT_SESSION_ID="+session.ParentSessionID, "WORKSPACE_WORKTREE_ID="+session.WorktreeID, "WORKSPACE_ROLE="+session.AgentSnapshot.Role)
 	cmd.Env = append(cmd.Env, "WORKSPACE_TASK_ID="+session.TaskID)
 	if session.ReadOnly {
 		cmd.Env = append(cmd.Env, "WORKSPACE_READ_ONLY=1")
@@ -549,7 +600,7 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 	var runErr error
 	if session.ClientSnapshot.Adapter == "codex" {
 		runErr = s.runCodex(ctx, selector, session, cmd, in, out, errOut)
-	} else if session.ClientSnapshot.Adapter == "opencode" && (session.ClientSnapshot.NativeDelivery || run.ClientThreadID == "") {
+	} else if usesNativeOpenCodeDelivery(session.ClientSnapshot) || (session.ClientSnapshot.Adapter == "opencode" && run.ClientThreadID == "") {
 		runErr = s.runOpenCode(ctx, selector, session, cmd, out, errOut)
 	} else {
 		runErr = cmd.Run()
@@ -734,6 +785,7 @@ func (s *Service) ResumeAgent(ctx context.Context, selector, agent, key string) 
 			session := *latest
 			opt.Worktree = session.WorktreeID
 			opt.Parent = session.ParentAgentID
+			opt.ParentSessionID = session.ParentSessionID
 			opt.Profile = session.Profile
 			opt.Task = session.TaskID
 			opt.ResumeSession = session.ID

@@ -77,6 +77,20 @@ thread initialization, OpenCode discovery, and resume all enforce that rule. Del
 and notification receipts are deduplicated per Run so a successor can take over an
 undelivered message without erasing the exact execution that received an earlier one.
 
+Mailbox addressing is separate from native conversation binding. New messages and
+handoffs persist `ToSession`; `ToAgent` remains an audit and legacy projection. An
+agent's current Run may read, acknowledge, review and receive delivery only for its
+exact logical Session. User commands can name a historical Session explicitly, or opt
+into an agent-wide historical view with `--agent`. The compatibility `--to` selector
+is accepted only when exactly one eligible open Session exists; it never means latest.
+
+When delivery starts, the supervisor reloads the exact target Session and current Run.
+For native OpenCode it may restore a missing Run endpoint only from valid loopback
+`--hostname` and `--port` flags recorded in that Run's immutable argv. Missing,
+malformed or non-loopback flags lead to `restart_required`; the supervisor never
+guesses a host or port. A `NotifiedSessionID` is only a fallback notification receipt
+and never marks the message delivered.
+
 A generic wrapper configuration:
 
 ```yaml

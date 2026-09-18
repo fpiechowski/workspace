@@ -313,7 +313,7 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 			}
 			user := *s
 			user.Actor = Actor{}
-			if _, err := user.SendMessage(ctx, selector, MessageOptions{To: session.AgentID, Body: line}); err != nil {
+			if _, err := user.SendMessage(ctx, selector, MessageOptions{To: session.AgentID, ToSession: session.ID, Body: line}); err != nil {
 				fmt.Fprintln(errOut, err)
 			}
 		case <-ticker.C:
@@ -345,7 +345,7 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 					}
 				}
 				for _, m := range d.Registry.Messages {
-					if m.ToAgent == p.AgentID && m.AcknowledgedAt == nil && m.DeliveredRunID != p.CurrentRunID {
+					if messageAddressMatchesRun(m, *p, Run{ID: p.CurrentRunID, SessionID: p.ID}) && m.AcknowledgedAt == nil && m.DeliveredRunID != p.CurrentRunID {
 						messages = append(messages, m)
 					}
 				}

@@ -106,7 +106,7 @@ func TestWorkflowAgentProcess(t *testing.T) {
 	if receipt.ExitCode != 0 {
 		t.Fatal("check failed")
 	}
-	args := []string{"handoff", "submit", "--to", os.Getenv("WORKSPACE_PARENT_AGENT_ID"), "--task", os.Getenv("WORKSPACE_TASK_ID"), "--summary-file", "work-products/SUMMARY.md", "--artifact", "work-products/" + name, "--check", receipt.ID, "--operation-key", "result:" + os.Getenv("WORKSPACE_SESSION_ID")}
+	args := []string{"handoff", "submit", "--to-session", os.Getenv("WORKSPACE_PARENT_SESSION_ID"), "--task", os.Getenv("WORKSPACE_TASK_ID"), "--summary-file", "work-products/SUMMARY.md", "--artifact", "work-products/" + name, "--check", receipt.ID, "--operation-key", "result:" + os.Getenv("WORKSPACE_SESSION_ID")}
 	var h1, h2 Handoff
 	if err := json.Unmarshal(call(args...), &h1); err != nil {
 		t.Fatal(err)

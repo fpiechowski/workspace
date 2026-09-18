@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -293,6 +294,55 @@ func TestOpenCodeNativeDeliveryUsesVisibleTUIContract(t *testing.T) {
 	attempt, delivered := deliveryState(t, s, workspace, messageID, run.ID)
 	if attempt.Phase != openCodeDeliveryPhaseConfirmed || delivered.DeliveredRunID != run.ID || delivered.AcknowledgedAt != nil {
 		t.Fatalf("delivery state = %+v message = %+v", attempt, delivered)
+	}
+}
+
+func TestOpenCodeDeliveryRecoversEndpointFromRunArgv(t *testing.T) {
+	thread := "ses_recover_endpoint"
+	messageID := "msg_recover_endpoint"
+	marker := "[workspace-message-id:" + messageID + "]"
+	mock := newOpenCodeMock(t, thread, marker)
+	mock.markerOnSubmit = true
+	s, workspace, session, run, message := nativeOpenCodeDeliveryFixture(t, mock.server.URL, thread, messageID)
+	parsed, err := url.Parse(mock.server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.With(context.Background(), workspace, func(d *Document) error {
+		p, err := findSession(d, session.ID)
+		if err != nil {
+			return err
+		}
+		r, err := findRun(d, run.ID)
+		if err != nil {
+			return err
+		}
+		r.OpenCodeEndpoint = ""
+		r.Argv = []string{"opencode", "--hostname", parsed.Hostname(), "--port", parsed.Port()}
+		d.syncSession(p)
+		return saveDocument(d)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.deliverOpenCodeMessage(context.Background(), workspace, session, run, message); err != nil {
+		t.Fatal(err)
+	}
+	attempt, delivered := deliveryState(t, s, workspace, messageID, run.ID)
+	if attempt.Phase != openCodeDeliveryPhaseConfirmed || delivered.DeliveredRunID != run.ID {
+		t.Fatalf("endpoint recovery did not complete delivery: attempt=%+v message=%+v", attempt, delivered)
+	}
+	if err := s.With(context.Background(), workspace, func(d *Document) error {
+		stored, err := findRun(d, run.ID)
+		if err != nil {
+			return err
+		}
+		if stored.OpenCodeEndpoint != mock.server.URL {
+			t.Fatalf("recovered endpoint = %q, want %q", stored.OpenCodeEndpoint, mock.server.URL)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -1,12 +1,12 @@
 Role: planner. Agent {{.AgentID}}. Logical session {{.SessionID}}. Run {{.RunID}}.
-Parent/result recipient: {{.ParentAgentID}}. Workspace: {{.WorkspaceDir}}.
+Parent/result recipient Session: {{.ParentSessionID}} (Agent {{.ParentAgentID}}). Workspace: {{.WorkspaceDir}}.
 Read the assigned Task, inputs/issue.md and repository instructions. Analyze the
 problem at {{.BaseCommit}}. Do not implement the fix. Label any experimental code
 as an experiment and preserve it separately from proposed implementation.
 Write work-products/PLAN.md: diagnosis, code evidence, alternatives, bounded tasks,
 dependencies, acceptance criteria, integration strategy, risks and verification plan.
 Write work-products/SUMMARY.md. Submit both files using workspace handoff submit
---to {{.ParentAgentID}} --task "$WORKSPACE_TASK_ID" --summary-file work-products/SUMMARY.md
+--to-session {{.ParentSessionID}} --task "$WORKSPACE_TASK_ID" --summary-file work-products/SUMMARY.md
 --artifact work-products/PLAN.md --artifact work-products/SUMMARY.md
 --operation-key "result:$WORKSPACE_TASK_ID:planning:{{.RunID}}".
 Use a single shell invocation for that command. Its returned artifact path is the

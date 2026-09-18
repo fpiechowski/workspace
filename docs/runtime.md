@@ -53,7 +53,8 @@ replacement; retrying the Task remains a separate operation.
 | `stopped` | explicitly stopped; supervisor does not restart it |
 | `interrupted` | pane was verified lost or superseded; Session stays resumable |
 
-Every new runner exports both `WORKSPACE_SESSION_ID` and `WORKSPACE_RUN_ID`. Actor
+Every new runner exports both `WORKSPACE_SESSION_ID` and `WORKSPACE_RUN_ID`, plus
+`WORKSPACE_PARENT_SESSION_ID` when the Session was delegated by an active parent. Actor
 mutations are accepted only from the Session's current Run. tmux stores both IDs on
 the pane; a legacy pane storing only its old concrete `sess_*` remains compatible
 because migration preserves that value as the Run ID.
@@ -99,6 +100,19 @@ least once. Without a delivery adapter, the supervisor shows a tmux notification
 the agent reads `inbox` explicitly. No terminal keystroke injection or
 `/tui/clear-prompt` is used. An ACK records receipt; accepting a handoff is a separate
 decision.
+
+Messages and handoffs are addressed to exact logical Sessions, not native thread IDs or
+the most recent Session of an Agent. An idle target remains pending until its own Run is
+active; a closed or deleted target is never rerouted. Agent processes are scoped to their
+current Session, while users choose `--session` for historical inspection or `--agent` for
+an explicit agent-wide view. Replies target the original `FromSession`, and deletion is
+guarded by parent, target, provenance and receipt references.
+
+The private registry is currently schema version 5. Migration is staged: legacy
+process-shaped sessions become logical Sessions and Runs, then communication targets,
+parent Session links, OpenCode snapshot normalization, and deterministic loopback
+endpoint repair are applied. Ambiguous historical agent targets remain legacy records
+with an empty `ToSession` instead of being assigned to an arbitrary Session.
 
 Restart the project supervisor after installing a newly built binary so the new
 delivery code is loaded. An OpenCode Session with a valid existing Run endpoint does

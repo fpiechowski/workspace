@@ -3,8 +3,10 @@
 Follow the repository's instructions and your assigned role and Task. The parent
 workspace AGENTS.md orchestration rules apply only to WORKSPACE_ROLE=orchestrator.
 Your Agent is a stable persona; WORKSPACE_SESSION_ID identifies the logical conversation
-and WORKSPACE_RUN_ID identifies this concrete execution.
-Send questions and results to WORKSPACE_PARENT_AGENT_ID (or WORKSPACE_ORCHESTRATOR_ID).
+and WORKSPACE_RUN_ID identifies this concrete execution. WORKSPACE_PARENT_SESSION_ID is
+the exact parent conversation for this task.
+Send questions and results to WORKSPACE_PARENT_SESSION_ID with `--to-session`; use the
+parent Agent ID only for ownership/audit or legacy compatibility.
 Keep products in work-products/ and preserve them with handoff submit. Use its returned
 immutable artifact links. Do not overwrite WORKSPACE.md, accept your own handoff,{{if not .Manual}}
 change workflow phases,{{end}} publish unapproved requests or attest to a release.

@@ -211,7 +211,7 @@ func loadDocument(dir string) (*Document, error) {
 	if d.Registry.Operations == nil {
 		d.Registry.Operations = map[string]Operation{}
 	}
-	if migrateRegistry(d) {
+	if migrateRegistry(d) || repairPersistedRuntime(d) {
 		if err := saveDocument(d); err != nil {
 			return nil, err
 		}

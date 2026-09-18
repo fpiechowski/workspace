@@ -705,6 +705,7 @@ func sessionCommands(o *options) *cobra.Command {
 	f.StringVar(&opt.Agent, "agent", "", "Agent ID or name")
 	f.StringVar(&opt.Worktree, "worktree", "", "Worktree ID or name")
 	f.StringVar(&opt.Parent, "parent", "", "Parent agent ID (defaults to orchestrator)")
+	f.StringVar(&opt.ParentSessionID, "parent-session", "", "Exact parent logical Session ID for a worker session")
 	f.StringVar(&opt.Profile, "profile", "", "Override model profile")
 	f.StringVar(&opt.Task, "task", "", "Task ID or name")
 	f.StringVar(&opt.PromptTemplate, "prompt-template", "", "Override snapshotted prompt template")

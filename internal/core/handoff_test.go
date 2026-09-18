@@ -243,7 +243,7 @@ func TestHandoffPreservesArtifactBeforeInboxAndRequiresAcceptance(t *testing.T) 
 	if _, err := os.Stat(filepath.Join(status.Directory, artifact.Path)); err != nil {
 		t.Fatal("local deletion lost preserved artifact")
 	}
-	inbox, err := s.Inbox(ctx, ws, "", false)
+	inbox, err := s.Inbox(ctx, ws, h.ToAgent, false)
 	if err != nil || len(inbox) != 1 {
 		t.Fatalf("inbox: %v %v", inbox, err)
 	}
@@ -359,6 +359,9 @@ func TestArtifactsRejectEscapesAndDetectTampering(t *testing.T) {
 func TestInboxWaitReleasesProjectLock(t *testing.T) {
 	s, ws := fixture(t)
 	ctx := context.Background()
+	if _, err := s.StartOrchestrator(ctx, ws, "wait-orchestrator"); err != nil {
+		t.Fatal(err)
+	}
 	done := make(chan error, 1)
 	go func() {
 		messages, err := s.WaitInbox(ctx, ws, "", 3*time.Second)

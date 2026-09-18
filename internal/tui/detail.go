@@ -184,11 +184,19 @@ func (m *Model) detailContent() string {
 		doc.field("Profile", session.Profile)
 		doc.field("Client", session.ClientSnapshot.Adapter+" · "+session.Route.Model)
 		doc.field("Task", session.TaskID+" · attempt "+fmt.Sprint(session.TaskAttempt))
+		doc.field("Parent Agent", session.ParentAgentID)
+		doc.field("Parent Session", session.ParentSessionID)
 		doc.field("Worktree", session.WorktreeID)
 		doc.field("Read only", fmt.Sprintf("%t", session.ReadOnly))
 		doc.field("Current run", session.CurrentRunID)
 		doc.field("Last run", session.LastRunID)
 		doc.field("Native thread", session.ClientThreadID)
+		if relation, ok := sessionRelation(m.snapshot.Relations.Sessions, session.ID); ok {
+			doc.section("Relations")
+			doc.field("Run IDs", strings.Join(relation.RunIDs, ", "))
+			doc.field("Message IDs", strings.Join(relation.MessageIDs, ", "))
+			doc.field("Handoff IDs", strings.Join(relation.HandoffIDs, ", "))
+		}
 		doc.section("Provenance")
 		doc.provenance("ID", session.ID)
 	case "run":
@@ -287,7 +295,8 @@ func (m *Model) detailContent() string {
 		doc.title("Handoff", handoff.Outcome, state)
 		doc.section("Facts")
 		doc.field("Task / attempt", handoff.TaskID+" / "+fmt.Sprint(handoff.Attempt))
-		doc.field("From / to", handoff.FromAgent+" / "+handoff.ToAgent)
+		doc.field("From / to Agent", handoff.FromAgent+" / "+handoff.ToAgent)
+		doc.field("From / to Session", handoff.FromSession+" / "+handoff.ToSession)
 		doc.section("Summary")
 		doc.body(handoff.Summary)
 		doc.section("Risks")
@@ -738,6 +747,14 @@ func worktreeRelation(values []core.WorktreeRelation, id string) (core.WorktreeR
 		}
 	}
 	return core.WorktreeRelation{}, false
+}
+func sessionRelation(values []core.SessionRelation, id string) (core.SessionRelation, bool) {
+	for _, value := range values {
+		if value.SessionID == id {
+			return value, true
+		}
+	}
+	return core.SessionRelation{}, false
 }
 func taskRelation(values []core.TaskRelation, id string) (core.TaskRelation, bool) {
 	for _, value := range values {
