@@ -3,9 +3,11 @@
 ## Overview
 
 **Operate** mode: a native terminal interface for observing agent work, reviewing
-results, and performing explicit operations. The first Work screen shows accepted-task
-progress and current work. Process completion does not mean result acceptance: the count
-and progress percentage include only `accepted` tasks.
+results, and performing explicit operations. The first screen is Tasks: each row
+combines the task, its state, and the number of active executions, sessions, and runs
+of its current attempt. Process completion does not mean result acceptance: the task,
+session, and process states are distinguished, and every result remains attached to
+its attempt.
 
 The contract sources are [PRODUCT.md](PRODUCT.md) and [docs/tui.md](docs/tui.md).
 The visual implementation is in `internal/tui/theme.go`, `status.go`, `view.go`, and
@@ -56,14 +58,14 @@ The shell has a fixed order: identity and freshness header, primary navigation,
 optional breadcrumb/secondary navigation, content, status/message row, and a
 contextual key legend. The status row and legend are always reserved, so they remain
 visible at every supported size. The breadcrumb appears on detail routes and dependent
-collections, while Results uses this line as secondary result-type navigation; Work and
-the project picker do not show it.
+collections, while Results uses this line as secondary result-type navigation; the
+project picker and the primary Tasks, Sessions, Worktrees, and More collections do not
+show it.
 
 - Minimum is **40×12**; a smaller terminal shows a size message.
 - One `layoutFor` decision controls every page: **tiny** below 40×12, **compact** for
   medium terminals (one column), and **wide** from 100×24 (list and details side by
-  side). Work uses the same decision instead of its own width threshold; in wide mode,
-  the Work list occupies three fifths of the width.
+  side).
 - Collections in wide mode show two named, bordered panels (list and `Preview`) side by
   side, with one clear focus edge; the list width is based on two fifths of the terminal
   width. The project picker in wide mode shows the workspace list next to unbordered
@@ -73,8 +75,8 @@ the project picker do not show it.
   entries are separated by a lower-emphasis (`subtle`) line. The selection remains
   visible, and the preview action line advertises only commands supported by the
   selected kind.
-- Work section labels are shortened below 75 columns, while the main tabs, summary, and
-  shortcuts use shorter forms below 60 columns.
+- Main tabs and shortcuts use shorter forms below 60 columns; the tabs then read
+  `1 Tasks`, `2 Sess`, `3 Trees`, `4 Out`, and `5 More`.
 
 ## Elevation & Depth
 
@@ -84,24 +86,20 @@ terminal borders. Focus is distinguished by color and bold styling, without shad
 ## Shapes
 
 The panel renderer uses rounded Lip Gloss character borders. Active tabs receive `[ ]`,
-the selected entry receives the `›` marker, and the progress bar uses `━` and `─`.
+and the selected entry receives the `›` marker.
 
 ## Components
 
-**Agents & runs.** A selectable entry combines the agent, task, execution state, and
-model. The list includes the orchestrator, active executions, and open sessions for
-current attempts of unaccepted tasks. The selection is tied to the ID even after
-sorting. This is the first of four Dashboard sections (Agents & runs, Tasks, Needs
-attention, Recent recorded activity); the active section has textual `[ ]` markers so
-focus remains visible without color.
+**Tasks.** A selectable entry combines the task, its state, and the number of active
+executions, sessions, and runs of the current attempt. The selection is tied to the ID
+even after sorting. Empty collections show a title, one-sentence explanation, and one
+valid action; the project picker advertises `a` (Create workspace) instead of claiming
+that the TUI never creates a workspace.
 
-**Progress and status.** The progress bar uses `bubbles/progress` with the `accent`
-token and is always accompanied by `accepted/total` text and a percentage; only
-`accepted` tasks are counted. A separate status bar below shows live, review, blocked,
-and attention, so the summary does not rely on color or a single number. Empty
-collections show a title, one-sentence explanation, and one valid action; the project
-picker advertises `a` (Create workspace) instead of claiming that the TUI never creates
-a workspace.
+**Sessions.** A selectable entry combines the agent, the logical session state, and its
+current Run. The list excludes deleted sessions, supports the current/history filter
+(`f`), and has no secondary tabs or its own `Tab` cycle. Opening an entry shows the
+session details, and `t` opens or resumes its verified terminal.
 
 **Board.** Tasks have two views: the default **List** and **Board**, toggled with `b`
 (the footer shows `b board`/`b list`). Board has one column per task state in the fixed
@@ -138,11 +136,12 @@ the route is revisited.
 `running` and `starting` use a Braille animation every 120 ms. The live-agent summary
 animates only for an active current Run; otherwise it shows `○`.
 
-**Navigation and terminal.** Arrows or `j`/`k` select an entry; `Enter` opens details.
-`Tab` changes the Work list or result type. `t` opens the verified current terminal, and
-starting or resuming requires explicit form confirmation. Multiple task sessions require
-choosing a specific session. A historical Run retains its exact target and does not
-automatically redirect to a newer execution.
+**Navigation and terminal.** Arrows or `j`/`k` select an entry; `Enter` opens details,
+and `1`–`5` move between Tasks, Sessions, Worktrees, Results, and More. `Tab` changes
+the result type on Results. `t` opens the verified current terminal, and starting or
+resuming requires explicit form confirmation. Multiple task sessions require choosing a
+specific session. A historical Run retains its exact target and does not automatically
+redirect to a newer execution.
 
 **Filter.** `/` edits a case-insensitive search over name, ID, and subtitle. `Enter`
 confirms. `Esc` while editing restores the previous filter and selection; outside editing

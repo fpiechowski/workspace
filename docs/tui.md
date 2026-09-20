@@ -12,15 +12,13 @@ input source, and creation date. When the list is empty, it shows a title, one-s
 explanation, and one valid action (`a` creates a workspace), so it no longer contradicts
 the Create workspace action. In wide mode, it shows selection details (ID, path, input
 source, creation date, and state) next to the list without a panel border. Selecting a
-workspace opens Work: a progress bar (`bubbles/progress`) with textual `accepted/total`
-and percentage, plus a status bar with separate live, review, blocked, and attention
-counters. The summary remains visible while switching among the Agents & runs, Tasks,
-Needs attention, and Recent recorded activity sections. Agents & runs shows the
-orchestrator, active executions, and open sessions for current attempts of unaccepted
-tasks. Each row combines an agent with a task, state, and model. Tasks shows the task
-state and the number of active executions, sessions, and runs for its current attempt.
-Run completion does not mean task acceptance; the progress percentage counts only
-accepted tasks.
+workspace opens Tasks: each row shows the task state and the number of active
+executions, sessions, and runs for its current attempt, and the selection stays pinned
+to the ID even after sorting. Run completion does not mean task acceptance; task,
+session, and process states are distinguished. The primary navigation order is
+`1 Tasks`, `2 Sessions`, `3 Worktrees`, `4 Results`, and `5 More`. Sessions is a plain
+collection without secondary tabs: `f` switches the current/history view, `Enter` opens
+the session details, and `t` opens or resumes its terminal.
 `b` switches the Tasks tab between **List** and **Board**. Board shows one column per
 task state in the fixed order pending, running, blocked, needs_changes, awaiting_review,
 accepted; unknown states are appended at the end and rendered as neutral text. Cards use
@@ -38,7 +36,7 @@ State has a symbol and label; running/starting have an animated indicator, inclu
 without color. `s` changes sorting (work priority, name, last execution); the selection
 remains pinned to the ID. Wide view shows named list and `Preview` panels with one clear
 focus edge, while the preview action line advertises only commands supported by the
-selected kind (`t`, `g`, `Enter`). Narrow view preserves progress and two-line entries.
+selected kind (`t`, `g`, `Enter`). Narrow view keeps the list and two-line entries.
 At small heights, an entry occupies one line. Entries are separated by a lower-emphasis
 line, and the selection covers the title and description on a shared background; without
 color, the selection marker and separator remain. The shortcut bar always reserves the
@@ -53,13 +51,14 @@ local `workspace/<id>/…` branches. This operation cannot be undone. Workflow s
 is available only for the `needs_workflow` state; a manual workspace does not later offer
 selection or advance.
 
-On the Dashboard, `a` provides `Complete this manual workspace` for an active manual
-workspace and `Archive completed workspace` when the state is `completed`. Archive
+On the Orchestrator (`o`) and the Runtime page in More, `a` provides
+`Complete this manual workspace` for an active manual workspace and
+`Archive completed workspace` when the state is `completed`. Archive
 requires confirmation, checks the revision, and preserves all data. A workflow still
 requires a confirmed release, while a completed manual workspace requires an earlier
 `complete`; in both cases there must be no active Sessions or services.
 
-More contains Sessions, Agents, Services, Decisions, Change requests, Runtime, Needs
+More contains Agents, Services, Decisions, Change requests, Runtime, Needs
 attention, Recent recorded activity, and Documents. Runtime detail renders tmux
 topology as a table (`bubbles/table`) with window, pane, kind, owner, run, and state
 columns in wide mode and an equivalent row layout in compact mode; errors and managed
@@ -88,16 +87,15 @@ the active/archived workspace view and the status or history filters for the rel
 collections. On the board, `Up`/`Down` moves within the active column (stopping at the
 ends without wrapping), `←`/`→` moves between non-empty columns and wraps at the edges,
 `PgUp`/`PgDn` works within a column, and `Home`/`End` jumps to the first or last card of
-the outermost non-empty column. On the Dashboard, `Tab`/`Shift+Tab` changes focus among
-Agents & runs, Tasks, Needs attention, and Recent recorded activity. On Results, it
-changes the result type: artifacts, handoffs, or checks; the active type is named in the
-helper line. Detail and dependent-collection routes show a breadcrumb, and on task
-details `1`–`3` are shortcuts to related resources (Sessions, Worktrees, Results), not
-top-level pages. Use `1`–`5` to go to the main pages.
+the outermost non-empty column. On Results, `Tab`/`Shift+Tab` changes the result type:
+artifacts, handoffs, or checks; the active type is named in the helper line. Detail and
+dependent-collection routes show a breadcrumb, and on task details `1`–`3` are shortcuts
+to related resources (Sessions, Worktrees, Results), not top-level pages. Use `1`–`5`
+to go to Tasks, Sessions, Worktrees, Results, and More respectively.
 
 | Key | Action |
 |---|---|
-| `1`–`5` | Work, Tasks, Worktrees, Results, More |
+| `1`–`5` | Tasks, Sessions, Worktrees, Results, More |
 | `Up`/`Down`, `j`/`k` | Change selection or scroll details |
 | `PgUp`/`PgDn` | Scroll the document or move the selection by one page in a collection |
 | `Home`/`End` | Start or end of a document or collection |
@@ -107,10 +105,8 @@ top-level pages. Use `1`–`5` to go to the main pages.
 | `Esc` | Cancel a form, exit filter editing, clear a filter, or go back |
 | `/` | Edit the collection filter |
 | `f` | Switch status or history on supported lists |
-| `Tab` / `Shift+Tab` | Change Dashboard panel focus or result type |
+| `Tab` / `Shift+Tab` | Change the result type on Results (Artifacts, Handoffs, Checks) |
 | `s` | Sort by priority, name, or last execution |
-| `l` | Return to Agents & runs |
-| `v` | Open Needs attention from the Dashboard |
 | `t` | Open the agent terminal or confirm start/resume |
 | `a` | Open available actions for the selection or workspace |
 | `g` | Jump to a verified tmux target |
@@ -145,9 +141,9 @@ If navigation reports a missing session or tmux pane, the TUI proposes reconcile
 confirmation form. Esc and Cancel leave the runtime unchanged. After confirmation, it
 performs one reconcile operation and retries navigation to the same target. Reconcile
 may restore an eligible orchestrator; it does not automatically restart stopped workers.
-If the target is still unavailable, the TUI points to Agents & runs and `t` to open or
-resume the session, without a confirmation loop. An ambiguous target, mismatched
-ownership, or mismatched socket does not trigger a reconcile proposal.
+If the target is still unavailable, the TUI points to Sessions (`2`) or the Orchestrator
+(`o`) with `t` to open or resume the session, without a confirmation loop. An ambiguous
+target, mismatched ownership, or mismatched socket does not trigger a reconcile proposal.
 
 ## Actions and Synchronization
 

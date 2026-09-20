@@ -45,7 +45,7 @@ func shellFixture(theme string, noColor bool) *Model {
 			},
 		}},
 	}
-	m.route = route{Page: "dashboard"}
+	m.route = route{Page: "tasks"}
 	m.validateSelection()
 	return m
 }
@@ -86,7 +86,7 @@ func TestShellRegionsAtSupportedSizes(t *testing.T) {
 				if !strings.Contains(lines[0], "Checkout reliability") {
 					t.Fatalf("%dx%d header missing the workspace identity: %q", size[0], size[1], lines[0])
 				}
-				if !strings.Contains(view, "1 Work") {
+				if !strings.Contains(view, "1 Tasks") {
 					t.Fatalf("%dx%d primary navigation missing: %q", size[0], size[1], view)
 				}
 				if !strings.Contains(lines[len(lines)-2], "Saved.") {
@@ -100,13 +100,13 @@ func TestShellRegionsAtSupportedSizes(t *testing.T) {
 	}
 }
 
-// TestWorkHonorsSharedLayoutMode proves Work no longer makes an independent
-// width decision: the shared wide mode adds the preview column at 100x24, while
-// 99x24 stays single-column.
-func TestWorkHonorsSharedLayoutMode(t *testing.T) {
+// TestCollectionHonorsSharedLayoutMode proves the Tasks collection no longer
+// makes an independent width decision: the shared wide mode adds the preview
+// column at 100x24, while 99x24 stays single-column.
+func TestCollectionHonorsSharedLayoutMode(t *testing.T) {
 	m := workFixture()
-	if m.route.Page != "dashboard" {
-		t.Fatalf("fixture route = %q, want dashboard", m.route.Page)
+	if m.route.Page != "tasks" {
+		t.Fatalf("fixture route = %q, want tasks", m.route.Page)
 	}
 	m.width, m.height = 100, 24
 	m.rebuildViewport()
@@ -115,10 +115,10 @@ func TestWorkHonorsSharedLayoutMode(t *testing.T) {
 	m.rebuildViewport()
 	compact := m.View()
 	if !strings.Contains(wide, "Enter details") {
-		t.Fatalf("work did not render the preview column at the shared wide breakpoint:\n%s", wide)
+		t.Fatalf("tasks did not render the preview column at the shared wide breakpoint:\n%s", wide)
 	}
 	if strings.Contains(compact, "Enter details") {
-		t.Fatalf("work rendered the preview column below the shared wide breakpoint:\n%s", compact)
+		t.Fatalf("tasks rendered the preview column below the shared wide breakpoint:\n%s", compact)
 	}
 }
 
@@ -132,7 +132,7 @@ func TestBreadcrumbIdentifiesDetailAndParentedRoutes(t *testing.T) {
 	if crumb := m.breadcrumb(); !strings.Contains(crumb, "Tasks") || !strings.Contains(crumb, "Retry failed payments") {
 		t.Fatalf("detail breadcrumb is incomplete: %q", crumb)
 	}
-	m.route = route{Page: "dashboard"}
+	m.route = route{Page: "tasks"}
 	if crumb := m.breadcrumb(); crumb != "" {
 		t.Fatalf("primary route should not render a breadcrumb: %q", crumb)
 	}

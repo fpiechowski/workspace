@@ -40,11 +40,9 @@ type keyMap struct {
 	Jump            key.Binding
 	Orchestrator    key.Binding
 	WorkspacePicker key.Binding
-	Attention       key.Binding
 
-	Actions     key.Binding
-	Refresh     key.Binding
-	CurrentWork key.Binding
+	Actions key.Binding
+	Refresh key.Binding
 
 	Help key.Binding
 	Exit key.Binding
@@ -83,8 +81,8 @@ func defaultKeyMap() keyMap {
 		ColumnNext: key.NewBinding(key.WithKeys("right"), key.WithHelp("←/→", "column")),
 
 		Primary: [5]key.Binding{
-			key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "Work")),
-			key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "Tasks")),
+			key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "Tasks")),
+			key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "Sessions")),
 			key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "Worktrees")),
 			key.NewBinding(key.WithKeys("4"), key.WithHelp("4", "Results")),
 			key.NewBinding(key.WithKeys("5"), key.WithHelp("5", "More")),
@@ -99,11 +97,9 @@ func defaultKeyMap() keyMap {
 		Jump:            key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "jump")),
 		Orchestrator:    key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "orchestrator")),
 		WorkspacePicker: key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "workspace")),
-		Attention:       key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "attention")),
 
-		Actions:     key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "actions")),
-		Refresh:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-		CurrentWork: key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "Agents & runs")),
+		Actions: key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "actions")),
+		Refresh: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 
 		Help: key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Exit: key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
@@ -174,7 +170,6 @@ type contextFlags struct {
 	sort         bool
 	focus        bool
 	taskRelated  bool
-	dashboard    bool
 	workspace    bool
 	board        bool
 	boardColumns bool
@@ -191,9 +186,8 @@ func (m *Model) contextFlags() contextFlags {
 		filter:       collection,
 		status:       collection && len(m.statusFilterOptions()) > 1,
 		sort:         collection,
-		focus:        m.route.Page == "dashboard" || m.route.Page == "results",
+		focus:        m.route.Page == "results",
 		taskRelated:  m.route.Page == "task",
-		dashboard:    m.route.Page == "dashboard",
 		workspace:    m.workspaceID != "",
 		board:        m.route.Page == "tasks",
 		boardColumns: m.isBoardPage(),
@@ -247,7 +241,6 @@ func (m *Model) keyGroups() []helpGroup {
 		enabled(m.keys.FilterNext, flags.status),
 		enabled(m.keys.Sort, flags.sort),
 		enabled(m.boardBinding(), flags.board),
-		enabled(m.keys.CurrentWork, flags.workspace),
 		enabled(m.keys.Help, true),
 	}
 
@@ -261,7 +254,6 @@ func (m *Model) keyGroups() []helpGroup {
 		enabled(m.keys.Actions, flags.actions),
 		enabled(m.keys.Refresh, true),
 		enabled(m.keys.WorkspacePicker, true),
-		enabled(m.keys.Attention, flags.dashboard),
 	}
 
 	exit := []key.Binding{enabled(m.exitBinding(), true)}

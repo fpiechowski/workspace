@@ -87,7 +87,7 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		}
 	case "project":
 		add("Create a new workspace", "create_workspace")
-	case "dashboard", "orchestrator", "runtime":
+	case "orchestrator", "runtime":
 		workspaceState := m.snapshot.Status.Workspace.Status
 		if workspaceState != "archived" && workspaceState != "completed" {
 			add("Start / resume orchestrator", "start_orchestrator")

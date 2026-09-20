@@ -93,14 +93,14 @@ func (m *Model) tabs() string {
 		return m.palette.headingStyle().Render("Workspaces") + "  / filter  f status"
 	}
 	labels := []struct{ key, page, name string }{
-		{"1", "dashboard", "Work"}, {"2", "tasks", "Tasks"}, {"3", "worktrees", "Worktrees"}, {"4", "results", "Results"}, {"5", "more", "More"},
+		{"1", "tasks", "Tasks"}, {"2", "sessions", "Sessions"}, {"3", "worktrees", "Worktrees"}, {"4", "results", "Results"}, {"5", "more", "More"},
 	}
 	var out []string
 	compact := m.width < 60
 	for i, label := range labels {
 		name := label.name
 		if compact {
-			name = label.key + " " + []string{"Work", "Tasks", "Trees", "Out", "More"}[i]
+			name = label.key + " " + []string{"Tasks", "Sess", "Trees", "Out", "More"}[i]
 		} else {
 			name = label.key + " " + name
 		}
@@ -123,7 +123,7 @@ func (m *Model) breadcrumb() string {
 		return ""
 	}
 	switch m.route.Page {
-	case "project", "dashboard", "error":
+	case "project", "error":
 		return ""
 	}
 	if m.isDetailPage() {
@@ -283,9 +283,6 @@ func (m *Model) bodyView(mode layoutMode) []string {
 	if m.route.Page == "project" {
 		return m.projectView(mode)
 	}
-	if m.route.Page == "dashboard" {
-		return m.dashboardView(mode)
-	}
 	if m.isCollectionPage() {
 		return m.collectionView(mode)
 	}
@@ -339,10 +336,6 @@ func appendFilterLine(filter string, lines []string) []string {
 		return lines
 	}
 	return append([]string{filter}, lines...)
-}
-
-func (m *Model) dashboardView(mode layoutMode) []string {
-	return m.workDashboard(mode)
 }
 
 func (m *Model) collectionView(mode layoutMode) []string {
@@ -750,7 +743,7 @@ func emptyState(page string) []string {
 	case "tasks":
 		return []string{"No tasks yet", "This workspace has no recorded tasks.", "Press o to start the orchestrator, then t to open its terminal."}
 	case "worktrees":
-		return []string{"No worktrees yet", "No worktree has been recorded for this workspace.", "Press r to refresh, or 1 to return to Work."}
+		return []string{"No worktrees yet", "No worktree has been recorded for this workspace.", "Press r to refresh, or 1 to return to Tasks."}
 	case "results":
 		return []string{"No results in this view", "No artifacts, handoffs, or checks are recorded here.", "Press Tab to change the results type or r to refresh."}
 	case "sessions":
@@ -766,7 +759,7 @@ func emptyState(page string) []string {
 	case "change_requests":
 		return []string{"No change requests", "No change requests are recorded.", "Press r to refresh."}
 	case "attention":
-		return []string{"Nothing needs attention", "No durable issues or failures are recorded.", "Press 1 to return to Work."}
+		return []string{"Nothing needs attention", "No durable issues or failures are recorded.", "Press 5 to return to More."}
 	case "activity":
 		return []string{"No recorded activity", "No runs, handoffs, artifacts, or decisions are recorded.", "Press r to refresh."}
 	case "documents":

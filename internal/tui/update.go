@@ -227,7 +227,7 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 	if m.form != nil {
 		return m.updateForm(message)
 	}
-	if m.route.Page == "dashboard" || m.isDetailPage() {
+	if m.isDetailPage() {
 		updated, cmd := m.viewport.Update(message)
 		m.viewport = updated
 		return m, cmd
@@ -387,15 +387,6 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.rebuildViewport()
 		return m, nil
 	}
-	if keybind.Matches(msg, m.keys.CurrentWork) && m.workspaceID != "" {
-		m.navigate(route{Page: "dashboard"})
-		m.focusedPanel = 0
-		m.route.Query = ""
-		m.route.SelectedID = ""
-		m.route.StatusFilter = ""
-		m.validateSelection()
-		return m, nil
-	}
 	if keybind.Matches(msg, m.keys.Terminal) {
 		return m, m.openTerminal()
 	}
@@ -405,10 +396,6 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if keybind.Matches(msg, m.keys.Orchestrator) && m.workspaceID != "" {
 		m.push(route{Page: "orchestrator"})
-		return m, nil
-	}
-	if keybind.Matches(msg, m.keys.Attention) && m.route.Page == "dashboard" {
-		m.push(route{Page: "attention"})
 		return m, nil
 	}
 	if keybind.Matches(msg, m.keys.FilterNext) && m.isCollectionPage() {
@@ -449,9 +436,6 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			index = (index + delta + len(tabs)) % len(tabs)
 			m.navigate(route{Page: "results", Tab: tabs[index]})
 			return m, nil
-		case "dashboard":
-			m.focusDashboardPanel(delta)
-			return m, nil
 		}
 	}
 	if m.route.Page == "task" && (key == "1" || key == "2" || key == "3") {
@@ -467,9 +451,9 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch {
 	case keybind.Matches(msg, m.keys.Primary[0]):
-		m.navigate(route{Page: "dashboard"})
-	case keybind.Matches(msg, m.keys.Primary[1]):
 		m.navigate(route{Page: "tasks"})
+	case keybind.Matches(msg, m.keys.Primary[1]):
+		m.navigate(route{Page: "sessions"})
 	case keybind.Matches(msg, m.keys.Primary[2]):
 		m.navigate(route{Page: "worktrees"})
 	case keybind.Matches(msg, m.keys.Primary[3]):
@@ -632,7 +616,7 @@ func (m *Model) validateSelection() {
 
 func (m *Model) isCollectionPage() bool {
 	switch m.route.Page {
-	case "dashboard", "work", "project", "tasks", "worktrees", "results", "more", "sessions", "runs", "agents", "services", "decisions", "change_requests", "attention", "activity", "documents":
+	case "project", "tasks", "worktrees", "results", "more", "sessions", "runs", "agents", "services", "decisions", "change_requests", "attention", "activity", "documents":
 		return true
 	default:
 		return false

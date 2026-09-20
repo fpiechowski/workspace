@@ -38,7 +38,6 @@ type routeKey struct {
 type routeMemory struct {
 	Query, SelectedID, StatusFilter, Sort, View string
 	ViewportOffset                              int
-	FocusedPanel                                int
 }
 
 type collectionItem struct {
@@ -85,10 +84,9 @@ type Model struct {
 	notice          string
 	quit            bool
 
-	route        route
-	stack        []route
-	routeMemory  map[routeKey]routeMemory
-	focusedPanel int
+	route       route
+	stack       []route
+	routeMemory map[routeKey]routeMemory
 
 	project            core.ProjectOverview
 	snapshot           core.WorkspaceSnapshot
@@ -226,7 +224,7 @@ func New(config Config) *Model {
 	if m.workspaceID == "" {
 		m.route = route{Page: "project"}
 	} else {
-		m.route = route{Page: "dashboard"}
+		m.route = route{Page: "tasks"}
 	}
 	if m.initialError != "" {
 		m.route = route{Page: "error"}
@@ -280,14 +278,24 @@ func (m *Model) navigate(next route) {
 
 func (m *Model) activateRoute(next route) {
 	if memory, ok := m.routeMemory[m.routeKey(next)]; ok {
-		next.Query = memory.Query
-		next.SelectedID = memory.SelectedID
-		next.StatusFilter = memory.StatusFilter
-		next.Sort = memory.Sort
-		next.View = memory.View
-		m.focusedPanel = memory.FocusedPanel
-	} else {
-		m.focusedPanel = 0
+		// Explicit fields in the navigation request win over the remembered
+		// ones; the memory only fills in what the caller left unset so that
+		// query, selection, filter, sort, and view stay sticky across visits.
+		if next.Query == "" {
+			next.Query = memory.Query
+		}
+		if next.SelectedID == "" {
+			next.SelectedID = memory.SelectedID
+		}
+		if next.StatusFilter == "" {
+			next.StatusFilter = memory.StatusFilter
+		}
+		if next.Sort == "" {
+			next.Sort = memory.Sort
+		}
+		if next.View == "" {
+			next.View = memory.View
+		}
 	}
 	m.route = next
 	m.resetView()
@@ -317,7 +325,6 @@ func (m *Model) rememberRoute() {
 		Sort:           m.route.Sort,
 		View:           m.route.View,
 		ViewportOffset: m.viewport.YOffset,
-		FocusedPanel:   m.focusedPanel,
 	}
 }
 
@@ -363,6 +370,6 @@ func (m *Model) setWorkspace(id string) tea.Cmd {
 	m.previewPending = false
 	m.worktreePending = false
 	m.projectPending = false
-	m.activateRoute(route{Page: "dashboard"})
+	m.activateRoute(route{Page: "tasks"})
 	return m.beginRefresh()
 }

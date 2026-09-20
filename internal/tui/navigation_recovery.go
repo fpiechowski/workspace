@@ -15,7 +15,7 @@ func (m *Model) navigationFailure(err error, ref core.EntityRef, afterReconcile 
 		return m.openConfirm("reconcile")
 	}
 	if afterReconcile {
-		m.notice = "Reconcile finished, but this terminal is unavailable. Open Agents & runs (l) and use t to open or resume a session."
+		m.notice = "Reconcile finished, but this terminal is unavailable. Open Sessions (2) or the Orchestrator (o) and use t to open or resume a session."
 	} else {
 		m.notice = "Terminal unavailable: " + m.loadError
 	}

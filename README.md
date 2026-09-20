@@ -194,15 +194,19 @@ workspace tui status --workspace ws_ID
 workspace tui hide --workspace ws_ID
 ```
 
-`1`–`5` open Work, Tasks, Worktrees, Results, and More; on the Dashboard,
-`Tab`/`Shift+Tab` switches between the Agents & runs, tasks, attention, and activity
-sections, while Results uses it to switch result type (the active type is named in the
-helper line). `Up`/`Down` or `j`/`k` changes the selection, `Enter` opens an item,
-`Esc` goes back, `/` filters a collection, and `f` switches between the status and
-history views. `s` sorts the list. `t` opens the selected agent's terminal or a resume
-confirmation; `o`, then `t`, quickly opens or starts the orchestrator; `l` returns to
-Agents & runs, and `v` opens Needs attention from the Dashboard. `a` opens only the
-operations available for the selection, including creating and fully deleting
+Opening or selecting a workspace lands on Tasks. `1`–`5` open Tasks, Sessions,
+Worktrees, Results, and More; below 60 columns the tabs shorten to `1 Tasks`,
+`2 Sess`, `3 Trees`, `4 Out`, and `5 More`. Sessions is a plain collection without
+secondary tabs: `f` switches between the current and history views, `Enter` opens the
+session details, and `t` opens or resumes its terminal. `Tab`/`Shift+Tab` switches the
+result type on Results only (the active type is named in the helper line).
+`Up`/`Down` or `j`/`k` changes the selection, `Enter` opens an item, `Esc` goes back,
+`/` filters a collection, and `f` switches between the status and history views. `s`
+sorts the list. `t` opens the selected agent's terminal or a resume confirmation;
+`o`, then `t`, quickly opens or starts the orchestrator. More groups Agents, Services,
+Decisions, Change requests, Runtime, Needs attention, Recent recorded activity, and
+Documents, so attention and recorded activity are reachable from `5`. `a` opens only
+the operations available for the selection, including creating and fully deleting
 workspaces in the project picker, archiving a completed workspace, and deleting
 unrelated tasks and inactive sessions. `g` jumps to a verified tmux window/pane. `r`
 refreshes the read without reconcile, and `?` shows scrollable help grouped into

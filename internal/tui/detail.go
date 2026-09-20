@@ -10,56 +10,6 @@ import (
 	"workspace/internal/core"
 )
 
-func (m *Model) dashboardContent() string {
-	if m.snapshot.ObservedAt.IsZero() {
-		if m.loadError != "" {
-			return strings.Join([]string{"Workspace snapshot unavailable", m.loadError, "Press r to retry."}, "\n")
-		}
-		return "Loading workspace…"
-	}
-	panels := m.dashboardPanels()
-	lines := []string{m.dashboardSectionTitle(0, panels[0].Title)}
-	lines = append(lines, panels[0].Lines...)
-	lines = append(lines, "", m.dashboardSectionTitle(1, panels[1].Title))
-	lines = append(lines, panels[1].Lines...)
-	lines = append(lines, "", m.dashboardSectionTitle(2, panels[2].Title))
-	lines = append(lines, panels[2].Lines...)
-	lines = append(lines, "", m.dashboardSectionTitle(3, panels[3].Title))
-	lines = append(lines, panels[3].Lines...)
-	if len(m.attentionItems()) > 4 {
-		lines = append(lines, "", "v opens all attention items")
-	}
-	return safeContent(lines)
-}
-
-// dashboardSectionTitle marks the focused section with text markers so focus
-// survives in no-color terminals.
-func (m *Model) dashboardSectionTitle(index int, title string) string {
-	if m.focusedPanel == index {
-		return "[" + title + "]"
-	}
-	return "  " + title
-}
-
-func (m *Model) focusDashboardPanel(delta int) {
-	const panelCount = 4
-	m.focusedPanel = (m.focusedPanel + delta + panelCount) % panelCount
-	m.route.Query, m.route.SelectedID, m.route.StatusFilter = "", "", ""
-	m.validateSelection()
-	m.rebuildViewport()
-	if layoutFor(m.width, m.height) != layoutCompact {
-		return
-	}
-	panels := m.dashboardPanels()
-	target := m.dashboardSectionTitle(m.focusedPanel, panels[m.focusedPanel].Title)
-	for line, value := range strings.Split(m.dashboardContent(), "\n") {
-		if strings.HasPrefix(value, target) {
-			m.viewport.SetYOffset(line)
-			return
-		}
-	}
-}
-
 func (m *Model) detailContent() string {
 	if m.initialError != "" || m.route.Page == "error" {
 		doc := newDetailDoc(m.palette, m.detailWidth())

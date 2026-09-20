@@ -151,7 +151,7 @@ func TestFullHelpIsScrollableAtMinimumSize(t *testing.T) {
 // matching.
 func TestRouteMemoryUnchangedByKeymap(t *testing.T) {
 	m := workFixture()
-	m.navigate(route{Page: "tasks", Query: "payments", SelectedID: "task_work", StatusFilter: "running", Sort: "name"})
+	m.route = route{Page: "tasks", Query: "payments", SelectedID: "task_work", StatusFilter: "running", Sort: "name"}
 	m.navigate(route{Page: "worktrees"})
 	m.navigate(route{Page: "tasks"})
 	if m.route.Query != "payments" || m.route.SelectedID != "task_work" || m.route.StatusFilter != "running" || m.route.Sort != "name" {
@@ -168,8 +168,8 @@ func TestRouteMemoryUnchangedByKeymap(t *testing.T) {
 	}
 }
 
-// TestSecondaryLabelsAndFocusMarkersAreUnambiguous covers the renamed dashboard
-// section, Results type tabs, and the no-color focus marker.
+// TestSecondaryLabelsAndFocusMarkersAreUnambiguous covers the Results type tabs
+// and proves Sessions renders as a plain collection with no secondary tabs.
 func TestSecondaryLabelsAndFocusMarkersAreUnambiguous(t *testing.T) {
 	m := workFixture()
 	m.route = route{Page: "results", Tab: "handoffs"}
@@ -178,13 +178,13 @@ func TestSecondaryLabelsAndFocusMarkersAreUnambiguous(t *testing.T) {
 		t.Fatalf("Results type tabs are not labeled unambiguously: %q", crumb)
 	}
 
-	m.route = route{Page: "dashboard"}
-	m.focusedPanel = 0
+	m.width, m.height = 120, 32
+	m.navigate(route{Page: "sessions"})
 	view := m.View()
-	if !strings.Contains(view, "[Agents & runs]") {
-		t.Fatalf("no-color focus marker missing for the focused dashboard section:\n%s", view)
+	if strings.Contains(view, "[Artifacts]") || strings.Contains(view, "[Handoffs]") || strings.Contains(view, "[Checks]") {
+		t.Fatalf("Sessions rendered Results type tabs:\n%s", view)
 	}
-	if strings.Contains(view, "Overview") {
-		t.Fatalf("stale Overview copy remained:\n%s", view)
+	if strings.Contains(view, "Agents & runs") || strings.Contains(view, "1 Work") {
+		t.Fatalf("stale Work copy remained in the workspace shell:\n%s", view)
 	}
 }

@@ -149,11 +149,16 @@ dependencies or persisted results and an inactive session with no result referen
 also be deleted. Tasks and sessions receive an auditable tombstone and disappear from
 normal views; the operation does not rewrite or delete history used by other records.
 
-The first TUI screen focuses on accepted-task progress and agents' current work. It
-combines the task, session, and current Run in a readable entry, distinguishes process
-execution from result acceptance, and allows the terminal to be opened or explicitly
-resumed. If a pane is missing during navigation, the TUI proposes a reconcile that
-requires user confirmation and then retries opening the same target.
+The first TUI screen is Tasks: each row combines the task, its state, and the number of
+active executions, sessions, and runs of its current attempt. The primary navigation
+order is Tasks, Sessions, Worktrees, Results, and More. Sessions is a plain collection
+without secondary tabs, with a current/history filter and entry into the session
+details and its terminal, and More provides Needs attention and Recent recorded
+activity among other pages. Opening a task shows its related sessions, worktrees, and
+results, distinguishes process execution from result acceptance, and allows the
+terminal to be opened or explicitly resumed. If a pane is missing during navigation,
+the TUI proposes a reconcile that requires user confirmation and then retries opening
+the same target.
 
 The TUI can run manually as a browser or as a managed pane next to the orchestrator.
 The supervisor restores only a pane with recorded, verified identity; `q` in that pane
