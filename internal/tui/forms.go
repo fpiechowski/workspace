@@ -50,9 +50,10 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		targetID = ""
 	}
 	add := func(label, action string) { actions = append(actions, huh.NewOption(sanitizeLine(label), action)) }
+	workspaceClosed := m.snapshot.Status.Workspace.Status == "completed" || m.snapshot.Status.Workspace.Status == "archived"
 	switch kind {
 	case "task":
-		if task, ok := m.task(targetID); ok && task.State != "accepted" {
+		if task, ok := m.task(targetID); ok && task.State != "accepted" && !workspaceClosed {
 			add("Retry task · increment attempt and invalidate dependent results", "retry_task")
 			add("Delete task · only when it has no durable results or dependents", "delete_task")
 		}
@@ -60,11 +61,11 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		if session, ok := findSession(m.snapshot.Status.Sessions, targetID); ok {
 			if session.CurrentRunID != "" && session.Active() {
 				add("Stop current run · "+shortID(session.CurrentRunID), "stop_run")
-			} else if session.ClosedAt == nil {
+			} else if session.ClosedAt == nil && m.snapshot.Status.Workspace.Status != "archived" {
 				add("Resume this session", "resume_session")
 				add("Close idle session", "close_session")
 			}
-			if !session.Active() && session.AgentID != m.snapshot.Status.Workspace.OrchestratorAgentID {
+			if !workspaceClosed && !session.Active() && session.AgentID != m.snapshot.Status.Workspace.OrchestratorAgentID {
 				add("Delete session · only when no durable result references it", "delete_session")
 			}
 		}
@@ -89,7 +90,7 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		add("Create a new workspace", "create_workspace")
 	case "dashboard", "orchestrator", "runtime":
 		workspaceState := m.snapshot.Status.Workspace.Status
-		if workspaceState != "archived" && workspaceState != "completed" {
+		if workspaceState != "archived" {
 			add("Start / resume orchestrator", "start_orchestrator")
 		}
 		if workspaceState == "paused" {
@@ -105,6 +106,7 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 			add("Complete this manual workspace", "complete_workspace")
 		}
 		if workspaceState == "completed" {
+			add("Reopen completed workspace", "reopen_workspace")
 			add("Archive completed workspace", "archive_workspace")
 		}
 		if workspaceState != "archived" {
@@ -119,7 +121,9 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		}
 	default:
 		if targetID == "" && m.workspaceID != "" {
-			add("Start / resume orchestrator", "start_orchestrator")
+			if m.snapshot.Status.Workspace.Status != "archived" {
+				add("Start / resume orchestrator", "start_orchestrator")
+			}
 			if m.snapshot.Status.Workspace.Status == "paused" {
 				add("Resume workspace", "resume_workspace")
 			} else if m.snapshot.Status.Workspace.Status != "archived" {
@@ -163,6 +167,10 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 	if action == "complete_workspace" {
 		call.TargetName = firstNonempty(m.snapshot.Status.Workspace.Title, m.workspaceID)
 		call.TargetDetails = "Complete this manual workspace. The core refuses completion while Runs, services or non-accepted tasks remain; archive then no longer requires a workflow release reference."
+	}
+	if action == "reopen_workspace" {
+		call.TargetName = firstNonempty(m.snapshot.Status.Workspace.Title, m.workspaceID)
+		call.TargetDetails = "Reopen this completed workspace for explicitly authorized follow-up work. The reason is recorded, the current revision is guarded, accepted tasks and provenance are preserved, and release/integration/testing state must be established again before completion."
 	}
 	m.formAction = call
 	m.formReason = ""
@@ -256,7 +264,7 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 	if action == "delete_workspace" || action == "delete_task" || action == "delete_session" {
 		return m.openDestructiveConfirm(action)
 	}
-	if action == "retry_task" || action == "close_session" {
+	if action == "retry_task" || action == "close_session" || action == "reopen_workspace" {
 		m.formMode = "reason"
 		label := "Reason for this action"
 		if action == "retry_task" {
@@ -499,7 +507,9 @@ func actionCaption(call ActionCall) string {
 	case "pause":
 		return "Pause the workspace and leave current Runs untouched"
 	case "resume_workspace":
-		return "Mark the workspace active; this does not restart stopped Runs"
+		return "Resume paused workspace; this does not restart stopped Runs"
+	case "reopen_workspace":
+		return "Reopen completed workspace " + targetName
 	case "reconcile":
 		if call.NavigationRef != nil {
 			return "Terminal unavailable. Reconcile workspace runtime?"
@@ -549,6 +559,9 @@ func actionDescription(action string, call ActionCall) string {
 	}
 	if action == "select_workflow" {
 		return "Select “" + sanitizeLine(call.TargetID) + "” for this workspace. The core checks that the workspace revision is still current."
+	}
+	if action == "reopen_workspace" {
+		return "Record why this completed workspace should receive follow-up work. The core requires the current revision and rejects active worker sessions or services; the prior completed document is preserved in history."
 	}
 	if action == "show_managed_tui" || action == "hide_managed_tui" {
 		return "The workspace supervisor will reconcile the managed TUI panel to this desired state."
@@ -635,7 +648,7 @@ func actionSeverity(action string) dialogSeverity {
 	switch action {
 	case "delete_workspace", "delete_task", "delete_session", "pause_interrupt":
 		return severityDanger
-	case "archive_workspace", "complete_workspace", "stop_run", "stop_service", "retry_task", "pause":
+	case "archive_workspace", "complete_workspace", "reopen_workspace", "stop_run", "stop_service", "retry_task", "pause":
 		return severityWarning
 	default:
 		return severityNeutral

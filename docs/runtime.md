@@ -26,7 +26,10 @@ workspace, which is stored as `active` with no workflow, so losing its orchestra
 is not treated as a reason to stop. Transient
 tmux errors preserve reservations. Explicitly stopped or failed clients are not
 automatically restarted. Captured check processes lost with their Run are marked
-interrupted. A paused workspace does not delegate or restart work automatically.
+interrupted. A paused workspace does not delegate or restart work automatically. A
+completed workspace is also not restarted automatically: an explicit `workspace start`
+or `agent resume orchestrator` creates a conversation-only Run, while an archived
+workspace is terminal.
 
 `pause` stops new delegation. `pause --interrupt` also stops active panes, preserving
 their worktrees. `resume` permits delegation again; `agent resume NAME` starts the
@@ -38,6 +41,16 @@ a new Run without reopening the Task or replacing the Run provenance of the subm
 handoff, so that handoff remains reviewable. If that handoff is rejected while the
 successor Run is active, the Task can adopt that compatible Run for a non-stale
 replacement; retrying the Task remains a separate operation.
+
+Completed work has a separate continuation contract. `workspace resume` only changes a
+paused workspace back to active. `workspace start` and `agent resume orchestrator` reuse
+the compatible idle orchestrator Session where possible and mark the successor Run
+`conversation_only`; the Codex app-server bridge continues polling so questions and
+exact Session-addressed messages can be delivered without reopening task execution.
+An existing accepted worker Session can be resumed for consultation only when its task,
+attempt, worktree, input digest, and base lineage still match. The prompt explicitly
+instructs that Run not to claim work or submit a result. New worker Sessions and all
+ordinary resource/task/result mutations require `workspace reopen`.
 
 | Logical Session state | Meaning |
 |---|---|
@@ -52,6 +65,11 @@ replacement; retrying the Task remains a separate operation.
 | `exited` / `failed` | client exited normally / with an error |
 | `stopped` | explicitly stopped; supervisor does not restart it |
 | `interrupted` | pane was verified lost or superseded; Session stays resumable |
+
+The `conversation_only` Run marker is persisted independently of the process state. It
+does not change accepted task or handoff provenance, and it prevents the Codex bridge
+from exiting merely because the workspace status is `completed`; `archived` still stops
+the bridge.
 
 Every new runner exports both `WORKSPACE_SESSION_ID` and `WORKSPACE_RUN_ID`, plus
 `WORKSPACE_PARENT_SESSION_ID` when the Session was delegated by an active parent. Actor
@@ -122,6 +140,12 @@ After user-confirmed release, stop remaining sessions and `archive` the workspac
 intentionally manual workspace has no release: finish it with the explicit, user-confirmed
 `workspace complete` operation once no active Sessions or services remain and every
 non-deleted task is accepted, then `archive` it without a release reference.
+To authorize new work after completion, use `workspace reopen --reason ...
+--expected-revision ...`. Reopen preserves tasks, artifacts, handoffs, and the base
+commit, records the prior document under `history/reopen_ID/`, invalidates derived
+release/integration/live-test state, and marks change requests outdated. It refuses
+active worker Sessions and services, is idempotent under its operation key, and does not
+apply to archived workspaces.
 `clean --dry-run` reports which worktrees can be removed. Uncommitted/unpreserved files
 and unpublished commits prevent removal. `clean --backup` can preserve unpublished
 commits in a verified Git bundle; source branches remain. Only Git removes worktrees.

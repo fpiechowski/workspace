@@ -90,6 +90,9 @@ func (s *Service) PrepareIntegration(ctx context.Context, selector string, opt I
 			reused = found
 			return err
 		}
+		if err := rejectNewWorkspaceWork(d, "preparing integration"); err != nil {
+			return err
+		}
 		if d.State.Workflow == nil || d.State.Workflow.Phase != "integrating" {
 			return fail("workflow_gate", "integration can be prepared in the integrating phase")
 		}

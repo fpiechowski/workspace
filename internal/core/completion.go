@@ -36,7 +36,10 @@ func (s *Service) CompleteWorkspace(ctx context.Context, selector string, opt Co
 		if !d.State.Manual() {
 			return fail("operation_not_applicable", "workspace completion is only available for an intentionally manual workspace")
 		}
-		if d.State.Status == "completed" || d.State.Status == "archived" {
+		if d.State.Status == "archived" {
+			return fail("workspace_archived", "archived workspace cannot be completed")
+		}
+		if d.State.Status == "completed" {
 			out = d.Status()
 			return nil
 		}

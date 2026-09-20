@@ -476,3 +476,109 @@ func TestCompleteAndArchiveManualWorkspace(t *testing.T) {
 		t.Fatalf("archive response: %s", out.String())
 	}
 }
+
+func TestReopenJSONAndHelpContract(t *testing.T) {
+	project := t.TempDir()
+	ctx := context.Background()
+	for _, args := range [][]string{
+		{"init"},
+		{"-c", "user.name=Workspace Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"},
+	} {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = project
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	if _, err := core.InitProject(ctx, project); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"--json", "--project", project, "create", "--no-workflow", "reopen CLI"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("create failed: %d %s", code, errOut.String())
+	}
+	var created struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if !created.OK {
+		t.Fatalf("create response was not successful: %s", out.String())
+	}
+	ws := created.Data.Workspace.ID
+	out.Reset()
+	errOut.Reset()
+	if code := Execute([]string{
+		"--json", "--project", project, "complete", "--workspace", ws,
+		"--reason", "initial delivery", "--expected-revision", strconv.Itoa(created.Data.Workspace.Revision),
+		"--operation-key", "complete:reopen-cli",
+	}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("complete failed: %d %s", code, errOut.String())
+	}
+	var completed struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &completed); err != nil {
+		t.Fatal(err)
+	}
+	if !completed.OK || completed.Data.Workspace.Status != "completed" {
+		t.Fatalf("complete response: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	reopenArgs := []string{
+		"--json", "--project", project, "reopen", "--workspace", ws,
+		"--reason", "User requested a follow-up", "--expected-revision", strconv.Itoa(completed.Data.Workspace.Revision),
+		"--operation-key", "reopen:cli",
+	}
+	if code := Execute(reopenArgs, nil, &out, &errOut); code != 0 {
+		t.Fatalf("reopen failed: %d %s", code, errOut.String())
+	}
+	var reopened struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &reopened); err != nil {
+		t.Fatal(err)
+	}
+	if !reopened.OK || reopened.Data.Workspace.Status != "active" || !reopened.Data.Workspace.Manual() {
+		t.Fatalf("reopen response: %s", out.String())
+	}
+	reopenRevision := reopened.Data.Workspace.Revision
+
+	out.Reset()
+	errOut.Reset()
+	if code := Execute(reopenArgs, nil, &out, &errOut); code != 0 {
+		t.Fatalf("reopen replay failed: %d %s", code, errOut.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte(`"revision":`+strconv.Itoa(reopenRevision))) {
+		t.Fatalf("reopen replay did not return the original result: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	changed := append([]string(nil), reopenArgs...)
+	for i := range changed {
+		if changed[i] == "User requested a follow-up" {
+			changed[i] = "different reason"
+		}
+	}
+	if code := Execute(changed, nil, &out, &errOut); code != 1 || !bytes.Contains(out.Bytes(), []byte(`"code":"operation_conflict"`)) {
+		t.Fatalf("changed replay did not return operation_conflict: code=%d output=%s", code, out.String())
+	}
+
+	var helpOut, helpErr bytes.Buffer
+	if code := Execute([]string{"help", "reopen"}, nil, &helpOut, &helpErr); code != 0 || helpErr.Len() != 0 {
+		t.Fatalf("reopen help failed: %d %s", code, helpErr.String())
+	}
+	for _, want := range []string{"workspace reopen", "--reason", "--expected-revision", "history/reopen_ID"} {
+		if !strings.Contains(helpOut.String(), want) {
+			t.Errorf("reopen help lacks %q:\n%s", want, helpOut.String())
+		}
+	}
+}

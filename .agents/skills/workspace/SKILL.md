@@ -6,8 +6,9 @@ description: Start or resume delegated plan-first or explicit manual workspace w
 # Workspace
 
 Use the installed `workspace` CLI from the project directory. An Agent is a persona
-definition; a Session is one execution. The workspace orchestrator delegates code
-changes and keeps durable state in WORKSPACE.md; workers return handoffs and artifacts.
+definition; a Session is a durable logical conversation and a Run is one concrete
+client/tmux execution. The workspace orchestrator delegates code changes and keeps
+durable state in WORKSPACE.md; workers return handoffs and artifacts.
 
 For a new issue or work description:
 
@@ -34,8 +35,10 @@ For a new issue or work description:
 
 For existing work, inspect `workspace status --workspace <id> --json` and
 `workspace menu --workspace <id> --json`. Reuse the existing orchestrator Agent;
-`agent resume orchestrator` creates a new Session if the previous one has ended.
-Do not start a second execution because a busy agent has not answered yet.
+`agent resume orchestrator` creates a new Run in the same compatible Session when
+possible. A changed task attempt, worktree, input lineage, or client thread starts a
+new logical Session. Do not start a second execution because a busy agent has not
+answered yet.
 
 Inside an orchestrator Session, read WORKFLOW.md and WORKSPACE.md and use the CLI's
 task, worktree, agent, session, inbox and handoff commands. In a manual workspace,
@@ -54,3 +57,19 @@ it has no integration, publication, live-testing or release gate. A manual works
 never selects or advances a workflow; it uses the same task/worktree/handoff flow with
 a fixed limit of three parallel workers and is closed only by the explicit `complete`
 operation.
+
+After a workspace reaches `completed`, inspect `workspace status` and `workspace menu`
+before acting. `workspace start` or `agent resume orchestrator` is a conversation-only
+continuation and may reuse the compatible orchestrator Session; it does not create
+tasks, worktrees, services, checks, handoffs, or release state. An accepted worker
+Session may be resumed for consultation only, with its task/attempt/worktree/input/base
+lineage unchanged. Address follow-up questions with the exact Session ID when needed.
+
+Do not use `workspace resume` to reactivate completed work, and do not create new
+resources or submit task results from a conversation-only Run. If the user explicitly
+authorizes new work, inspect the current revision and run
+`workspace reopen --reason "..." --expected-revision <revision> --operation-key <key>`.
+The operation preserves tasks, artifacts, handoffs, and the base commit, records the
+prior document under `history/reopen_ID/`, invalidates derived release/integration/test
+state, and requires `--user-confirmed` when invoked by an agent. Archived workspaces
+cannot be reopened or resumed.

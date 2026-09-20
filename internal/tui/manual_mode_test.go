@@ -51,15 +51,29 @@ func TestManualWorkspaceHeaderAndActions(t *testing.T) {
 	}
 }
 
-// A completed manual workspace offers archive and no longer offers completion.
-func TestCompletedManualWorkspaceOffersArchive(t *testing.T) {
+// A completed manual workspace offers conversation, explicit reopen, and archive.
+func TestCompletedManualWorkspaceOffersConversationReopenAndArchive(t *testing.T) {
 	m := workspaceState("ws_manual", "completed")
 	values := actionValues(t, m)
-	if !values["archive_workspace"] {
-		t.Fatalf("completed manual actions missing archive: %+v", values)
+	for _, action := range []string{"start_orchestrator", "reopen_workspace", "archive_workspace"} {
+		if !values[action] {
+			t.Fatalf("completed manual actions missing %q: %+v", action, values)
+		}
 	}
-	if values["complete_workspace"] {
-		t.Fatalf("completed manual workspace still offered completion: %+v", values)
+	for _, action := range []string{"complete_workspace", "pause", "pause_interrupt", "resume_workspace"} {
+		if values[action] {
+			t.Fatalf("completed manual workspace still offered %q: %+v", action, values)
+		}
+	}
+}
+
+func TestArchivedWorkspaceOffersNoConversationOrReopen(t *testing.T) {
+	m := workspaceState("ws_archived", "archived")
+	values := actionValues(t, m)
+	for _, action := range []string{"start_orchestrator", "reopen_workspace", "resume_workspace", "archive_workspace"} {
+		if values[action] {
+			t.Fatalf("archived workspace offered %q: %+v", action, values)
+		}
 	}
 }
 

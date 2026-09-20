@@ -203,8 +203,10 @@ history views. `s` sorts the list. `t` opens the selected agent's terminal or a 
 confirmation; `o`, then `t`, quickly opens or starts the orchestrator; `l` returns to
 Agents & runs, and `v` opens Needs attention from the Dashboard. `a` opens only the
 operations available for the selection, including creating and fully deleting
-workspaces in the project picker, archiving a completed workspace, and deleting
-unrelated tasks and inactive sessions. `g` jumps to a verified tmux window/pane. `r`
+workspaces in the project picker, starting completed-workspace conversation, reopening
+or archiving a completed workspace, and deleting unrelated tasks and inactive sessions
+while ordinary task mutations remain unavailable after completion. `g` jumps to a
+verified tmux window/pane. `r`
 refreshes the read without reconcile, and `?` shows scrollable help grouped into
 Navigation, View, Runtime, Actions, and Exit (already reachable at 40×12). `--theme`
 accepts `auto`, `dark`, or `light`; `--no-color` forces textual badges.
@@ -227,8 +229,10 @@ discard: after the full ID is entered, it stops the runtime and removes state,
 worktrees, uncommitted files, and local workspace branches without requiring release or
 archive. Archive preserves history; a workflow still requires a confirmed release,
 while a manual workspace requires an earlier `complete`, and both require no active
-sessions/services. The TUI also provides `Complete this manual workspace` as a
-confirmed core operation.
+sessions/services. A completed workspace also offers conversation and the guarded
+`Reopen completed workspace` action; reopening records a reason and revision, preserves
+accepted history, and requires derived release/integration evidence to be rebuilt. The
+TUI also provides `Complete this manual workspace` as a confirmed core operation.
 Before downgrading the binary, hide the managed pane with `workspace tui hide`: the
 older launcher does not yet recognize ownership of the new pane.
 For screen and shortcut details, see [docs/tui.md](docs/tui.md).
@@ -303,6 +307,13 @@ workspace complete --reason "Analysis delivered" --user-confirmed --operation-ke
 workspace archive
 ```
 
+After a workflow or manual workspace is completed, `workspace start` and
+`agent resume orchestrator` reopen the existing compatible orchestrator Session for
+conversation only. They do not create tasks, worktrees, services, checks, handoffs, or
+release state. A worker may resume an existing accepted-task Session for consultation;
+new worker execution requires an explicit reopen. Archived workspaces are terminal for
+conversation and execution.
+
 ## Resumption and State
 
 `agent resume NAME` preserves a compatible logical Session and creates a new Run,
@@ -311,9 +322,27 @@ worktree, or native thread starts a new Session. `session list` shows one record
 conversation; `session history sess_ID` and `run list` show all executions.
 `session close sess_ID --reason ...` closes the idle context and blocks further resume.
 `pause` suspends delegation, `pause --interrupt` stops active runs, and `resume` unblocks
-the work. `reconcile` reconciles lost panes and interrupted operations. `archive` and
-`clean --dry-run` are separate from release confirmation; a manual workspace is
-archived after an earlier `complete`.
+the work; `workspace resume` applies only to paused workspaces and never reactivates a
+completed workspace. `reconcile` reconciles lost panes and interrupted operations.
+
+Completed workspaces remain inspectable and conversational. A completed Run is marked
+`conversation_only`; its Codex/native bridge remains available for questions and exact
+Session-addressed messages, but task, handoff, artifact, check, integration, release,
+and resource mutations are rejected until the workspace is reopened. To authorize new
+work, inspect the current revision and run:
+
+```sh
+workspace reopen --reason "User requested follow-up fixes" \
+  --expected-revision 42 --operation-key reopen-1
+```
+
+Reopen is an explicit, optimistic-concurrency-guarded mutation. It preserves tasks,
+artifacts, handoffs, the base commit, and prior WORKSPACE.md under
+`history/reopen_ID/`, while invalidating release/integration/live-test state and marking
+change requests outdated. An agent actor must also pass `--user-confirmed`, attesting
+that the user authorized the follow-up. `archive` and `clean --dry-run` remain separate
+from release confirmation; a manual workspace is archived after an earlier `complete`,
+and an archived workspace cannot be reopened.
 [Runtime, communication, and cleanup](docs/runtime.md).
 
 WORKSPACE.md is the canonical mode and workflow state; in a manual workspace it has an

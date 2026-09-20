@@ -116,8 +116,19 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		if opt.ReadOnly && a.Role != "planner" {
 			return fail("invalid_role", "read-only sessions require a planning/analysis persona")
 		}
-		if d.State.Status == "completed" || d.State.Status == "archived" {
-			return fail("workspace_closed", "workspace is closed")
+		conversationOnly := false
+		if d.State.Status == "archived" {
+			return fail("workspace_archived", "archived workspace cannot start or resume sessions")
+		}
+		if d.State.Status == "completed" {
+			// The orchestrator may always be explicitly started for consultation.
+			// A worker can enter a completed workspace only by resuming an existing
+			// logical Session; creating a new task execution requires workspace
+			// reopen.
+			if a.Role != "orchestrator" && opt.ResumeSession == "" {
+				return fail("workspace_completed", "workspace is completed; reopen it before starting a new worker session")
+			}
+			conversationOnly = true
 		}
 		if d.State.Status == "paused" {
 			return fail("workspace_paused", "resume workspace before starting sessions")
@@ -390,6 +401,9 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				}
 			}
 		}
+		if conversationOnly {
+			prompt.WriteString("\n\nCompleted workspace conversation notice:\nThis workspace is completed. This Run is conversation-only: discuss results, answer questions, and clarify follow-up instructions, but do not change accepted task, handoff, artifact, result, attempt, or release state. Only the orchestrator may invoke `workspace reopen` after the user has actually authorized more work.\n")
+		}
 		promptFile := filepath.Join(d.Dir, "prompts", runID+".md")
 		if err := atomicWrite(promptFile, prompt.Bytes()); err != nil {
 			return err
@@ -441,14 +455,16 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		out.Profile, out.Route, out.RoutingDecision = profile, route, &decision
 		out.Argv, out.CWD, out.PromptFile, out.State, out.OpenCodeEndpoint = argv, cwd, promptFile, "starting", openCodeEndpoint
 		bindingMode := taskClaim
-		if resumePrior != nil {
+		if conversationOnly {
+			bindingMode = taskConsultation
+		} else if resumePrior != nil {
 			bindingMode = taskResume
 		}
 		binding, err := bindTask(ctx, d, &out, opt.Task, bindingMode)
 		if err != nil {
 			return err
 		}
-		run := Run{ID: runID, SessionID: out.ID, Generation: out.RunCount + 1, Profile: profile, Route: route, RoutingDecision: &decision, Argv: argv, CWD: cwd, PromptFile: promptFile, State: "starting", ClientThreadID: thread, OpenCodeEndpoint: openCodeEndpoint, CreatedAt: created}
+		run := Run{ID: runID, SessionID: out.ID, Generation: out.RunCount + 1, ConversationOnly: conversationOnly, Profile: profile, Route: route, RoutingDecision: &decision, Argv: argv, CWD: cwd, PromptFile: promptFile, State: "starting", ClientThreadID: thread, OpenCodeEndpoint: openCodeEndpoint, CreatedAt: created}
 		out.CurrentRunID, out.LastRunID = run.ID, run.ID
 		if logical == &out {
 			d.Registry.Sessions = append(d.Registry.Sessions, out)
@@ -526,6 +542,25 @@ func priorOrchestratorPane(d *Document, newRunID string) (windowID, paneID, sess
 }
 
 func (s *Service) StartOrchestrator(ctx context.Context, selector, key string) (Session, error) {
+	var completed, active bool
+	if err := s.With(ctx, selector, func(d *Document) error {
+		completed = d.State.Status == "completed"
+		for _, session := range d.Registry.Sessions {
+			if session.AgentID == d.State.OrchestratorAgentID && session.Active() {
+				active = true
+				break
+			}
+		}
+		return nil
+	}); err != nil {
+		return Session{}, err
+	}
+	if completed && !active {
+		// `workspace start` is an explicit conversation action after completion;
+		// use the normal agent-resume path so compatible logical Sessions and
+		// native client thread IDs are preserved.
+		return s.ResumeAgent(ctx, selector, "orchestrator", key)
+	}
 	return s.StartSession(ctx, selector, SessionOptions{Agent: "orchestrator", OperationKey: key})
 }
 
@@ -599,7 +634,7 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 	cmd.Stderr = errOut
 	var runErr error
 	if session.ClientSnapshot.Adapter == "codex" {
-		runErr = s.runCodex(ctx, selector, session, cmd, in, out, errOut)
+		runErr = s.runCodex(ctx, selector, session, run, cmd, in, out, errOut)
 	} else if usesNativeOpenCodeDelivery(session.ClientSnapshot) || (session.ClientSnapshot.Adapter == "opencode" && run.ClientThreadID == "") {
 		runErr = s.runOpenCode(ctx, selector, session, cmd, out, errOut)
 	} else {

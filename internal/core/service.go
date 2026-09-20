@@ -76,6 +76,9 @@ func (s *Service) StartService(ctx context.Context, selector string, opt Service
 			out = *p
 			return nil
 		}
+		if err := rejectNewWorkspaceWork(d, "starting services"); err != nil {
+			return err
+		}
 		if d.State.Status != "active" {
 			return fail("workspace_paused", "service start requires an active workspace")
 		}

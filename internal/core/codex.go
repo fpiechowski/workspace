@@ -30,7 +30,7 @@ type pendingRPC struct {
 	Messages []string
 }
 
-func (s *Service) runCodex(ctx context.Context, selector string, session Session, cmd *exec.Cmd, userInput io.Reader, out, errOut io.Writer) error {
+func (s *Service) runCodex(ctx context.Context, selector string, session Session, run Run, cmd *exec.Cmd, userInput io.Reader, out, errOut io.Writer) error {
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	stdin, err := cmd.StdinPipe()
@@ -330,11 +330,11 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 				if !p.Active() {
 					return fail("stale_session", "session was stopped")
 				}
-				if d.State.Status == "completed" || d.State.Status == "archived" {
+				if d.State.Status == "archived" || d.State.Status == "completed" && !run.ConversationOnly {
 					exit = true
 					return nil
 				}
-				if p.TaskID != "" {
+				if p.TaskID != "" && !run.ConversationOnly {
 					t, err := findTask(d, p.TaskID)
 					if err != nil {
 						return err

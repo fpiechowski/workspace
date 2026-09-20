@@ -650,6 +650,9 @@ func (s *Service) selectWorkflow(ctx context.Context, selector, name string, exp
 		if expectedRevision != 0 && d.State.Revision != expectedRevision {
 			return fail("revision_conflict", "workspace changed while the action was being confirmed")
 		}
+		if err := rejectNewWorkspaceWork(d, "selecting a workflow"); err != nil {
+			return err
+		}
 		if d.State.Manual() {
 			return fail("operation_not_applicable", "workflow selection is not available in a manual workspace")
 		}
@@ -706,8 +709,11 @@ func (s *Service) setPaused(ctx context.Context, selector string, paused bool, g
 		if guard.ExpectedRevision != 0 && d.State.Revision != guard.ExpectedRevision {
 			return fail("revision_conflict", "workspace changed while the action was being confirmed")
 		}
-		if d.State.Status == "completed" || d.State.Status == "archived" {
-			return fail("workspace_closed", "closed workspace cannot be resumed or paused")
+		if d.State.Status == "completed" {
+			return fail("workspace_completed", "completed workspace requires workspace reopen; workspace resume applies only to paused workspaces")
+		}
+		if d.State.Status == "archived" {
+			return fail("workspace_archived", "archived workspace cannot be resumed or paused")
 		}
 		if d.State.NeedsWorkflow() {
 			return decisionRequired("select a workflow first", exampleWorkflow)

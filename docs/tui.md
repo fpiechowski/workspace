@@ -54,10 +54,15 @@ is available only for the `needs_workflow` state; a manual workspace does not la
 selection or advance.
 
 On the Dashboard, `a` provides `Complete this manual workspace` for an active manual
-workspace and `Archive completed workspace` when the state is `completed`. Archive
-requires confirmation, checks the revision, and preserves all data. A workflow still
-requires a confirmed release, while a completed manual workspace requires an earlier
-`complete`; in both cases there must be no active Sessions or services.
+workspace and, when the state is `completed`, `Start / resume orchestrator`,
+`Reopen completed workspace`, and `Archive completed workspace`. The first starts a
+conversation-only Run in the compatible logical Session; it does not create new work.
+Reopen requires a reason and the current revision, preserves accepted history, and
+invalidates derived release/integration/testing state. Archive requires confirmation,
+checks the revision, and preserves all data. A workflow still requires a confirmed
+release, while a completed manual workspace requires an earlier `complete`; in both
+cases there must be no active Sessions or services. Archived workspaces offer no
+conversation or reopen action.
 
 More contains Sessions, Agents, Services, Decisions, Change requests, Runtime, Needs
 attention, Recent recorded activity, and Documents. Runtime detail renders tmux
@@ -136,6 +141,10 @@ inactive session, it asks for resume confirmation, creates a new Run through cor
 opens its terminal on success. This resumes that specific Session; it is not a Task
 retry. When the Session's Task is awaiting review, an unchanged resume still creates a
 Run but preserves the `awaiting_review` state and the provenance of the pending handoff.
+In a completed workspace, an existing accepted worker Session can be resumed only for
+consultation; the Run is marked `conversation_only` and cannot submit a new result.
+The orchestrator's completed-workspace Run carries the same restriction while keeping
+Codex/native message delivery available. Archived sessions cannot be resumed.
 `o`, followed by `t`, opens the orchestrator or confirms starting it. A task with
 multiple sessions opens their list for explicit selection; a task without a session
 indicates that delegation through the orchestrator is needed. A historical Run remains
@@ -154,14 +163,16 @@ ownership, or mismatched socket does not trigger a reconcile proposal.
 Actions are limited to the existing core contract. Available actions include starting or
 resuming the orchestrator, pause, guarded pause-and-interrupt, workspace resume,
 reconcile, workflow selection (only for `needs_workflow`), `complete` for a manual
-workspace, task retry, session resume/stop/close, and service stop. Runtime provides
-show and hide for the managed TUI. The Task and Session menus also provide Delete. It
-requires entering the full ID and records a `deleted_at` tombstone; the record
-disappears from normal collections but remains in history for receipts. Core rejects an
-active session, a session with result references, an accepted or dependent task, and a
-task with active sessions or persisted handoffs, artifacts, checks, integration, or a
-change request. The TUI does not send messages to agents, ACK the inbox, or accept
-handoffs or decisions.
+workspace, completed-workspace conversation/reopen/archive, task retry, session
+resume/stop/close, and service stop. Runtime provides show and hide for the managed TUI.
+Completed and archived workspaces do not advertise ordinary task/resource deletion or
+retry; completed consultation remains the deliberate exception. The Task and Session
+menus otherwise provide Delete. It requires entering the full ID and records a
+`deleted_at` tombstone; the record disappears from normal collections but remains in
+history for receipts. Core rejects an active session, a session with result references,
+an accepted or dependent task, and a task with active sessions or persisted handoffs,
+artifacts, checks, integration, or a change request. The TUI does not send messages to
+agents, ACK the inbox, or accept handoffs or decisions.
 
 Each new, confirmed intent receives a `tui_<ULID>` key. Double confirmation does not
 start a second mutation. A retry after an error uses the same key and payload; after

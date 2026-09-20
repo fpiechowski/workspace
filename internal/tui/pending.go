@@ -195,6 +195,8 @@ func actionVerb(action string) string {
 		return "Archiving workspace"
 	case "complete_workspace":
 		return "Completing workspace"
+	case "reopen_workspace":
+		return "Reopening workspace"
 	case "retry_task":
 		return "Retrying task"
 	case "close_session":

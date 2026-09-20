@@ -39,7 +39,7 @@ func TestPauseInterruptAndArchiveGates(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.SetPaused(ctx, id, false)
-	expectCode(t, err, "workspace_closed")
+	expectCode(t, err, "workspace_completed")
 	completed, err := s.Status(ctx, id)
 	if err != nil {
 		t.Fatal(err)

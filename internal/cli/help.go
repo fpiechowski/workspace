@@ -190,7 +190,7 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace agent list",
 	),
 	"workspace agent resume": h(
-		"Start a new concrete Run for a persona, reusing a compatible logical Session, worktree and profile when possible.",
+		"Start a new concrete Run for a persona, reusing a compatible logical Session, worktree and profile when possible. In a completed workspace, an accepted worker resume is consultation-only; new work requires workspace reopen.",
 		"workspace agent resume planner",
 		requiredArgument("agent", "Agent ID or persona name to resume."),
 	),
@@ -465,7 +465,7 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace server stop",
 	),
 	"workspace start": h(
-		"Launch the project supervisor and workspace orchestrator in tmux. The current terminal view is not changed.",
+		"Launch the project supervisor and workspace orchestrator in tmux. In a completed workspace this starts or resumes a conversation-only Run; it does not reopen task execution. The current terminal view is not changed.",
 		"workspace start --workspace ws_01",
 	),
 	"workspace attach": h(
@@ -477,12 +477,16 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace pause --interrupt",
 	),
 	"workspace resume": h(
-		"Resume delegation for a paused workspace.",
+		"Resume delegation for a paused workspace. It does not reactivate a completed workspace; use workspace reopen with a reason and exact revision for authorized new work.",
 		"workspace resume",
 	),
 	"workspace complete": h(
 		"Complete an intentionally manual workspace after the user explicitly confirms it. The workspace must have no active Runs, services or non-accepted tasks; a workspace with a selected workflow uses release confirmation instead.",
 		"workspace complete --reason \"Analysis delivered\" --user-confirmed",
+	),
+	"workspace reopen": h(
+		"Reopen only a completed workspace for explicitly authorized follow-up work. The exact current revision and a non-empty reason are required; an agent actor must also pass --user-confirmed. The prior WORKSPACE.md is preserved under history/reopen_ID/.",
+		"workspace reopen --reason \"User requested follow-up fixes\" --expected-revision 12 --operation-key reopen-1",
 	),
 	"workspace archive": h(
 		"Archive a completed workspace so it can no longer receive normal delegation operations. A workflow workspace requires a confirmed release; a completed manual workspace does not.",

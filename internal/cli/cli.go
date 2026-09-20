@@ -470,7 +470,7 @@ func newRoot(o *options) *cobra.Command {
 	root.AddCommand(services, serviceRunner)
 	serve, server := supervisorCommands(o)
 	root.AddCommand(serve, server)
-	root.AddCommand(command("start", "Launch the orchestrator in tmux", func(c *cobra.Command, _ []string) error {
+	root.AddCommand(command("start", "Launch or converse with the orchestrator in tmux", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err
@@ -530,6 +530,24 @@ func newRoot(o *options) *cobra.Command {
 	complete.Flags().BoolVar(&completeConfirmed, "user-confirmed", false, "Attest that the user explicitly requested completion when running from an agent session")
 	complete.Flags().IntVar(&completeExpected, "expected-revision", 0, "Required current workspace revision")
 	root.AddCommand(complete)
+	var reopenReason string
+	var reopenConfirmed bool
+	var reopenExpected int
+	reopen := command("reopen", "Reopen a completed workspace for explicitly authorized follow-up work", func(c *cobra.Command, _ []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.ReopenWorkspace(c.Context(), id, core.ReopenOptions{Reason: reopenReason, ExpectedRevision: reopenExpected, UserConfirmed: reopenConfirmed}, o.key)
+		if err != nil {
+			return err
+		}
+		return o.emit(v)
+	})
+	reopen.Flags().StringVar(&reopenReason, "reason", "", "Required reason for reopening the completed workspace")
+	reopen.Flags().IntVar(&reopenExpected, "expected-revision", 0, "Required exact current workspace revision")
+	reopen.Flags().BoolVar(&reopenConfirmed, "user-confirmed", false, "Attest that the user explicitly requested follow-up work when running from an agent session")
+	root.AddCommand(reopen)
 	root.AddCommand(command("archive", "Archive a completed workspace", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {

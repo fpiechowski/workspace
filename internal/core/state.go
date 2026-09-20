@@ -28,8 +28,8 @@ func (s *Service) UpdateState(ctx context.Context, selector string, expected int
 		if d.State.Revision != expected {
 			return fail("revision_conflict", "expected %d, current %d", expected, d.State.Revision)
 		}
-		if d.State.Status == "completed" || d.State.Status == "archived" {
-			return fail("workspace_closed", "workspace is closed")
+		if err := rejectNewWorkspaceWork(d, "updating workspace state"); err != nil {
+			return err
 		}
 		if patch.Title != nil {
 			d.State.Title = *patch.Title
@@ -65,6 +65,9 @@ func (s *Service) EditState(ctx context.Context, selector string, expected int, 
 	var out Status
 	err := mutate(s, ctx, selector, keys, []any{"state.edit", expected, content}, &out, s.requireUser, func(d *Document) error {
 		if err := s.requireUser(d); err != nil {
+			return err
+		}
+		if err := rejectNewWorkspaceWork(d, "editing workspace state"); err != nil {
 			return err
 		}
 		if d.State.Status != "paused" {

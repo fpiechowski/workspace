@@ -39,8 +39,10 @@ func (s *Service) CreateAgent(ctx context.Context, selector string, opt AgentOpt
 		if found, err := replayResource(d, opt.OperationKey, &out); found || err != nil {
 			return err
 		}
-		if id == "" && (d.State.Status == "completed" || d.State.Status == "archived") {
-			return fail("workspace_closed", "workspace is closed")
+		if id == "" {
+			if err := rejectNewWorkspaceWork(d, "creating agents"); err != nil {
+				return err
+			}
 		}
 		for _, a := range d.Registry.Agents {
 			if a.ID == id {
@@ -226,8 +228,10 @@ func (s *Service) CreateWorktree(ctx context.Context, selector string, opt Workt
 		if found, err := replayResource(d, opt.OperationKey, &out); found || err != nil {
 			return err
 		}
-		if id == "" && (d.State.Status == "completed" || d.State.Status == "archived") {
-			return fail("workspace_closed", "workspace is closed")
+		if id == "" {
+			if err := rejectNewWorkspaceWork(d, "creating worktrees"); err != nil {
+				return err
+			}
 		}
 		for _, w := range d.Registry.Worktrees {
 			if w.ID == id {

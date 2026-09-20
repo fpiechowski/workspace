@@ -8,7 +8,7 @@ attempt at the work requires a new key.
 Workspace mutations include creating resources and tasks, starting/resuming/stopping
 sessions, messages and ACKs, handoffs and their evaluation, workflows, state updates,
 migrations, integration, CRs, decisions, release, `complete` for a manual workspace,
-pause/resume, reconcile, archive, and clean.
+pause/resume, reconcile, `reopen` for a completed workspace, archive, and clean.
 `project init`, `skill install`, and `server stop` write project-scoped receipts.
 Reads, `clean --dry-run`, interactive attach, and the continuously running `serve`
 command are not one-shot mutations that require a receipt.
@@ -51,6 +51,27 @@ from strong evidence, while ambiguous legacy records retain an empty `ToSession`
 OpenCode snapshots are normalized by adapter plus empty custom `deliver_argv`; missing
 native Run endpoints are restored only from valid loopback server flags in immutable argv.
 
+## Completed workspaces and reopen
+
+`completed` is intentionally not an alias for `paused`. `workspace resume` cannot
+reactivate it, and ordinary task/resource/result operations return a precise
+`workspace_completed` error; the corresponding terminal error for an archived workspace
+is `workspace_archived`. Explicit `workspace start` or `agent resume orchestrator` is
+conversation-only and may reuse the compatible logical Session. An existing accepted
+worker Session may also be resumed for consultation, but it cannot claim or submit new
+work. Exact Session-addressed messages remain deliverable while the conversation Run is
+active. The supervisor does not restart completed Sessions automatically.
+
+`workspace reopen` is a distinct mutation. It requires a non-empty reason and the exact
+current `--expected-revision`; an agent actor must also pass `--user-confirmed`. The
+operation refuses active worker Sessions and services, records the previous
+`WORKSPACE.md`, reason, status, revision, and base commit under
+`history/reopen_ID/`, and atomically changes the workspace to active. Tasks, artifacts,
+handoffs, and base provenance remain; integration, live-test, release, pending-decision,
+and change-request state is invalidated or marked outdated. Repeating the same
+operation key and payload replays the original status; changing the reason or revision
+with that key returns `operation_conflict`. Archived workspaces cannot be reopened.
+
 ## TUI Operations
 
 Mutations started from the TUI use the same core use cases as the CLI. Confirmation
@@ -77,4 +98,5 @@ and local `workspace/<id>/…` branches, and then removes all state. A revision 
 change ends in a conflict. Archive from the TUI is non-destructive, has its own revision
 guard, and preserves the existing lifecycle gates. `complete` for a manual workspace is
 a separate idempotent mutation with a revision guard and operation key; archive respects
-the confirmed release for a workflow or an earlier `complete` for manual mode.
+the confirmed release for a workflow or an earlier `complete` for manual mode. Reopen
+has its own revision/reason guard and never silently reuses release evidence.

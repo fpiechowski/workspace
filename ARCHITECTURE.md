@@ -56,12 +56,12 @@ and others) and by external adapter interfaces.
 | Object | Responsibility |
 |---|---|
 | Project | Git repository; configuration for clients, profiles, forge, tracker, and workflow. |
-| Workspace | Persistent context for one initiative from input to confirmed release (workflow) or confirmed completion (manual mode). |
+| Workspace | Persistent context for one initiative from input to confirmed release (workflow) or confirmed completion (manual mode); completed work can be reopened only through an explicit guarded mutation. |
 | Worktree | Isolated checkout and branch for planning, implementation, integration, or testing. |
 | Task | Delegated unit of work with an attempt, dependencies, and acceptance criteria. |
 | Agent | Stable persona definition: role, instructions, prompt, and profile. |
 | Session | Logical conversation context for one agent and task lineage. |
-| Run | A specific client and pane execution with routing and process result. |
+| Run | A specific client and pane execution with routing and process result; a `conversation_only` Run can inspect and discuss completed work without performing task execution. |
 | Message | Durable message addressed to an exact logical Session; `ToAgent` is retained as ownership and legacy projection. |
 | Handoff | Submission of a task result for separate evaluation by the exact recipient Session. |
 | Artifact | Immutable copy of a work product with digest and provenance. |
@@ -93,7 +93,11 @@ Key invariants:
 - a process exit code does not automatically accept a task result;
 - message ACK and handoff acceptance are separate operations;
 - new input, a task attempt, or incompatible lineage does not resume an old Session;
-- live test and release refer to a specific SHA.
+- live test and release refer to a specific SHA;
+- completed workspaces preserve task/result history and allow only conversation, archive,
+  or an explicitly authorized reopen; archived workspaces are terminal;
+- a completed conversation Run cannot claim work, submit or review results, create
+  resources, or advance release state.
 
 ## Persisted State
 
@@ -120,6 +124,12 @@ ws_ID/
     ├── pending.json      # interrupted-write intent
     └── ...               # inbox, prompts, receipts, and supervisor state
 ```
+
+An explicit reopen writes the pre-reopen `WORKSPACE.md`, authorization reason, and
+previous status/revision/base metadata under `history/reopen_ID/` in the same
+write-ahead mutation as the new active state. It preserves tasks, artifacts, handoffs,
+and the base commit, but invalidates integration, live-test, release, pending-decision,
+and change-request state that depended on the completed cycle.
 
 `WORKSPACE.md` has validated frontmatter and descriptive content for the next
 orchestrator. It is the source of truth for the mode, workflow phase (when selected),
@@ -155,6 +165,12 @@ transaction; their intent and state are recorded before invocation, and an uncer
 result is checked before retry. The full contract is in
 [docs/operations.md](docs/operations.md).
 
+`workspace reopen` is a user- or orchestrator-authorized mutation, not an implicit form
+of `workspace resume`. It requires the exact current revision and a non-empty reason;
+agent actors must carry an explicit user-confirmation flag. The operation refuses active
+worker Sessions and services, preserves immutable result provenance, and is idempotent
+under its operation key. `workspace resume` remains limited to paused workspaces.
+
 Destructive TUI actions additionally require retyping the full ID. Delete Task/Session
 uses revision and attempt/last-Run guards, while Delete Workspace writes an idempotent
 receipt to the project operation registry, stops the runtime, and removes worktrees and
@@ -180,7 +196,10 @@ to mutate state.
 The supervisor compares active reservations with actual panes, delivers messages, and
 detects lost processes. It may resume a lost orchestrator in a compatible Session —
 including in active manual mode — but it does not blindly restart executors that were
-explicitly stopped or ended with an error. Detailed states and procedures are described
+explicitly stopped or ended with an error, and it never auto-restarts an orchestrator
+merely because a workspace is completed. An explicit start/resume after completion
+creates a `conversation_only` Run in the compatible orchestrator Session; archived
+workspaces are not started. Detailed states and procedures are described
 [docs/runtime.md](docs/runtime.md).
 
 The managed TUI is a separate runtime ownership type recorded in the workspace
@@ -263,6 +282,23 @@ idempotent `workspace complete` mutation, available after user confirmation and 
 when there are no active sessions, services, or unaccepted tasks; only that operation
 allows a manual workspace to be archived without a release. Accepting all tasks, a
 process exit, or handoff acceptance alone does not complete a manual workspace.
+
+### Completed conversation and reopen
+
+`completed` is a durable result state, not a paused state. `workspace start` and
+`agent resume orchestrator` reuse a compatible idle logical Session when possible and
+create a new `Run` marked `conversation_only`; Codex/native delivery and exact
+Session-addressed messages remain available. Existing accepted worker Sessions may be
+resumed for consultation with the same task attempt, worktree, input digest, and base
+lineage, but they cannot submit a new result. New workers, tasks, worktrees, services,
+checks, handoffs, integration, change requests, decisions, release, and ordinary state
+mutations are rejected with a precise completed/archived error.
+
+`workspace reopen --reason ... --expected-revision ...` is the only normal transition
+from completed to active. It is guarded by the current revision, records the user's
+authorization, preserves accepted history and base provenance, and starts a fresh
+planning/release cycle by invalidating derived completion state. The supervisor does
+not infer reopen from process exit or from a conversation message.
 
 ## Communication, Artifacts, and Evidence
 
