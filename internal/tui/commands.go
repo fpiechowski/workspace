@@ -15,17 +15,28 @@ func (m *Model) beginRefresh() tea.Cmd {
 	}
 	gen := m.generation
 	if m.route.Page == "project" || m.workspaceID == "" {
-		if m.projectPending {
-			return nil
+		var cmds []tea.Cmd
+		if !m.projectPending {
+			m.projectPending = true
+			backend := m.backend
+			cmds = append(cmds, func() tea.Msg {
+				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				defer cancel()
+				value, err := backend.ProjectOverview(ctx)
+				return projectMsg{generation: gen, value: value, err: err}
+			})
 		}
-		m.projectPending = true
-		backend := m.backend
-		return func() tea.Msg {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			value, err := backend.ProjectOverview(ctx)
-			return projectMsg{generation: gen, value: value, err: err}
+		if !m.supervisorPending {
+			m.supervisorPending = true
+			backend := m.backend
+			cmds = append(cmds, func() tea.Msg {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				value, err := backend.ObserveSupervisor(ctx)
+				return supervisorMsg{generation: gen, value: value, err: err}
+			})
 		}
+		return tea.Batch(cmds...)
 	}
 	var cmds []tea.Cmd
 	if !m.snapshotPending {

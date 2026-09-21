@@ -280,6 +280,10 @@ refreshes the read without reconcile, and `?` shows scrollable help grouped into
 Navigation, View, Runtime, Actions, and Exit (already reachable at 40×12). `--theme`
 accepts `auto`, `dark`, or `light`; `--no-color` forces textual badges.
 
+The picker and workspace screens include a read-only supervisor health indicator. On a
+workspace screen it also summarizes effective auxiliary-service health; `--no-color`
+keeps the dot markers and explicit state/count text.
+
 In manually started TUI, `q` exits the program. In a managed pane, `q`, and also
 `Ctrl+C` outside a form, first records a durable hide request, restores the terminal,
 and only then exits; if the write fails, the pane remains open and the same operation

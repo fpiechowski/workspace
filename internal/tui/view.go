@@ -52,6 +52,23 @@ func (m *Model) View() string {
 }
 
 func (m *Model) header() string {
+	identity, identityName := m.headerIdentityText()
+	health := m.fullHeaderHealth()
+	if m.workspaceRoute() && ansi.StringWidth(identity)+1+ansi.StringWidth(health) > m.width {
+		identity = identityName
+		health = m.compactHeaderHealth()
+	}
+	health = ansi.TruncateWc(health, max(1, m.width-2), "…")
+	healthWidth := ansi.StringWidth(health)
+	identityWidth := max(1, m.width-healthWidth-1)
+	identity = ansi.TruncateWc(sanitizeLine(identity), identityWidth, "…")
+	return m.palette.titleStyle().Render(identity) + " " + health
+}
+
+// headerIdentityText returns the full identity/status text and the stable name
+// that can survive narrow-layout health reservation. Health is rendered by a
+// separate segment so the semantic dot is never lost to title truncation.
+func (m *Model) headerIdentityText() (string, string) {
 	project := m.projectRoot
 	if project == "" {
 		project = "No project found"
@@ -75,7 +92,7 @@ func (m *Model) header() string {
 		parts = append(parts, "·", "[!] "+m.initialError)
 	} else if m.actionFailure && m.loadError != "" {
 		parts = append(parts, "·", "[!] action failed")
-	} else if m.loadError != "" {
+	} else if m.visibleReadError() != "" {
 		stale := "[!] refresh failed"
 		if !m.lastSuccess.IsZero() {
 			stale = "[!] Stale · last update " + timeAgo(m.lastSuccess)
@@ -84,8 +101,16 @@ func (m *Model) header() string {
 	} else if !m.lastSuccess.IsZero() {
 		parts = append(parts, "·", "updated "+timeAgo(m.lastSuccess)+" ago")
 	}
-	line := strings.Join(parts, " ")
-	return m.palette.titleStyle().Render(ansi.TruncateWc(sanitizeLine(line), m.width, "…"))
+	name := ""
+	if m.workspaceRoute() {
+		name = m.snapshot.Status.Workspace.Title
+		if name == "" {
+			name = m.workspaceID
+		}
+	} else {
+		name = "Project " + project
+	}
+	return strings.Join(parts, " "), sanitizeLine(name)
 }
 
 func (m *Model) tabs() string {

@@ -9,6 +9,7 @@ import (
 
 type Backend interface {
 	ProjectOverview(context.Context) (core.ProjectOverview, error)
+	ObserveSupervisor(context.Context) (core.SupervisorObservation, error)
 	WorkspaceSnapshot(context.Context, string) (core.WorkspaceSnapshot, error)
 	ObserveWorkspaceRuntime(context.Context, string) (core.RuntimeObservation, error)
 	InspectWorktree(context.Context, string, string) (core.WorktreeObservation, error)
@@ -61,6 +62,9 @@ type CoreBackend struct{ Service *core.Service }
 
 func (b CoreBackend) ProjectOverview(ctx context.Context) (core.ProjectOverview, error) {
 	return b.Service.ProjectOverview(ctx)
+}
+func (b CoreBackend) ObserveSupervisor(ctx context.Context) (core.SupervisorObservation, error) {
+	return b.Service.ObserveSupervisor(ctx)
 }
 func (b CoreBackend) WorkspaceSnapshot(ctx context.Context, selector string) (core.WorkspaceSnapshot, error) {
 	return b.Service.WorkspaceSnapshot(ctx, selector)

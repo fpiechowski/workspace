@@ -5,6 +5,33 @@ same core queries and mutations as the CLI. Reading or refreshing alone creates 
 and does not start the orchestrator or supervisor; an explicit action in the picker may
 create a workspace.
 
+The shell header reserves a health segment for the project supervisor. A successful
+ping is `● server running` with the semantic success color; `stopped`, `conflict`, and
+`unavailable` use a danger-colored `●` and retain the state word. Before the first
+observation, the neutral marker says `○ server unknown`; while the first read is in
+flight it says `○ server checking`, so an initial refresh does not flash a false
+failure. The project picker and every workspace route show this project-scoped status.
+
+Workspace routes also show an auxiliary-services indicator. Services are historical
+records, so the TUI first keeps only the last record for each stable service name in
+slice order. Effective `starting` and `running` records count as active; effective
+`failed` records count as failures; `stopped` and successful `exited` records are idle
+history. Any failure is a red indicator with the failed count and, when nonzero, the
+active count. Active services without failures are green with the active count. With
+neither, the neutral label is `services idle`. On narrow layouts the service dot stays
+next to the server indicator and its text/count is moved to the reserved status row
+when needed to keep the identity and health visible at the 40-column minimum.
+
+The project overview and supervisor observation refresh independently. Workspace
+refresh uses the supervisor observation already returned by `ObserveWorkspaceRuntime`,
+so the normal workspace cadence does not issue a duplicate ping. `r` starts the same
+read-only refresh; pending reads drive the spinner and a late response from an older
+workspace or generation is ignored. If a read fails, the last good health remains on
+screen and the existing stale/error or Needs attention surfaces show the failure.
+Runtime details continue to show the complete supervisor error and observation time.
+All markers and state/count words remain visible with `--no-color`; rendered shell
+lines stay within the supported 40×12 and wider terminal sizes.
+
 ## Screens and Navigation
 
 The project picker shows the title, status, phase, active Runs, issues, full ID, path,

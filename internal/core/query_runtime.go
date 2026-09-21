@@ -7,6 +7,16 @@ import (
 	"time"
 )
 
+// SupervisorObservation is a best-effort, project-scoped view of the
+// supervisor process. The observation captures failures as states so callers
+// can keep rendering durable data while still showing why the health check is
+// not healthy.
+type SupervisorObservation struct {
+	State      string    `json:"state"`
+	Error      string    `json:"error,omitempty"`
+	ObservedAt time.Time `json:"observed_at"`
+}
+
 // RuntimeObservation is a best-effort view of external runtime state. Runtime
 // failures are captured here so callers can still display the durable snapshot.
 type RuntimeObservation struct {
@@ -18,6 +28,33 @@ type RuntimeObservation struct {
 	Topology        TmuxTopology `json:"topology"`
 	ObservedAt      time.Time    `json:"observed_at"`
 	SupervisorAt    time.Time    `json:"supervisor_observed_at"`
+}
+
+func classifySupervisorObservation(runtime Runtime, info SupervisorInfo, err error) SupervisorObservation {
+	out := SupervisorObservation{ObservedAt: nowUTC()}
+	switch {
+	case err == nil:
+		out.State = "running"
+		if tmux, ok := runtime.(Tmux); ok && info.TmuxSocket != tmux.Socket {
+			out.State = "conflict"
+			out.Error = "supervisor is using a different tmux server"
+		}
+	case errors.Is(err, os.ErrNotExist):
+		out.State = "stopped"
+	default:
+		out.State = "unavailable"
+		out.Error = err.Error()
+	}
+	return out
+}
+
+// ObserveSupervisor reads the project supervisor descriptor and pings the
+// supervisor without starting, stopping, or reconciling any runtime. Missing
+// supervisor files or sockets are the normal stopped state; other failures are
+// retained in the observation for display and attention views.
+func (s *Service) ObserveSupervisor(ctx context.Context) (SupervisorObservation, error) {
+	info, err := s.SupervisorStatus(ctx)
+	return classifySupervisorObservation(s.Runtime, info, err), nil
 }
 
 // ObserveWorkspaceRuntime reads tmux and supervisor state without starting or
@@ -48,20 +85,10 @@ func (s *Service) ObserveWorkspaceRuntime(ctx context.Context, selector string) 
 		out.ObservedAt = nowUTC()
 	}
 
-	info, err := s.SupervisorStatus(ctx)
-	out.SupervisorAt = nowUTC()
-	if err == nil {
-		out.SupervisorState = "running"
-		if tmux, ok := s.Runtime.(Tmux); ok && info.TmuxSocket != tmux.Socket {
-			out.SupervisorState = "conflict"
-			out.SupervisorError = "supervisor is using a different tmux server"
-		}
-	} else if errors.Is(err, os.ErrNotExist) {
-		out.SupervisorState = "stopped"
-	} else {
-		out.SupervisorState = "unavailable"
-		out.SupervisorError = err.Error()
-	}
+	supervisor, _ := s.ObserveSupervisor(ctx)
+	out.SupervisorState = supervisor.State
+	out.SupervisorError = supervisor.Error
+	out.SupervisorAt = supervisor.ObservedAt
 	return out, nil
 }
 
