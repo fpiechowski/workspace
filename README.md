@@ -120,6 +120,8 @@ clients:
     adapter: claude
   opencode:
     adapter: opencode
+    launch_argv: [opencode, --auto, --model, "{model}", --prompt, "{prompt}"]
+    resume_argv: [opencode, --auto, --session, "{thread_id}", --model, "{model}", --prompt, "{prompt}"]
 profiles:
   thinker:
     routes:
@@ -147,6 +149,19 @@ forge:
   remote: origin
   publication: ask
 ```
+
+Profiles are named routing policies. Each route is one client/provider/model candidate
+with its own concurrency and optional launch budget. The route `id` is a stable name,
+unique within its profile, used in routing decisions, `profile explain` output, and the
+persisted Run provenance; it is not sent to the model provider. When a profile has
+multiple eligible routes, workspace selects one using provider weights, active runs,
+recent launches, capability requirements, cooldowns, and route limits. Workflow roles
+select profiles through `workflows.<name>.profiles`.
+
+For built-in `codex`, `claude`, and `opencode` clients, `launch_argv` and `resume_argv`
+are optional because workspace supplies defaults when they are omitted. The OpenCode
+example above includes `--auto`, which auto-approves permissions that are not explicitly
+denied; remove it from both arrays if interactive permission approval is required.
 
 `forge.adapter` can be `github`, `gitlab`, or `command`. Without an adapter, a local CR
 package is created; the user can attach a real request or explicitly skip publication.
