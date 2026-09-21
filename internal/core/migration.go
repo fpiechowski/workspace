@@ -41,6 +41,9 @@ func revisionGate(s *Service, d *Document, revision int, reason string) error {
 	if err := s.requireOrchestrator(d); err != nil {
 		return err
 	}
+	if err := rejectNewWorkspaceWork(d, "revising workspace inputs or workflow"); err != nil {
+		return err
+	}
 	if d.State.Revision != revision {
 		return fail("revision_conflict", "expected revision %d, current %d", revision, d.State.Revision)
 	}

@@ -250,6 +250,24 @@ func TestCompletedWorkspaceCanBeArchivedFromTUI(t *testing.T) {
 	}
 }
 
+func TestCompletedWorkspaceReopenUsesReasonAndRevisionGuard(t *testing.T) {
+	model := workFixture()
+	model.backend = &actionHarness{}
+	model.snapshot.Status.Workspace.Status = "completed"
+	model.snapshot.Status.Workspace.Revision = 12
+	model.navigate(route{Page: "dashboard"})
+
+	if cmd := model.beginAction("reopen_workspace", ""); cmd == nil {
+		t.Fatal("reopen did not open a reason form")
+	}
+	if model.form == nil || model.formMode != "reason" || model.formAction.ExpectedRevision != 12 {
+		t.Fatalf("reopen form did not preserve the workspace revision: %+v mode=%q", model.formAction, model.formMode)
+	}
+	if !strings.Contains(actionDescription("reopen_workspace", model.formAction), "current revision") {
+		t.Fatalf("reopen form omitted its revision guard: %q", actionDescription("reopen_workspace", model.formAction))
+	}
+}
+
 func TestWorkspaceDeletionAllowsSlowMountedFilesystemCleanup(t *testing.T) {
 	if got := actionTimeout(ActionCall{Action: "delete_workspace"}); got != 10*time.Minute {
 		t.Fatalf("workspace deletion timeout = %s", got)

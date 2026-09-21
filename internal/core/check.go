@@ -80,6 +80,9 @@ func (s *Service) RunCheck(ctx context.Context, selector string, opt CheckOption
 			replay = found
 			return err
 		}
+		if err := rejectNewWorkspaceWork(d, "running checks"); err != nil {
+			return err
+		}
 		if id != "" {
 			r, err := findCheck(d, id)
 			if err != nil {
@@ -106,6 +109,9 @@ func (s *Service) RunCheck(ctx context.Context, selector string, opt CheckOption
 		run, err := currentRun(d, p)
 		if err != nil {
 			return err
+		}
+		if run.ConversationOnly {
+			return fail("conversation_only", "conversation-only Runs cannot create task checks; reopen the workspace before doing work")
 		}
 		for _, r := range d.Registry.Checks {
 			if r.RunID == run.ID && r.State == "running" {

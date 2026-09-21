@@ -34,6 +34,9 @@ func (s *Service) PrepareChangeRequest(ctx context.Context, selector string, opt
 		if found, err := replayResource(d, opt.OperationKey, &out); found || err != nil {
 			return err
 		}
+		if err := rejectNewWorkspaceWork(d, "preparing change requests"); err != nil {
+			return err
+		}
 		if previous != "" {
 			cr, err := findCR(d, previous)
 			if err != nil {
@@ -189,6 +192,9 @@ func (s *Service) PublishChangeRequest(ctx context.Context, selector, id string,
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := rejectNewWorkspaceWork(d, "publishing change requests"); err != nil {
+			return err
+		}
 		if err := requireWorkflowOperation(d.State, "change-request publication"); err != nil {
 			return err
 		}
@@ -278,6 +284,9 @@ func (s *Service) SyncChangeRequests(ctx context.Context, selector string, keys 
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := rejectNewWorkspaceWork(d, "syncing change requests"); err != nil {
+			return err
+		}
 		return requireWorkflowOperation(d.State, "change-request sync")
 	}); err != nil {
 		return nil, err
@@ -308,6 +317,9 @@ func (s *Service) SyncChangeRequests(ctx context.Context, selector string, keys 
 			if err := s.requireOrchestrator(d); err != nil {
 				return err
 			}
+			if err := rejectNewWorkspaceWork(d, "syncing change requests"); err != nil {
+				return err
+			}
 			current, err := findCR(d, cr.ID)
 			if err != nil {
 				return err
@@ -332,6 +344,9 @@ func (s *Service) ResolveChangeRequest(ctx context.Context, selector, id, action
 	var out ChangeRequest
 	err := mutate(s, ctx, selector, keys, []any{"change-request.resolve", id, action, reference, reason, userConfirmed}, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		if err := rejectNewWorkspaceWork(d, "resolving change requests"); err != nil {
 			return err
 		}
 		if err := requireWorkflowOperation(d.State, "change-request resolution"); err != nil {

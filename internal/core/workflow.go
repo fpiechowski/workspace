@@ -62,7 +62,7 @@ func advancePlanFirst(d *Document) error {
 		d.State.Workflow.Phase = "completed"
 		d.State.Status = "completed"
 	case "completed":
-		return fail("workspace_closed", "workflow is completed")
+		return fail("workspace_completed", "workflow is completed")
 	default:
 		return fail("invalid_state", "unknown plan-first workflow phase %q", phase)
 	}
@@ -165,6 +165,12 @@ func advance(ctx context.Context, d *Document, target string) error {
 	}
 	if err := requireWorkflowOperation(d.State, "workflow advance"); err != nil {
 		return err
+	}
+	if d.State.Status == "completed" {
+		return fail("workspace_completed", "workflow is completed; reopen the workspace before advancing")
+	}
+	if d.State.Status == "archived" {
+		return fail("workspace_archived", "archived workspace cannot advance")
 	}
 	if d.State.Status != "active" {
 		return fail("workflow_gate", "workspace is %s", d.State.Status)
@@ -277,7 +283,7 @@ func advance(ctx context.Context, d *Document, target string) error {
 	case "awaiting_release":
 		return fail("user_decision_required", "use release confirm after the user confirms deployment or release")
 	case "completed":
-		return fail("workspace_closed", "workflow is completed")
+		return fail("workspace_completed", "workflow is completed")
 	default:
 		return fail("invalid_state", "unknown workflow phase %q", phase)
 	}
@@ -321,6 +327,9 @@ func (s *Service) AnswerDecision(ctx context.Context, selector string, opt Decis
 	var out Status
 	err := mutate(s, ctx, selector, keys, []any{"decision.answer", opt}, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		if err := rejectNewWorkspaceWork(d, "answering decisions"); err != nil {
 			return err
 		}
 		if err := requireWorkflowOperation(d.State, "decision answers"); err != nil {
@@ -408,6 +417,12 @@ func (s *Service) ConfirmRelease(ctx context.Context, selector, reference string
 			out = d.Status()
 			return nil
 		}
+		if d.State.Status == "completed" {
+			return fail("workspace_completed", "workflow is completed; reopen the workspace before confirming release")
+		}
+		if d.State.Status == "archived" {
+			return fail("workspace_archived", "archived workspace cannot confirm release")
+		}
 		if err := requireWorkflowOperation(d.State, "release confirmation"); err != nil {
 			return err
 		}
@@ -478,6 +493,8 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 			out.Phase = "manual"
 			switch d.State.Status {
 			case "completed":
+				out.Actions = append(out.Actions, MenuAction{"conversation", "Start or resume conversation", "start"})
+				out.Actions = append(out.Actions, MenuAction{"reopen", "Reopen completed workspace", "reopen --reason <reason> --expected-revision <revision>"})
 				out.Actions = append(out.Actions, MenuAction{"archive", "Archive this workspace", "archive"})
 			case "archived":
 				out.Actions = append(out.Actions, MenuAction{"clean", "Inspect cleanup plan", "clean --dry-run"})
@@ -491,6 +508,8 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 		}
 		out.Phase = d.State.Workflow.Phase
 		if d.State.Status == "completed" {
+			out.Actions = append(out.Actions, MenuAction{"conversation", "Start or resume conversation", "start"})
+			out.Actions = append(out.Actions, MenuAction{"reopen", "Reopen completed workspace", "reopen --reason <reason> --expected-revision <revision>"})
 			out.Actions = append(out.Actions, MenuAction{"archive", "Archive this workspace", "archive"})
 			return nil
 		}

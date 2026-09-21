@@ -64,8 +64,11 @@ func (s *Service) pauseInterrupt(ctx context.Context, selector, key string, requ
 			if guard.ExpectedRevision != 0 && d.State.Revision != guard.ExpectedRevision {
 				return fail("revision_conflict", "workspace changed while the action was being confirmed")
 			}
-			if d.State.Status == "completed" || d.State.Status == "archived" {
-				return fail("workspace_closed", "closed workspace cannot be paused")
+			if d.State.Status == "completed" {
+				return fail("workspace_completed", "completed workspace cannot be paused; use workspace reopen for new work")
+			}
+			if d.State.Status == "archived" {
+				return fail("workspace_archived", "archived workspace cannot be paused")
 			}
 			if d.State.NeedsWorkflow() {
 				return decisionRequired("select a workflow before pausing", exampleWorkflow)
@@ -102,8 +105,11 @@ func (s *Service) pauseInterrupt(ctx context.Context, selector, key string, requ
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
-		if d.State.Status == "completed" || d.State.Status == "archived" {
-			return fail("workspace_closed", "closed workspace cannot continue a pending pause")
+		if d.State.Status == "completed" {
+			return fail("workspace_completed", "completed workspace cannot continue a pending pause")
+		}
+		if d.State.Status == "archived" {
+			return fail("workspace_archived", "archived workspace cannot continue a pending pause")
 		}
 		if d.State.Status != "paused" {
 			d.State.Status = "paused"

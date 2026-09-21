@@ -237,6 +237,7 @@ type Run struct {
 	ID               string           `json:"id" yaml:"id"`
 	SessionID        string           `json:"session_id" yaml:"session_id"`
 	Generation       int              `json:"generation" yaml:"generation"`
+	ConversationOnly bool             `json:"conversation_only,omitempty" yaml:"conversation_only,omitempty"`
 	Profile          string           `json:"profile" yaml:"profile"`
 	Route            Route            `json:"route" yaml:"route"`
 	RoutingDecision  *RoutingDecision `json:"routing_decision,omitempty" yaml:"routing_decision,omitempty"`

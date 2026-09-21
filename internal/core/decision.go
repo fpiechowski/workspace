@@ -8,6 +8,9 @@ func (s *Service) RefreshDecision(ctx context.Context, selector string, keys ...
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := rejectNewWorkspaceWork(d, "refreshing decisions"); err != nil {
+			return err
+		}
 		if err := requireWorkflowOperation(d.State, "decision refresh"); err != nil {
 			return err
 		}

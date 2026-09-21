@@ -60,3 +60,19 @@ it has no integration, publication, live-testing or release gate. A manual works
 never selects or advances a workflow; it uses the same task/worktree/handoff flow with
 a fixed limit of three parallel workers and is closed only by the explicit `complete`
 operation.
+
+After a workspace reaches `completed`, inspect `workspace status` and `workspace menu`
+before acting. `workspace start` or `agent resume orchestrator` is a conversation-only
+continuation and may reuse the compatible orchestrator Session; it does not create
+tasks, worktrees, services, checks, handoffs, or release state. An accepted worker
+Session may be resumed for consultation only, with its task/attempt/worktree/input/base
+lineage unchanged. Address follow-up questions with the exact Session ID when needed.
+
+Do not use `workspace resume` to reactivate completed work, and do not create new
+resources or submit task results from a conversation-only Run. If the user explicitly
+authorizes new work, inspect the current revision and run
+`workspace reopen --reason "..." --expected-revision <revision> --operation-key <key>`.
+The operation preserves tasks, artifacts, handoffs, and the base commit, records the
+prior document under `history/reopen_ID/`, invalidates derived release/integration/test
+state, and requires `--user-confirmed` when invoked by an agent. Archived workspaces
+cannot be reopened or resumed.

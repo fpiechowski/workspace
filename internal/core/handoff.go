@@ -101,6 +101,9 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 		if found, err := replayResource(d, opt.OperationKey, &out); found || err != nil {
 			return err
 		}
+		if err := rejectNewWorkspaceWork(d, "submitting task results"); err != nil {
+			return err
+		}
 		if id != "" {
 			h, err := findHandoff(d, id)
 			if err != nil {
@@ -126,6 +129,9 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 		run, err := provenanceRun(d, p)
 		if err != nil {
 			return err
+		}
+		if run.ConversationOnly {
+			return fail("conversation_only", "conversation-only Runs cannot submit task results; reopen the workspace before doing work")
 		}
 		t, err := findTask(d, p.TaskID)
 		if err != nil {
@@ -354,6 +360,9 @@ func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept
 	var out Handoff
 	err := mutate(s, ctx, selector, keys, []any{"handoff.review", id, accept, feedback}, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		if err := rejectNewWorkspaceWork(d, "reviewing task results"); err != nil {
 			return err
 		}
 		h, err := findHandoff(d, id)

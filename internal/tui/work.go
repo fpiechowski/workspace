@@ -142,6 +142,10 @@ func (m *Model) openTerminal() tea.Cmd {
 		return nil
 	}
 	if kind == "orchestrator" {
+		if m.snapshot.Status.Workspace.Status == "archived" {
+			m.notice = "Archived workspaces cannot start or resume the orchestrator."
+			return nil
+		}
 		if session, _ := m.orchestrator(); session != nil {
 			kind, id = "session", session.ID
 		} else {
@@ -151,6 +155,10 @@ func (m *Model) openTerminal() tea.Cmd {
 	if kind == "session" {
 		session, ok := findSession(m.snapshot.Status.Sessions, id)
 		if !ok {
+			return nil
+		}
+		if m.snapshot.Status.Workspace.Status == "archived" {
+			m.notice = "Archived workspaces cannot resume sessions."
 			return nil
 		}
 		if run, active := m.currentRun(session); active {

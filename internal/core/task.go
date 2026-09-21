@@ -109,8 +109,10 @@ func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec
 		if found, err := replayResource(d, key, &out); found || err != nil {
 			return err
 		}
-		if id == "" && (d.State.Status == "completed" || d.State.Status == "archived") {
-			return fail("workspace_closed", "workspace is closed")
+		if id == "" {
+			if err := rejectNewWorkspaceWork(d, "creating tasks"); err != nil {
+				return err
+			}
 		}
 		if id != "" {
 			t, err := findTask(d, id)
@@ -242,8 +244,11 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, key strin
 		if guard.ExpectedAttempt != 0 && t.Attempt != guard.ExpectedAttempt {
 			return fail("target_changed", "task %s moved from attempt %d to %d", id, guard.ExpectedAttempt, t.Attempt)
 		}
+		if err := rejectNewWorkspaceWork(d, "retrying tasks"); err != nil {
+			return err
+		}
 		if d.State.Release.UserConfirmed {
-			return fail("workspace_closed", "released work cannot be silently reopened")
+			return fail("workspace_completed", "released work requires workspace reopen before retrying tasks")
 		}
 		affected := map[string]bool{t.ID: true}
 		changed := true
@@ -316,6 +321,7 @@ type taskBindingMode uint8
 const (
 	taskClaim taskBindingMode = iota
 	taskResume
+	taskConsultation
 )
 
 // taskBinding makes the provenance decision explicit to the caller that
@@ -342,6 +348,37 @@ func bindTask(ctx context.Context, d *Document, p *Session, taskID string, mode 
 		return binding, fail("role_mismatch", "task and agent roles differ")
 	}
 	reviewResume := mode == taskResume && t.State == "awaiting_review"
+	consultationResume := mode == taskConsultation && t.State == "accepted"
+	if mode == taskConsultation && !consultationResume {
+		return binding, fail("conversation_only", "completed workspace Runs may consult only accepted task results")
+	}
+	if consultationResume {
+		if t.SessionID != p.ID || t.WorktreeID != p.WorktreeID || t.Attempt != p.TaskAttempt || t.InputDigest != p.InputDigest || t.RunID == "" {
+			return binding, fail("invalid_resume", "accepted task provenance differs from the logical session")
+		}
+		run, runErr := findRun(d, t.RunID)
+		if runErr != nil || run.SessionID != p.ID {
+			return binding, fail("invalid_resume", "accepted task provenance is missing or inconsistent")
+		}
+		input, inputErr := taskInputDigest(d, t)
+		if inputErr != nil {
+			return binding, inputErr
+		}
+		if input != t.InputDigest {
+			return binding, fail("invalid_resume", "task attempt or input lineage changed; start a new logical session")
+		}
+		if t.BaseCommit != "" {
+			head, headErr := git(ctx, p.CWD, "rev-parse", "HEAD")
+			if headErr != nil {
+				return binding, headErr
+			}
+			if _, headErr = git(ctx, p.CWD, "merge-base", "--is-ancestor", t.BaseCommit, head); headErr != nil {
+				return binding, fail("base_mismatch", "worktree does not contain task base")
+			}
+		}
+		binding.preserveRunProvenance = true
+		return binding, nil
+	}
 	if reviewResume {
 		if t.SessionID != p.ID || t.WorktreeID != p.WorktreeID || t.Attempt != p.TaskAttempt || t.InputDigest != p.InputDigest || t.RunID == "" {
 			return binding, fail("invalid_resume", "task binding differs from the logical session")

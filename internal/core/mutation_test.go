@@ -279,13 +279,13 @@ func TestClosedWorkspaceReplaysResourcesButRejectsNewWork(t *testing.T) {
 	}
 	aOpt.Name, aOpt.OperationKey = "another", "another-agent"
 	_, err = s.CreateAgent(ctx, ws, aOpt)
-	expectCode(t, err, "workspace_closed")
+	expectCode(t, err, "workspace_completed")
 	wOpt.Name, wOpt.OperationKey = "another", "another-worktree"
 	_, err = s.CreateWorktree(ctx, ws, wOpt)
-	expectCode(t, err, "workspace_closed")
+	expectCode(t, err, "workspace_completed")
 	spec.Name = "another"
 	_, err = s.CreateTask(ctx, ws, spec, "another-task")
-	expectCode(t, err, "workspace_closed")
+	expectCode(t, err, "workspace_completed")
 }
 
 func TestSessionStartReplayPreservesResponseAfterStop(t *testing.T) {

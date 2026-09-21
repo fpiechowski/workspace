@@ -45,7 +45,9 @@ Success means that the user can:
 3. inspect current state, decisions, artifacts, and execution history;
 4. resume interrupted work without duplicating uncertain operations;
 5. deliberately approve publication and live testing in a workflow and confirm
-   completion of either the workflow or a manual workspace.
+   completion of either the workflow or a manual workspace;
+6. return to a completed workspace for an explicitly authorized follow-up without
+   losing accepted history or confusing conversation with new execution.
 
 ## Product Principles
 
@@ -67,8 +69,10 @@ before accepting a task and, in a workflow, before advancing the phase.
 An agent may prepare a change request and present a diff, but publication depends on
 the policy configured by the user. A workflow ends only after user confirmation of
 deployment or release; a manual workspace closes only through the explicit,
-user-confirmed `complete` operation. Ticket content does not expand the agent's
-privileges.
+user-confirmed `complete` operation. A completed workspace remains conversationally
+inspectable, but new execution and durable task/resource mutations require the explicit
+`workspace reopen` operation with a reason and exact revision; an agent actor must also
+carry the user's confirmation. Ticket content does not expand the agent's privileges.
 
 ### Retrying Must Not Duplicate Work
 
@@ -103,6 +107,8 @@ The current scope includes:
 - Codex, Claude, OpenCode, and custom-command adapters;
 - change integration and change-request preparation/publication;
 - controlled resumption, failure reconciliation, archiving, and cleanup;
+- completed-workspace conversation and an auditable, idempotent reopen path for
+  explicitly authorized follow-up work;
 - the `plan-first` workflow and the extended, backward-compatible `issue-resolution` workflow;
 - manual mode without a workflow: task and worktree delegation, handoffs, checks, and
   acceptance with a fixed limit of 3 parallel workers, without phases, advance, release,
@@ -143,11 +149,17 @@ a release; a workflow still requires a confirmed release. Alternatively, the use
 deliberately discard the entire workspace without requiring release/archive. Full
 deletion requires retyping the ID, stops the runtime, and removes state, worktrees,
 uncommitted files, and local workspace branches. Within a completed workspace, the TUI
-offers archive, which preserves history and respects active-runtime and release gates
-(for a workflow) or the earlier `complete` (for manual mode). A task with no
-dependencies or persisted results and an inactive session with no result references can
-also be deleted. Tasks and sessions receive an auditable tombstone and disappear from
-normal views; the operation does not rewrite or delete history used by other records.
+offers conversation, guarded reopen, and archive. Conversation reuses the compatible
+orchestrator Session where possible, marks the new Run as conversation-only, and keeps
+exact Session-addressed messaging available. Reopen preserves tasks, artifacts,
+handoffs, the base commit, and the prior WORKSPACE.md under history, while invalidating
+release/integration/live-test state and marking change requests outdated. It refuses
+active worker Sessions and services; archive remains a history-preserving terminal
+operation. Ordinary task/resource mutation is not available in completed or archived
+state. A task with no dependencies or persisted results and an inactive session with no
+result references can also be deleted before completion. Tasks and sessions receive an
+auditable tombstone and disappear from normal views; the operation does not rewrite or
+delete history used by other records.
 
 The first TUI screen is Tasks: each row combines the task, its state, and the number of
 active executions, sessions, and runs of its current attempt. The primary navigation

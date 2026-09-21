@@ -217,6 +217,9 @@ func (s *Service) DeleteTask(ctx context.Context, selector, id, key string, guar
 		if guard.ExpectedRevision != 0 && d.State.Revision != guard.ExpectedRevision {
 			return fail("revision_conflict", "workspace changed while deletion was being confirmed")
 		}
+		if err := rejectNewWorkspaceWork(d, "deleting tasks"); err != nil {
+			return err
+		}
 		task, err := findTask(d, id)
 		if err != nil {
 			return err
@@ -301,6 +304,9 @@ func (s *Service) DeleteSession(ctx context.Context, selector, id, key string, g
 	err := mutate(s, ctx, selector, []string{key}, request, &out, s.requireUser, func(d *Document) error {
 		if guard.ExpectedRevision != 0 && d.State.Revision != guard.ExpectedRevision {
 			return fail("revision_conflict", "workspace changed while deletion was being confirmed")
+		}
+		if err := rejectNewWorkspaceWork(d, "deleting sessions"); err != nil {
+			return err
 		}
 		session, err := findSession(d, id)
 		if err != nil {

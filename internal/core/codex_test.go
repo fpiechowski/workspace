@@ -80,6 +80,15 @@ func TestCodexNativeWakeupAndResume(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("native client did not exit")
 	}
+	if err := s.With(ctx, ws, func(d *Document) error {
+		d.State.Status = "completed"
+		if d.State.Workflow != nil {
+			d.State.Workflow.Phase = "completed"
+		}
+		return saveDocument(d)
+	}); err != nil {
+		t.Fatal(err)
+	}
 	resumed, err := s.ResumeAgent(ctx, ws, p.AgentID, "")
 	if err != nil {
 		t.Fatal(err)
@@ -101,6 +110,33 @@ func TestCodexNativeWakeupAndResume(t *testing.T) {
 	if string(data) != "thread/resume" {
 		t.Fatalf("expected native resume, got %s", data)
 	}
+	status, err := s.Status(ctx, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentRun, err := findRunInStatus(status, resumed.CurrentRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !currentRun.ConversationOnly {
+		t.Fatal("completed native resume was not marked conversation_only")
+	}
+	exact, err := s.SendMessage(ctx, ws, MessageOptions{To: p.AgentID, ToSession: resumed.ID, Body: "A user has a question about the completed result."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(func(v Status) bool {
+		messages, err := s.Inbox(ctx, ws, p.AgentID, true)
+		if err != nil {
+			return false
+		}
+		for _, message := range messages {
+			if message.ID == exact.ID && message.DeliveredSessionID == resumed.ID && message.DeliveredRunID == resumed.CurrentRunID {
+				return true
+			}
+		}
+		return false
+	})
 	io.WriteString(w2, "/quit\n")
 	select {
 	case err := <-done:

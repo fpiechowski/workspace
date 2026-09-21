@@ -20,8 +20,14 @@ Session prompts are never rendered again or overwritten.
 These operations reset dependent results for re-evaluation, increment task attempts,
 invalidate integration/live-test results and mark existing CRs outdated. They preserve
 artifacts and handoffs. The workspace stays paused; resume when the next steps are clear.
-Released work cannot be silently reopened. A replayed operation key does not create
-another revision. Files and state share a recoverable write-ahead record.
+Released or completed work cannot be silently reopened. Use the separate
+`workspace reopen --reason ... --expected-revision ...` mutation after inspecting the
+current status. Reopen preserves the completed task/artifact/handoff history, base
+commit, and prior `WORKSPACE.md` under `history/reopen_ID/`, while invalidating release,
+integration, and live-test evidence and marking change requests outdated. It refuses
+active worker Sessions/services, requires an agent-side user confirmation when invoked
+by an agent, and does not apply to archived workspaces. A replayed operation key does
+not create another revision. Files and state share a recoverable write-ahead record.
 
 `state update` is for title, narrative and validated phase/status changes. It does not
 bypass task acceptance or release gates. `state edit` permits a paused human edit of
