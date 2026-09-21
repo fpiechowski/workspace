@@ -47,7 +47,8 @@ func migrateRegistryV2(d *Document) bool {
 					ID: sid, AgentID: old.AgentID, AgentSnapshot: old.AgentSnapshot,
 					ParentAgentID: old.ParentAgentID, ParentSessionID: old.ParentSessionID, WorktreeID: old.WorktreeID,
 					TaskID: old.TaskID, TaskAttempt: old.TaskAttempt, InputDigest: old.InputDigest,
-					ClientSnapshot: old.ClientSnapshot, ClientThreadID: old.ClientThreadID,
+					ReasoningEffort: old.ReasoningEffort,
+					ClientSnapshot:  old.ClientSnapshot, ClientThreadID: old.ClientThreadID,
 					ReadOnly: old.ReadOnly, CreatedAt: old.CreatedAt, LifecycleState: "idle",
 				})
 			} else {
@@ -59,7 +60,7 @@ func migrateRegistryV2(d *Document) bool {
 				}
 			}
 			legacyToLogical[old.ID] = sid
-			r := Run{ID: old.ID, SessionID: sid, Profile: old.Profile, Route: old.Route,
+			r := Run{ID: old.ID, SessionID: sid, Profile: old.Profile, ReasoningEffort: old.ReasoningEffort, Route: old.Route,
 				RoutingDecision: old.RoutingDecision, Argv: append([]string(nil), old.Argv...), CWD: old.CWD,
 				PromptFile: old.PromptFile, State: old.State, PaneID: old.PaneID, WindowID: old.WindowID,
 				ClientState: old.ClientState, ClientThreadID: old.ClientThreadID, OpenCodeEndpoint: old.OpenCodeEndpoint, CreatedAt: old.CreatedAt,

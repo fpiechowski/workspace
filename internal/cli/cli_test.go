@@ -14,10 +14,58 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"gopkg.in/yaml.v3"
 
 	"workspace/internal/buildinfo"
 	"workspace/internal/core"
 )
+
+func TestProfileListIncludesReasoningEffort(t *testing.T) {
+	project := t.TempDir()
+	ctx := context.Background()
+	for _, args := range [][]string{
+		{"init"},
+		{"-c", "user.name=Workspace Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"},
+	} {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = project
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	if _, err := core.InitProject(ctx, project); err != nil {
+		t.Fatal(err)
+	}
+	s := &core.Service{Root: project}
+	cfg, err := s.Config()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Clients = map[string]core.Client{"test": {Adapter: "command", LaunchArgv: []string{"wrapper", "{prompt}"}}}
+	cfg.Profiles = map[string]core.Profile{"worker": {ReasoningEffort: "high", Routes: []core.Route{{ID: "worker", Client: "test", Provider: "provider", Model: "provider/model", MaxConcurrency: 1}}}}
+	config, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".workspace", "config.yaml"), config, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"--json", "--project", project, "profile", "list"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("profile list failed: %d %s", code, errOut.String())
+	}
+	var response struct {
+		OK   bool                    `json:"ok"`
+		Data map[string]core.Profile `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.OK || response.Data["worker"].ReasoningEffort != "high" {
+		t.Fatalf("profile list omitted reasoning_effort: %s", out.String())
+	}
+}
 
 func TestStructuredErrorsAndWorkflowDiscovery(t *testing.T) {
 	var out, errOut bytes.Buffer

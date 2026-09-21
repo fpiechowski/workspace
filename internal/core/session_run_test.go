@@ -89,8 +89,8 @@ func TestLegacySessionMigrationPreservesProvenanceAndIsIdempotent(t *testing.T) 
 	later := now.Add(time.Minute)
 	d := &Document{State: Workspace{Tasks: []Task{{ID: "task", SessionID: "sess_old_2"}}}, Registry: Registry{
 		Sessions: []Session{
-			{ID: "sess_old_1", AgentID: "agent", WorktreeID: "wt", TaskID: "task", TaskAttempt: 1, InputDigest: "digest", ClientSnapshot: Client{Adapter: "codex"}, ClientThreadID: "thread", State: "interrupted", CreatedAt: now},
-			{ID: "sess_old_2", AgentID: "agent", WorktreeID: "wt", TaskID: "task", TaskAttempt: 1, InputDigest: "digest", ClientSnapshot: Client{Adapter: "codex"}, ClientThreadID: "thread", State: "running", CreatedAt: later},
+			{ID: "sess_old_1", AgentID: "agent", WorktreeID: "wt", TaskID: "task", TaskAttempt: 1, InputDigest: "digest", ReasoningEffort: "legacy-effort", ClientSnapshot: Client{Adapter: "codex"}, ClientThreadID: "thread", State: "interrupted", CreatedAt: now},
+			{ID: "sess_old_2", AgentID: "agent", WorktreeID: "wt", TaskID: "task", TaskAttempt: 1, InputDigest: "digest", ReasoningEffort: "legacy-effort", ClientSnapshot: Client{Adapter: "codex"}, ClientThreadID: "thread", State: "running", CreatedAt: later},
 		},
 		Checks:     []CheckReceipt{{ID: "check", SessionID: "sess_old_2"}},
 		Handoffs:   []Handoff{{ID: "handoff", FromSession: "sess_old_1"}},
@@ -110,6 +110,9 @@ func TestLegacySessionMigrationPreservesProvenanceAndIsIdempotent(t *testing.T) 
 	sid := d.Registry.Sessions[0].ID
 	if d.Registry.Runs[0].ID != "sess_old_1" || d.Registry.Runs[1].ID != "sess_old_2" || d.Registry.Runs[1].SessionID != sid {
 		t.Fatal("legacy run aliases were not preserved")
+	}
+	if d.Registry.Sessions[0].ReasoningEffort != "legacy-effort" || d.Registry.Runs[0].ReasoningEffort != "legacy-effort" || d.Registry.Runs[1].ReasoningEffort != "legacy-effort" {
+		t.Fatal("legacy reasoning effort was not copied into Session and Run provenance")
 	}
 	if d.Registry.Checks[0].SessionID != sid || d.Registry.Checks[0].RunID != "sess_old_2" ||
 		d.Registry.Handoffs[0].FromSession != sid || d.Registry.Handoffs[0].FromRun != "sess_old_1" ||

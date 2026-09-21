@@ -23,7 +23,10 @@ func TestCodexNativeWakeupAndResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	exe, _ := os.Executable()
-	cfg.Clients["test"] = Client{Adapter: "codex", LaunchArgv: []string{exe, "-test.run=TestAppServerProcess", "--", "app-server-helper"}}
+	cfg.Clients["test"] = Client{Adapter: "codex", LaunchArgv: []string{exe, "-test.run=TestAppServerProcess", "--", "app-server-helper"}, ThreadParams: map[string]any{"effort": "client-default", "approvalPolicy": "never"}}
+	profile := cfg.Profiles["frontier"]
+	profile.ReasoningEffort = "configured-effort"
+	cfg.Profiles["frontier"] = profile
 	b, _ := yaml.Marshal(cfg)
 	if err := atomicWrite(filepath.Join(s.Root, ".workspace", "config.yaml"), b); err != nil {
 		t.Fatal(err)
@@ -53,6 +56,10 @@ func TestCodexNativeWakeupAndResume(t *testing.T) {
 		t.Fatal("native client did not reach expected state")
 	}
 	waitFor(func(v Status) bool { return v.Sessions[0].ClientState == "idle" && v.Sessions[0].ClientThreadID != "" })
+	startParams := readCodexThreadParams(t, filepath.Join(p.CWD, "work-products", "thread-thread-start.json"))
+	if startParams["effort"] != "configured-effort" || startParams["approvalPolicy"] != "never" {
+		t.Fatalf("thread/start did not receive the profile effort or other params: %#v", startParams)
+	}
 	m, err := s.SendMessage(ctx, ws, MessageOptions{To: p.AgentID, Body: "A worker has completed planning."})
 	if err != nil {
 		t.Fatal(err)
@@ -103,6 +110,10 @@ func TestCodexNativeWakeupAndResume(t *testing.T) {
 	waitFor(func(v Status) bool {
 		return len(v.Sessions) == 1 && len(v.Runs) == 2 && v.Sessions[0].ClientState == "idle"
 	})
+	resumeParams := readCodexThreadParams(t, filepath.Join(p.CWD, "work-products", "thread-thread-resume.json"))
+	if resumeParams["effort"] != "configured-effort" || resumeParams["approvalPolicy"] != "never" {
+		t.Fatalf("thread/resume did not receive the profile effort or other params: %#v", resumeParams)
+	}
 	data, err := os.ReadFile(filepath.Join(p.CWD, "work-products", "thread-method.txt"))
 	if err != nil {
 		t.Fatal(err)
@@ -173,6 +184,10 @@ func TestAppServerProcess(t *testing.T) {
 			if err := atomicWrite(filepath.Join("work-products", "thread-method.txt"), []byte(req.Method)); err != nil {
 				os.Exit(3)
 			}
+			params, _ := json.Marshal(req.Params)
+			if err := atomicWrite(filepath.Join("work-products", "thread-"+strings.ReplaceAll(req.Method, "/", "-")+".json"), params); err != nil {
+				os.Exit(3)
+			}
 			encoder.Encode(map[string]any{"id": req.ID, "result": map[string]any{"thread": map[string]any{"id": "test-native-thread"}}})
 		case "turn/start":
 			encoder.Encode(map[string]any{"id": req.ID, "result": map[string]any{"turn": map[string]any{"id": "turn-1"}}})
@@ -185,4 +200,17 @@ func TestAppServerProcess(t *testing.T) {
 		}
 	}
 	os.Exit(0)
+}
+
+func readCodexThreadParams(t *testing.T, path string) map[string]any {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var params map[string]any
+	if err := json.Unmarshal(b, &params); err != nil {
+		t.Fatal(err)
+	}
+	return params
 }

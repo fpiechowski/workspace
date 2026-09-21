@@ -170,7 +170,7 @@ func (d *Document) syncSession(p *Session) {
 	if current == nil || !current.Active() {
 		p.CurrentRunID = ""
 	}
-	p.Profile, p.Route, p.RoutingDecision = selected.Profile, selected.Route, selected.RoutingDecision
+	p.Profile, p.ReasoningEffort, p.Route, p.RoutingDecision = selected.Profile, selected.ReasoningEffort, selected.Route, selected.RoutingDecision
 	p.Argv, p.CWD, p.PromptFile = append([]string(nil), selected.Argv...), selected.CWD, selected.PromptFile
 	p.RunState, p.State, p.PaneID, p.WindowID = selected.State, selected.State, selected.PaneID, selected.WindowID
 	p.FinishedAt, p.ExitCode, p.Error, p.ClientState = selected.FinishedAt, selected.ExitCode, selected.Error, selected.ClientState

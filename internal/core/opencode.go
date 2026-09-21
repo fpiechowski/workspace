@@ -737,7 +737,15 @@ func (s *Service) recoverOpenCodeBinding(ctx context.Context, d *Document, sessi
 		return "", nil
 	}
 
-	items, err := s.listOpenCodeSessions(ctx, *session, os.Environ())
+	env := os.Environ()
+	var err error
+	if session.ReasoningEffort != "" {
+		env, err = withOpenCodeReasoningEffortEnv(env, session.Argv, session.ReasoningEffort)
+		if err != nil {
+			return "", err
+		}
+	}
+	items, err := s.listOpenCodeSessions(ctx, *session, env)
 	if err != nil {
 		return "", fail("opencode_thread_recovery", "cannot safely recover the OpenCode conversation for session %s: %v; use `workspace session bind-thread %s --thread-id <thread-id>` and retry", session.ID, err, session.ID)
 	}
