@@ -111,17 +111,30 @@ Configuration and templates may be versioned; working data has local Git ignore 
 Keep the generated `schema_version`, `project_id`, and `runtime`. Add clients and
 profiles to `.workspace/config.yaml`. Replace model names with identifiers available in
 your own account; profiles contain no built-in assumptions about pricing or subscription.
+The example below shows complete client definitions for every supported adapter. Keep the
+clients you use and replace the command and wrapper paths with locally installed paths.
 
 ```yaml
 clients:
   codex:
     adapter: codex
+    launch_argv: [codex, app-server, --stdio]
+    # Resume is handled natively by the Codex app-server bridge.
   claude:
     adapter: claude
+    launch_argv: [claude, --model, "{model}", "{prompt}"]
+    resume_argv: [claude, --resume, "{thread_id}", --model, "{model}", "{prompt}"]
+    # Optional external mailbox delivery:
+    # deliver_argv: [/absolute/path/to/deliver-wrapper, "{thread_id}", "{message_file}", "{message_id}"]
   opencode:
     adapter: opencode
     launch_argv: [opencode, --auto, --model, "{model}", --prompt, "{prompt}"]
     resume_argv: [opencode, --auto, --session, "{thread_id}", --model, "{model}", --prompt, "{prompt}"]
+  command:
+    adapter: command
+    launch_argv: [/absolute/path/to/agent-wrapper, --model, "{model}", --prompt-file, "{prompt_file}"]
+    resume_argv: [/absolute/path/to/agent-wrapper, --resume, "{thread_id}", --model, "{model}", --prompt-file, "{prompt_file}"]
+    deliver_argv: [/absolute/path/to/deliver-wrapper, "{thread_id}", "{message_file}", "{message_id}"]
 profiles:
   thinker:
     reasoning_effort: medium
