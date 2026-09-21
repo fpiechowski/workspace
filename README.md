@@ -268,10 +268,11 @@ accepts `auto`, `dark`, or `light`; `--no-color` forces textual badges.
 In manually started TUI, `q` exits the program. In a managed pane, `q`, and also
 `Ctrl+C` outside a form, first records a durable hide request, restores the terminal,
 and only then exits; if the write fails, the pane remains open and the same operation
-can be retried. `Ctrl+C` in a form cancels the form. `tui show` restores the pane,
-`tui hide` disables and cleans up only the verified pane, and `tui status` shows its
-generation, ownership, and backoff. The supervisor reconciles the pane together with
-the orchestrator; show does not start a new workspace or supervisor by itself.
+can be retried. `Ctrl+C` in a form cancels the form. `tui show` explicitly opens or
+restores the pane, `tui hide` disables and cleans up only the verified pane, and
+`tui status` shows its generation, ownership, and last known state. The supervisor
+does not start or restore the TUI, and workspace start does not open it; show does not
+start a new workspace or supervisor by itself.
 
 The TUI uses the same core queries and mutations as the CLI. Confirmations are guarded
 by the revision, task attempt, or exact RunID; “Pause and interrupt” shows the Runs and

@@ -197,19 +197,16 @@ Inside tmux, navigation selects the client by its TTY and current pane; no clien
 multiple clients viewing the pane, or another socket produces an explicit error instead
 of switching a random terminal.
 
-The supervisor maintains at most one managed pane per workspace after orchestrator
-history has been recorded. The pane goes into the same orchestrator window with an
-inactive split, does not take focus, and is not an Agent, Session, or Run.
-`workspace tui show` records desired state and reconciles the pane; `hide` disables it,
-and `status` shows generation, ownership, error, and backoff. `q`/`Ctrl+C` records a hide
-request and exits the TUI only after restoring the terminal; the supervisor removes the
-pane at the next reconcile. An external pane kill leaves desired=true, so the supervisor
-can restore it. If the TUI process is still running but its pane metadata disappears or
-is corrupted, reconcile confirms the exact runner command and restores the metadata. It
-does not remove neighboring, unverified panes. Losing the entire orchestrator window
-first causes the orchestrator to be restored, followed by one TUI pane in the new window.
+The managed pane is user-operated. `workspace tui show` explicitly records desired state
+and reconciles at most one pane in the existing orchestrator window with an inactive
+split; it does not take focus and the pane is not an Agent, Session, or Run. `hide`
+disables it and removes only a pane with verified ownership, while `status` shows
+generation, ownership, error, and last known state. The supervisor, workspace start,
+and general `reconcile` do not create or restore the pane.
 
-The pane remains available after pause and completed until the user hides it or the
-workspace is archived. Archive cleans up the verified pane; the UI does not block `clean`
-and is not counted as an active domain process. Before downgrading the binary, run
+`q`/`Ctrl+C` records a hide request and exits the TUI only after restoring the terminal.
+An external pane kill or process exit leaves the panel absent until the user runs
+`workspace tui show` again. Explicit UI reconciliation confirms the exact runner command
+and does not remove neighboring, unverified panes. The UI does not block `clean` and is
+not counted as an active domain process. Before downgrading the binary, run
 `workspace tui hide`, because the old launcher does not recognize the new pane.

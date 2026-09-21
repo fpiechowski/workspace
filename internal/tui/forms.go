@@ -564,7 +564,7 @@ func actionDescription(action string, call ActionCall) string {
 		return "Record why this completed workspace should receive follow-up work. The core requires the current revision and rejects active worker sessions or services; the prior completed document is preserved in history."
 	}
 	if action == "show_managed_tui" || action == "hide_managed_tui" {
-		return "The workspace supervisor will reconcile the managed TUI panel to this desired state."
+		return "This action explicitly reconciles the managed TUI panel to this desired state."
 	}
 	if call.TargetDetails != "" {
 		return sanitizeLine(call.TargetDetails)

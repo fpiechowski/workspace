@@ -231,12 +231,13 @@ workspaces are not started. Detailed states and procedures are described
 [docs/runtime.md](docs/runtime.md).
 
 The managed TUI is a separate runtime ownership type recorded in the workspace
-`.runtime/ui.json`. After the orchestrator history is detected, the supervisor starts at
-most one pane next to the orchestrator without changing focus. The launch token and
-generation are claimed by the exact pane; reconcile removes only panes whose identity
-is confirmed by metadata or a specific runner command. UI errors and agent errors are
-reconciled independently. The UI does not count as a writer, service, or active Run and
-does not block cleanup. The full contract is described in [docs/runtime.md](docs/runtime.md).
+`.runtime/ui.json`. It is user-operated: `workspace tui show` explicitly creates or
+restores at most one pane next to the orchestrator without changing focus, while the
+supervisor and workspace start do not create or restore it. The launch token and
+generation are claimed by the exact pane; explicit UI operations remove only panes
+whose identity is confirmed by metadata or a specific runner command. The UI does not
+count as a writer, service, or active Run and does not block cleanup. The full contract
+is described in [docs/runtime.md](docs/runtime.md).
 
 ## Client Adapters and Routing
 

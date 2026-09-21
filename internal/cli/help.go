@@ -114,7 +114,7 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace tui --project ./repo --theme dark",
 	),
 	"workspace tui show": h(
-		"Enable the managed companion panel and reconcile it into an existing orchestrator window. --operation-key makes retries idempotent.",
+		"Explicitly enable and reconcile the managed companion panel into an existing orchestrator window. --operation-key makes retries idempotent.",
 		"workspace tui show --workspace ws_01 --operation-key tui-show:ws_01",
 	),
 	"workspace tui hide": h(
@@ -122,7 +122,7 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace tui hide --workspace ws_01 --operation-key tui-hide:ws_01",
 	),
 	"workspace tui status": h(
-		"Show desired state, generation, pane/window ownership and recovery status for the managed companion panel.",
+		"Show desired state, generation, pane/window ownership and last known runtime state for the managed companion panel.",
 		"workspace tui status --workspace ws_01 --json",
 	),
 	"workspace open": h(

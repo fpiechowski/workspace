@@ -78,8 +78,8 @@ func readUIRecord(dir, workspaceID, projectID string) (uiRecord, bool, error) {
 		SchemaVersion: uiSchemaVersion,
 		WorkspaceID:   workspaceID,
 		ProjectID:     projectID,
-		Desired:       true,
-		State:         "waiting_for_runtime",
+		Desired:       false,
+		State:         "disabled",
 		UpdatedAt:     nowUTC(),
 		Receipts:      map[string]uiReceipt{},
 	}
@@ -150,8 +150,6 @@ func (s *Service) UIPaneStatus(ctx context.Context, selector string) (UIStatus, 
 		if !exists {
 			if d.State.Status == "archived" {
 				record.Desired, record.State = false, "disabled"
-			} else if !hasOrchestratorHistory(d) {
-				record.State = "waiting_for_runtime"
 			}
 		}
 		out = uiStatus(record)
@@ -164,11 +162,10 @@ func (s *Service) SetUIPaneDesired(ctx context.Context, selector string, desired
 	return s.setUIPaneDesired(ctx, selector, desired, key, false, false)
 }
 
-// HideManagedUIPane records q's durable hide intent and leaves pane cleanup to
-// the supervisor after the Bubble Tea process has restored and exited from the
-// terminal.
+// HideManagedUIPane records q's durable hide intent. The managed process exits
+// after Bubble Tea restores the terminal; tmux then closes its pane.
 func (s *Service) HideManagedUIPane(ctx context.Context, selector, key string) error {
-	_, err := s.setUIPaneDesired(ctx, selector, false, key, true, true)
+	_, err := s.setUIPaneDesired(ctx, selector, false, key, true, false)
 	return err
 }
 

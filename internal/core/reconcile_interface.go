@@ -30,12 +30,8 @@ func (s *Service) ReconcileInterface(ctx context.Context, selector string) error
 			return err
 		}
 		archived := doc.State.Status == "archived"
-		if !exists && (archived || !hasOrchestratorHistory(doc)) {
-			return nil
-		}
 		if !exists {
-			record.UIID = ID("ui")
-			record.Desired = true
+			return nil
 		}
 		if archived {
 			record.Desired = false
@@ -187,9 +183,14 @@ func (s *Service) ReconcileInterface(ctx context.Context, selector string) error
 			return nil
 		}
 		if record.State == "running" {
-			setUIBackoff(&record, "managed interface pane was lost", nowUTC())
+			// The UI is user-managed. A new explicit show must be able to
+			// recover a pane that disappeared while its record still said running;
+			// there is no supervisor retry loop to advance this state for us.
+			record.State = "waiting_for_runtime"
 			record.PaneID, record.WindowID = "", ""
-			return writeUIRecord(dir, record)
+			record.LastError = ""
+			record.NextRetryAt = nil
+			record.UpdatedAt = nowUTC()
 		}
 		if record.NextRetryAt != nil && nowUTC().Before(*record.NextRetryAt) {
 			record.State = "backoff"

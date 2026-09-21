@@ -30,7 +30,7 @@ func intString(value int) string {
 }
 
 func (t Tmux) setUIPaneMetadata(ctx context.Context, launch UILaunch, paneID string) error {
-	if _, err := t.call(ctx, "set-option", "-p", "-t", paneID, "remain-on-exit", "on"); err != nil {
+	if _, err := t.call(ctx, "set-option", "-p", "-t", paneID, "remain-on-exit", "off"); err != nil {
 		return err
 	}
 	values := [][2]string{

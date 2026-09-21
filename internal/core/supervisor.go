@@ -251,11 +251,6 @@ func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 			failures = append(failures, fmt.Errorf("agent runtime: %w", err))
 		}
 	}
-	if _, managed := s.Runtime.(ManagedUIRuntime); managed {
-		if err := s.ReconcileInterface(ctx, status.Workspace.ID); err != nil {
-			failures = append(failures, fmt.Errorf("managed interface: %w", err))
-		}
-	}
 	return errors.Join(failures...)
 }
 
