@@ -92,6 +92,10 @@ var commandHelpSpecs = map[string]commandHelp{
 		"Show the embedded version, source commit, build date and runtime target. This command works from any directory and does not inspect project state.",
 		"workspace version --json",
 	),
+	"workspace prime": h(
+		"Print the current binary's bundled general agent guidance as raw Markdown, for use at a new session or after context compaction. This command works without a project and does not report live workspace state; use status or menu for that.",
+		"workspace prime\nworkspace prime --json",
+	),
 	"workspace upgrade": h(
 		"Download the newest stable release for the current supported target, verify its checksum and archive layout, then atomically replace the running executable. Existing supervisors and tmux processes keep their old in-memory code until restarted.",
 		"workspace upgrade",

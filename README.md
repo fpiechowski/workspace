@@ -46,6 +46,20 @@ workspace version
 workspace version --json
 ```
 
+The binary also carries the current general agent guidance used by the workspace skill.
+Refresh it at the start of a new session or after context compaction with:
+
+```sh
+workspace prime
+workspace prime --json
+```
+
+The normal form prints the embedded Markdown directly with a trailing newline. The JSON
+form uses the standard `{ok:true,data:{instructions:"..."}}` success envelope and puts
+the same Markdown in `data.instructions`. `prime` works from any directory and is
+read-only: it does not inspect or create project/workspace state. Use
+`workspace status` and `workspace menu` when you need live state or available actions.
+
 Upgrade checks the latest published, non-draft, non-prerelease GitHub Release for the
 current target, verifies the exact archive's SHA-256 entry, validates the archive
 layout, and atomically replaces the executable in its existing directory:
