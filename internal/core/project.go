@@ -186,6 +186,9 @@ func (s *Service) Config() (Config, error) {
 		if p.Strategy != "" && p.Strategy != "provider-balanced" {
 			return cfg, fail("invalid_config", "unsupported strategy in profile %q", name)
 		}
+		if p.ReasoningEffort != "" && strings.TrimSpace(p.ReasoningEffort) == "" {
+			return cfg, fail("invalid_config", "reasoning_effort in profile %q must not be whitespace-only", name)
+		}
 		if p.CooldownSeconds < 0 {
 			return cfg, fail("invalid_config", "cooldown_seconds must be nonnegative")
 		}

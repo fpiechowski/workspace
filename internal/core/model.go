@@ -64,6 +64,7 @@ type Profile struct {
 	RequiredCapabilities []string           `yaml:"required_capabilities,omitempty" json:"required_capabilities,omitempty"`
 	CooldownSeconds      int                `yaml:"cooldown_seconds,omitempty" json:"cooldown_seconds,omitempty"`
 	ProviderWeights      map[string]float64 `yaml:"provider_weights,omitempty" json:"provider_weights,omitempty"`
+	ReasoningEffort      string             `yaml:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty"`
 	Routes               []Route            `yaml:"routes" json:"routes"`
 	Strategy             string             `yaml:"strategy,omitempty" json:"strategy,omitempty"`
 }
@@ -210,6 +211,7 @@ type Session struct {
 	// last_run when idle). They are never the source of runtime ownership.
 	RoutingDecision  *RoutingDecision `json:"routing_decision,omitempty" yaml:"routing_decision,omitempty"`
 	Profile          string           `json:"profile" yaml:"profile"`
+	ReasoningEffort  string           `json:"reasoning_effort,omitempty" yaml:"reasoning_effort,omitempty"`
 	Route            Route            `json:"route" yaml:"route"`
 	Argv             []string         `json:"argv" yaml:"argv"`
 	CWD              string           `json:"cwd" yaml:"cwd"`
@@ -239,6 +241,7 @@ type Run struct {
 	Generation       int              `json:"generation" yaml:"generation"`
 	ConversationOnly bool             `json:"conversation_only,omitempty" yaml:"conversation_only,omitempty"`
 	Profile          string           `json:"profile" yaml:"profile"`
+	ReasoningEffort  string           `json:"reasoning_effort,omitempty" yaml:"reasoning_effort,omitempty"`
 	Route            Route            `json:"route" yaml:"route"`
 	RoutingDecision  *RoutingDecision `json:"routing_decision,omitempty" yaml:"routing_decision,omitempty"`
 	Argv             []string         `json:"argv" yaml:"argv"`

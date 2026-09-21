@@ -124,15 +124,19 @@ clients:
     resume_argv: [opencode, --auto, --session, "{thread_id}", --model, "{model}", --prompt, "{prompt}"]
 profiles:
   thinker:
+    reasoning_effort: medium
     routes:
       - {id: planner, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_THINKER_MODEL, max_concurrency: 1}
   orchestrator:
+    reasoning_effort: high
     routes:
       - {id: orchestrator, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_ORCHESTRATOR_MODEL, max_concurrency: 3}
   supervisor:
+    reasoning_effort: low
     routes:
       - {id: supervisor, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_SUPERVISOR_MODEL, max_concurrency: 1}
   worker:
+    reasoning_effort: medium
     routes:
       - {id: worker, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_WORKER_MODEL, max_concurrency: 3}
 defaults:
@@ -157,6 +161,11 @@ persisted Run provenance; it is not sent to the model provider. When a profile h
 multiple eligible routes, workspace selects one using provider weights, active runs,
 recent launches, capability requirements, cooldowns, and route limits. Workflow roles
 select profiles through `workflows.<name>.profiles`.
+
+The optional profile-level `reasoning_effort` applies to every route in that profile.
+Workspace passes it through the selected client adapter, and the value must be supported
+by the selected client and model. Supported spellings are adapter/provider-specific;
+leave the field out to keep the client's existing default behavior.
 
 For built-in `codex`, `claude`, and `opencode` clients, `launch_argv` and `resume_argv`
 are optional because workspace supplies defaults when they are omitted. The OpenCode

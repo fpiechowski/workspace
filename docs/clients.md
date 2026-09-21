@@ -18,6 +18,24 @@ text are displayed without requiring a JSON response.
 Project-specific native thread parameters can be supplied with `clients.NAME.thread_params`; the bridge always
 sets the selected model and workspace cwd. It does not bypass client permissions.
 
+An optional profile-level `reasoning_effort` is copied to the app-server `effort` field
+for both `thread/start` and `thread/resume`. When configured, it overrides
+`thread_params.effort` for that Run; when omitted, an existing client parameter and the
+Codex default are left unchanged.
+
+Claude receives `--effort VALUE` on both launch and resume when a profile sets the field.
+Workspace does not add a duplicate when custom argv already contains
+`{reasoning_effort}` or an explicit `--effort` option. The value is intentionally
+opaque because supported effort names depend on the installed client/model.
+
+Native OpenCode does not receive a root `--variant` flag. Before the TUI starts,
+workspace merges a run-scoped `OPENCODE_CONFIG_CONTENT` JSON override that sets
+`agent.<initial-agent>.variant`; the initial agent comes from `--agent`/`--agent=`, or
+defaults to `build`. Existing JSON keys and sibling agents are preserved, and malformed
+or structurally incompatible content fails with a configuration error instead of being
+replaced. The same environment is used by OpenCode session discovery and resume
+queries.
+
 For OpenCode, each Run receives a unique `127.0.0.1` endpoint and the normal TUI is
 started with server flags. The native session ID is discovered through that endpoint
 and persisted. Resuming a logical Session creates a new Run and endpoint while
@@ -109,6 +127,13 @@ and returns `{"accepted":true}` only after acceptance. `{project_dir}` expands t
 repository root, which lets a project keep its delivery wrapper in `scripts/` without
 hard-coding a machine-specific path. A busy TUI is not a transport API.
 Workspace never injects text into an unknown terminal state.
+
+Custom launchers may use `{reasoning_effort}` as an argv placeholder. If the profile
+omits the setting, an argv element containing that optional placeholder is removed; a
+standalone `--effort` paired with the placeholder is removed as well, so wrappers do not
+receive an empty positional value or dangling option. When configured, the exact value
+is also available as `WORKSPACE_REASONING_EFFORT`. Leave the placeholder out to keep a
+custom client's existing behavior unchanged.
 
 Profile `required_capabilities` filters clients before launch. Native Codex advertises
 launch/resume/deliver/observe/interrupt. Other adapters derive capabilities from their

@@ -32,11 +32,12 @@ type RouteAssessment struct {
 	CooldownUntil *time.Time `json:"cooldown_until,omitempty" yaml:"cooldown_until,omitempty"`
 }
 type RoutingDecision struct {
-	Profile    string            `json:"profile" yaml:"profile"`
-	Selected   string            `json:"selected,omitempty" yaml:"selected,omitempty"`
-	Candidates []RouteAssessment `json:"candidates" yaml:"candidates"`
-	MeasuredAt time.Time         `json:"measured_at" yaml:"measured_at"`
-	Metric     string            `json:"metric" yaml:"metric"`
+	Profile         string            `json:"profile" yaml:"profile"`
+	ReasoningEffort string            `json:"reasoning_effort,omitempty" yaml:"reasoning_effort,omitempty"`
+	Selected        string            `json:"selected,omitempty" yaml:"selected,omitempty"`
+	Candidates      []RouteAssessment `json:"candidates" yaml:"candidates"`
+	MeasuredAt      time.Time         `json:"measured_at" yaml:"measured_at"`
+	Metric          string            `json:"metric" yaml:"metric"`
 }
 
 func (s *Service) assessRoutes(cfg Config, profile string) (RoutingDecision, error) {
@@ -46,6 +47,7 @@ func (s *Service) assessRoutes(cfg Config, profile string) (RoutingDecision, err
 	if !ok {
 		return out, fail("no_route", "configure model profile %q", profile)
 	}
+	out.ReasoningEffort = p.ReasoningEffort
 	counts, active, routeCount := map[string]int{}, map[string]int{}, map[string]int{}
 	failures := map[string]time.Time{}
 	dirs, err := s.workspaceDirs()

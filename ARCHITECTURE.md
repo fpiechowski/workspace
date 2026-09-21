@@ -266,11 +266,14 @@ Codex, Claude, and OpenCode; the `command` adapter allows custom wrappers. A nat
 conversation ID is an optional Session binding, never its identity or inbox address.
 Details and the wrapper format are described in [docs/clients.md](docs/clients.md).
 
-The profile contains client/provider/model routes and required capabilities. The router
-rejects unavailable routes, routes in cooldown, and routes over their limits. It then
-balances providers based on local launches and reservations in a 24-hour window and
-records the decision in the Run. These counters approximate local project load; they do
-not measure tokens, cost, or limits for the entire account.
+The profile contains client/provider/model routes, required capabilities, and an optional
+reasoning-effort setting applied to every route in that profile. The router rejects
+unavailable routes, routes in cooldown, and routes over their limits. It then balances
+providers based on local launches and reservations in a 24-hour window and records the
+decision plus the selected setting in the Run. These counters approximate local project
+load; they do not measure tokens, cost, or limits for the entire account. A resumed
+logical Session keeps the original Run setting even if project configuration changes;
+a new logical Session resolves the current profile setting.
 
 ## Workflow and Delegation
 

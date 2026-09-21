@@ -151,12 +151,7 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 					if err := encoder.Encode(map[string]any{"method": "initialized", "params": map[string]any{}}); err != nil {
 						return err
 					}
-					params := map[string]any{}
-					for k, v := range session.ClientSnapshot.ThreadParams {
-						params[k] = v
-					}
-					params["cwd"] = session.CWD
-					params["model"] = session.Route.Model
+					params := codexThreadParams(session, run)
 					method := "thread/start"
 					if thread != "" {
 						method = "thread/resume"
@@ -375,6 +370,19 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 			}
 		}
 	}
+}
+
+func codexThreadParams(session Session, run Run) map[string]any {
+	params := map[string]any{}
+	for k, v := range session.ClientSnapshot.ThreadParams {
+		params[k] = v
+	}
+	params["cwd"] = session.CWD
+	params["model"] = session.Route.Model
+	if run.ReasoningEffort != "" {
+		params["effort"] = run.ReasoningEffort
+	}
+	return params
 }
 
 // References used to validate the stable transport and lifecycle contract:

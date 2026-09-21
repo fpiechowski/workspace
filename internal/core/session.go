@@ -251,6 +251,17 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				profile = workflowProfile(cfg, d, a.Role, profile)
 			}
 		}
+		reasoningEffort := ""
+		if resumePrior != nil {
+			reasoningEffort = resumePrior.ReasoningEffort
+			if reasoningEffort == "" && resumePrior.LastRunID != "" {
+				if priorRun, priorErr := findRun(d, resumePrior.LastRunID); priorErr == nil {
+					reasoningEffort = priorRun.ReasoningEffort
+				}
+			}
+		} else if profileCfg, profileOK := cfg.Profiles[profile]; profileOK {
+			reasoningEffort = profileCfg.ReasoningEffort
+		}
 		thread := ""
 		var logical *Session
 		if opt.ResumeSession != "" {
@@ -321,6 +332,10 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			}
 			if prior.ClientThreadID != "" {
 				thread = prior.ClientThreadID
+			}
+			if profileCfg, profileOK := cfg.Profiles[profile]; profileOK {
+				profileCfg.ReasoningEffort = reasoningEffort
+				cfg.Profiles[profile] = profileCfg
 			}
 		}
 		route, err := s.chooseRoute(cfg, profile)
@@ -419,11 +434,10 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				launchArgv = client.ResumeArgv
 			}
 		}
-		argv := make([]string, len(launchArgv))
-		replace := strings.NewReplacer("{model}", route.Model, "{prompt_file}", promptFile, "{prompt}", prompt.String(), "{thread_id}", thread)
-		for i, arg := range launchArgv {
-			argv[i] = replace.Replace(arg)
+		if client.Adapter == "claude" {
+			launchArgv = addClaudeReasoningEffort(launchArgv, reasoningEffort)
 		}
+		argv := expandClientArgv(launchArgv, route, promptFile, prompt.String(), thread, reasoningEffort)
 		openCodeEndpoint := ""
 		if usesNativeOpenCodeDelivery(client) {
 			openCodeEndpoint, err = allocateOpenCodeEndpoint()
@@ -438,7 +452,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		}
 		created := time.Now().UTC()
 		if logical == nil {
-			out = Session{ID: id, AgentID: a.ID, AgentSnapshot: a, ParentAgentID: parent, ParentSessionID: parentSession, WorktreeID: wtID, ClientSnapshot: client, ClientThreadID: thread, ReadOnly: opt.ReadOnly, CreatedAt: created, LifecycleState: "idle"}
+			out = Session{ID: id, AgentID: a.ID, AgentSnapshot: a, ParentAgentID: parent, ParentSessionID: parentSession, WorktreeID: wtID, ClientSnapshot: client, ClientThreadID: thread, ReasoningEffort: reasoningEffort, ReadOnly: opt.ReadOnly, CreatedAt: created, LifecycleState: "idle"}
 			logical = &out
 		} else {
 			out = *logical
@@ -449,10 +463,11 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			// Session. Otherwise a normal resume can retain NativeDelivery=false
 			// while the successor Run receives native OpenCode server flags.
 			out.ClientSnapshot = client
+			out.ReasoningEffort = reasoningEffort
 		}
 		// bindTask validates the checkout before the Run is appended; expose the
 		// pending run snapshot through the compatibility projection for that gate.
-		out.Profile, out.Route, out.RoutingDecision = profile, route, &decision
+		out.Profile, out.ReasoningEffort, out.Route, out.RoutingDecision = profile, reasoningEffort, route, &decision
 		out.Argv, out.CWD, out.PromptFile, out.State, out.OpenCodeEndpoint = argv, cwd, promptFile, "starting", openCodeEndpoint
 		bindingMode := taskClaim
 		if conversationOnly {
@@ -464,7 +479,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		if err != nil {
 			return err
 		}
-		run := Run{ID: runID, SessionID: out.ID, Generation: out.RunCount + 1, ConversationOnly: conversationOnly, Profile: profile, Route: route, RoutingDecision: &decision, Argv: argv, CWD: cwd, PromptFile: promptFile, State: "starting", ClientThreadID: thread, OpenCodeEndpoint: openCodeEndpoint, CreatedAt: created}
+		run := Run{ID: runID, SessionID: out.ID, Generation: out.RunCount + 1, ConversationOnly: conversationOnly, Profile: profile, ReasoningEffort: reasoningEffort, Route: route, RoutingDecision: &decision, Argv: argv, CWD: cwd, PromptFile: promptFile, State: "starting", ClientThreadID: thread, OpenCodeEndpoint: openCodeEndpoint, CreatedAt: created}
 		out.CurrentRunID, out.LastRunID = run.ID, run.ID
 		if logical == &out {
 			d.Registry.Sessions = append(d.Registry.Sessions, out)
@@ -564,6 +579,7 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 	var run Run
 	var state Workspace
 	var dir string
+	var cmdEnv []string
 	err := s.With(ctx, selector, func(d *Document) error {
 		r, err := findRun(d, id)
 		if err != nil {
@@ -600,6 +616,10 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 		session = *p
 		state = d.State
 		dir = d.Dir
+		cmdEnv, err = s.sessionCommandEnv(state, dir, session, run)
+		if err != nil {
+			return err
+		}
 		return saveDocument(d)
 	})
 	if err != nil {
@@ -607,21 +627,7 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 	}
 	cmd := exec.CommandContext(ctx, run.Argv[0], run.Argv[1:]...)
 	cmd.Dir = run.CWD
-	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "WORKSPACE_") {
-			cmd.Env = append(cmd.Env, e)
-		}
-	}
-	cmd.Env = append(cmd.Env, "WORKSPACE_PROJECT_DIR="+s.Root, "WORKSPACE_PROJECT_ID="+state.ProjectID, "WORKSPACE_ID="+state.ID, "WORKSPACE_DIR="+dir, "WORKSPACE_AGENT_ID="+session.AgentID, "WORKSPACE_SESSION_ID="+session.ID, "WORKSPACE_RUN_ID="+run.ID, "WORKSPACE_ORCHESTRATOR_ID="+state.OrchestratorAgentID, "WORKSPACE_PARENT_AGENT_ID="+session.ParentAgentID, "WORKSPACE_PARENT_SESSION_ID="+session.ParentSessionID, "WORKSPACE_WORKTREE_ID="+session.WorktreeID, "WORKSPACE_ROLE="+session.AgentSnapshot.Role)
-	cmd.Env = append(cmd.Env, "WORKSPACE_TASK_ID="+session.TaskID)
-	if session.ReadOnly {
-		cmd.Env = append(cmd.Env, "WORKSPACE_READ_ONLY=1")
-	}
-	if tmux, ok := s.Runtime.(Tmux); ok {
-		cmd.Env = append(cmd.Env, "WORKSPACE_TMUX_SOCKET="+tmux.Socket)
-	}
-	// Make the same installed binary available when the agent invokes workspace.
-	cmd.Env = replaceEnv(cmd.Env, "PATH", filepath.Dir(s.Executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cmd.Env = cmdEnv
 	cmd.Stdin = in
 	cmd.Stdout = out
 	cmd.Stderr = errOut
@@ -679,6 +685,37 @@ func (s *Service) ExecuteSession(ctx context.Context, selector, id string, in io
 	}
 	return runErr
 }
+
+func (s *Service) sessionCommandEnv(state Workspace, dir string, session Session, run Run) ([]string, error) {
+	cmdEnv := make([]string, 0, len(os.Environ())+16)
+	for _, e := range os.Environ() {
+		if !strings.HasPrefix(e, "WORKSPACE_") {
+			cmdEnv = append(cmdEnv, e)
+		}
+	}
+	cmdEnv = append(cmdEnv, "WORKSPACE_PROJECT_DIR="+s.Root, "WORKSPACE_PROJECT_ID="+state.ProjectID, "WORKSPACE_ID="+state.ID, "WORKSPACE_DIR="+dir, "WORKSPACE_AGENT_ID="+session.AgentID, "WORKSPACE_SESSION_ID="+session.ID, "WORKSPACE_RUN_ID="+run.ID, "WORKSPACE_ORCHESTRATOR_ID="+state.OrchestratorAgentID, "WORKSPACE_PARENT_AGENT_ID="+session.ParentAgentID, "WORKSPACE_PARENT_SESSION_ID="+session.ParentSessionID, "WORKSPACE_WORKTREE_ID="+session.WorktreeID, "WORKSPACE_ROLE="+session.AgentSnapshot.Role)
+	cmdEnv = append(cmdEnv, "WORKSPACE_TASK_ID="+session.TaskID)
+	if session.ReadOnly {
+		cmdEnv = append(cmdEnv, "WORKSPACE_READ_ONLY=1")
+	}
+	if run.ReasoningEffort != "" {
+		cmdEnv = append(cmdEnv, "WORKSPACE_REASONING_EFFORT="+run.ReasoningEffort)
+	}
+	if tmux, ok := s.Runtime.(Tmux); ok {
+		cmdEnv = append(cmdEnv, "WORKSPACE_TMUX_SOCKET="+tmux.Socket)
+	}
+	// Make the same installed binary available when the agent invokes workspace.
+	cmdEnv = replaceEnv(cmdEnv, "PATH", filepath.Dir(s.Executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if session.ClientSnapshot.Adapter == "opencode" && run.ReasoningEffort != "" {
+		var err error
+		cmdEnv, err = withOpenCodeReasoningEffortEnv(cmdEnv, run.Argv, run.ReasoningEffort)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return cmdEnv, nil
+}
+
 func replaceEnv(env []string, key, value string) []string {
 	prefix := key + "="
 	out := []string{}

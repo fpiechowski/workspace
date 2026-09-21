@@ -393,7 +393,7 @@ func TestWorkerProcess(t *testing.T) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	result := map[string]string{"agent": os.Getenv("WORKSPACE_AGENT_ID"), "session": os.Getenv("WORKSPACE_SESSION_ID"), "run": os.Getenv("WORKSPACE_RUN_ID"), "parent": os.Getenv("WORKSPACE_PARENT_AGENT_ID"), "worktree": os.Getenv("WORKSPACE_WORKTREE_ID"), "prompt": string(b)}
+	result := map[string]string{"agent": os.Getenv("WORKSPACE_AGENT_ID"), "session": os.Getenv("WORKSPACE_SESSION_ID"), "run": os.Getenv("WORKSPACE_RUN_ID"), "parent": os.Getenv("WORKSPACE_PARENT_AGENT_ID"), "worktree": os.Getenv("WORKSPACE_WORKTREE_ID"), "effort": os.Getenv("WORKSPACE_REASONING_EFFORT"), "prompt": string(b)}
 	data, _ := json.Marshal(result)
 	if err := atomicWrite(filepath.Join("work-products", "identity.json"), data); err != nil {
 		fmt.Fprintln(os.Stderr, err)
