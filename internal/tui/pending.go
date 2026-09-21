@@ -77,8 +77,9 @@ func (m *Model) runningGlyph() string {
 }
 
 // actionCompletedNotice is the transient success status shown while the
-// post-action refresh is still running. It is cleared once that refresh lands.
-const actionCompletedNotice = "Action completed. Refreshing workspace…"
+// post-action refresh is still running. The header indicator communicates the
+// refresh independently and this notice stays concise.
+const actionCompletedNotice = "Action completed."
 
 // completeAction clears the transient success status after the post-action
 // refresh has landed so later refreshes are not mislabelled as success.
@@ -93,14 +94,14 @@ func (m *Model) completeAction() {
 }
 
 // statusKind classifies the reserved status/notice row so each state can be
-// presented with its own wording and text marker.
+// presented with its own wording and text marker. Read progress is intentionally
+// absent: the header owns that compact indicator.
 type statusKind int
 
 const (
 	statusNone statusKind = iota
 	statusNotice
 	statusSuccess
-	statusRefresh
 	statusMutation
 	statusFailure
 	statusStale
@@ -115,8 +116,6 @@ func (m *Model) statusKind() statusKind {
 		return statusMutation
 	case m.actionCompleted && m.notice != "":
 		return statusSuccess
-	case m.readPending():
-		return statusRefresh
 	case m.notice != "":
 		return statusNotice
 	case m.visibleReadError() != "":
@@ -152,8 +151,6 @@ func (m *Model) statusLine() (string, string) {
 		return appendHealth(m.staleStatus()), "[!] "
 	case statusSuccess:
 		return appendHealth(m.notice), "✓ "
-	case statusRefresh:
-		return appendHealth(m.refreshStatus()), ""
 	case statusNotice:
 		return appendHealth(m.notice), "· "
 	case statusScroll:
@@ -171,14 +168,6 @@ func (m *Model) visibleReadError() string {
 		return m.loadError
 	}
 	return m.supervisorReadError
-}
-
-// refreshStatus names non-blocking reads and keeps the last good data explicit.
-func (m *Model) refreshStatus() string {
-	if m.lastSuccess.IsZero() {
-		return "Loading…"
-	}
-	return "Refreshing, showing data from " + timeAgo(m.lastSuccess) + " ago"
 }
 
 // mutationStatus names the blocking write so it is not confused with a refresh.

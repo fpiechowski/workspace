@@ -58,6 +58,9 @@ func (m *Model) header() string {
 		identity = identityName
 		health = m.compactHeaderHealth()
 	}
+	// fullHeaderHealth and compactHeaderHealth both reserve the refresh frame
+	// and the semantic health markers before identity truncation. The compact
+	// form is intentionally short enough to remain intact at 40 columns.
 	health = ansi.TruncateWc(health, max(1, m.width-2), "…")
 	healthWidth := ansi.StringWidth(health)
 	identityWidth := max(1, m.width-healthWidth-1)
@@ -272,9 +275,10 @@ func (m *Model) parentTitle(id string) string {
 	return id
 }
 
-// statusRow is the status/notice region. It presents refresh, blocking
-// mutation, failure, success and stale data distinctly, with text markers so the
-// meaning survives no-color mode. It stays reserved even when idle.
+// statusRow is the status/notice region. It presents blocking mutation,
+// failure, success, stale data, notices, scroll position, and narrow service
+// health distinctly, with text markers so the meaning survives no-color mode.
+// Background reads use the header indicator and never commandeer this row.
 func (m *Model) statusRow() string {
 	if m.showHelp {
 		return m.helpPosition()
@@ -283,9 +287,9 @@ func (m *Model) statusRow() string {
 	if text == "" {
 		return ""
 	}
-	if m.pendingWork() {
-		// The spinner is rendered only for active work; combining it with the
-		// explicit wording separates pending reads from pending writes.
+	if m.mutationActive() {
+		// Blocking writes retain both an animated spinner and their explanatory
+		// wording. Non-blocking reads are represented in the header instead.
 		marker = m.spinnerGlyph() + marker
 	}
 	style := m.palette.noticeStyle()
@@ -373,9 +377,6 @@ func (m *Model) collectionView(mode layoutMode) []string {
 		return []string{"Loading workspace data…"}
 	}
 	count := fmt.Sprintf("%s · %d / %d · sort: %s", m.collectionTitle(), len(items), len(m.allItems()), firstNonempty(m.route.Sort, "priority"))
-	if pending {
-		count += " · refreshing…"
-	}
 	if m.route.Query != "" {
 		count += " · filter: " + sanitizeLine(m.route.Query)
 	}

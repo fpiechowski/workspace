@@ -282,6 +282,23 @@ func TestBoardEmptyAndNoMatchStatesReuseExistingCopy(t *testing.T) {
 	}
 }
 
+func TestBoardRefreshKeepsCardsWithoutRefreshSuffix(t *testing.T) {
+	m := boardFixture()
+	m.width, m.height = 80, 24
+	m.navigate(route{Page: "tasks", View: "board", SelectedID: "task_running"})
+	m.snapshotPending = true
+
+	view := m.View()
+	if strings.Contains(view, "refreshing…") {
+		t.Fatalf("board count still contains a refresh suffix:\n%s", view)
+	}
+	for _, want := range []string{"Implement board", "running (2)"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("board refresh dropped %q:\n%s", want, view)
+		}
+	}
+}
+
 // TestBoardHelpAndFlagsAreScopedToTasks proves the toggle and column movement
 // are advertised only where they are valid.
 func TestBoardHelpAndFlagsAreScopedToTasks(t *testing.T) {

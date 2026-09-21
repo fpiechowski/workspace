@@ -22,15 +22,28 @@ neither, the neutral label is `services idle`. On narrow layouts the service dot
 next to the server indicator and its text/count is moved to the reserved status row
 when needed to keep the identity and health visible at the 40-column minimum.
 
+While one or more asynchronous reads are pending, the trailing header health area also
+shows the existing animated MiniDot frame. It appears on both the project picker and
+workspace routes, reserves its width before identity truncation, and remains visible
+alongside the semantic server/service markers at the 40-column minimum. The frame is
+still present in `--no-color` mode. A live Run or a blocking mutation alone does not
+show this read-progress indicator.
+
 The project overview and supervisor observation refresh independently. Workspace
 refresh uses the supervisor observation already returned by `ObserveWorkspaceRuntime`,
 so the normal workspace cadence does not issue a duplicate ping. `r` starts the same
-read-only refresh; pending reads drive the spinner and a late response from an older
-workspace or generation is ignored. If a read fails, the last good health remains on
-screen and the existing stale/error or Needs attention surfaces show the failure.
-Runtime details continue to show the complete supervisor error and observation time.
-All markers and state/count words remain visible with `--no-color`; rendered shell
-lines stay within the supported 40×12 and wider terminal sizes.
+read-only refresh; the header indicator disappears as soon as the final pending read
+completes and a late response from an older workspace or generation is ignored. The
+reserved status row remains available for notices, action success, stale/error text,
+scroll position, service-health overflow, and the animated explanatory text for
+blocking mutations. With previously loaded data, refresh keeps the current collection
+content visible and adds no textual refresh suffix. An initial empty project or
+workspace still renders `Loading workspaces…` or `Loading workspace data…` in the
+body. If a read fails, the last good health remains on screen and the existing
+stale/error or Needs attention surfaces show the failure. Runtime details continue to
+show the complete supervisor error and observation time. All markers and state/count
+words remain visible with `--no-color`; rendered shell lines stay within the supported
+40×12 and wider terminal sizes.
 
 ## Screens and Navigation
 

@@ -10,7 +10,7 @@ List of planned improvements. Items are ordered by priority.
 - [x] **Server status in the TUI** — add an indicator for the supervisor process and related service status in the TUI (green/red dot).
 - [ ] **Issues as a first-class entity** — add an Issues view at project level in the TUI; allow creating workspaces for an issue, treating the issue as their input, and show this relationship in the list view.
 - [ ] **Concurrency monitoring statistics** — add monitoring for the number of agents and sessions running in parallel.
-- [ ] **Refresh indicator in the TUI** — replace the current refresh notification with an icon indicating that a refresh is in progress.
+- [x] **Refresh indicator in the TUI** — replace the current refresh notification with an icon indicating that a refresh is in progress.
 - [ ] **`idle` session status** — extend session statuses with `idle` and detect it when the agent is not doing work.
 
 - [x] **User TUI** — add a terminal interface based on Bubble Tea and Bubbles.

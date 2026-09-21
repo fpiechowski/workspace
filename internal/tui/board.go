@@ -239,9 +239,6 @@ func (m *Model) boardView(mode layoutMode) []string {
 		}
 	}
 	count := fmt.Sprintf("%s · %d / %d · sort: %s", m.collectionTitle(), len(items), len(m.allItems()), firstNonempty(m.route.Sort, "priority"))
-	if pending {
-		count += " · refreshing…"
-	}
 	if m.route.Query != "" {
 		count += " · filter: " + sanitizeLine(m.route.Query)
 	}

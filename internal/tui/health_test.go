@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -142,6 +143,80 @@ func TestHealthHeaderFitsMinimumWidthWithEffectiveServiceCounts(t *testing.T) {
 		if !strings.Contains(view, "server "+state) || !strings.Contains(view, "services 1 failed") || !strings.Contains(view, "1 active") {
 			t.Fatalf("minimum frame hid health text for %s:\n%s", state, view)
 		}
+	}
+}
+
+func TestRefreshIndicatorFitsWithHealthAtSupportedSizes(t *testing.T) {
+	modes := []struct {
+		name    string
+		theme   string
+		noColor bool
+	}{
+		{name: "dark", theme: "dark"},
+		{name: "light", theme: "light"},
+		{name: "no-color", theme: "dark", noColor: true},
+	}
+	sizes := [][2]int{{40, 12}, {60, 24}, {100, 24}, {120, 32}}
+	for _, mode := range modes {
+		for _, size := range sizes {
+			t.Run(fmt.Sprintf("%s-workspace-%dx%d", mode.name, size[0], size[1]), func(t *testing.T) {
+				m := shellFixture(mode.theme, mode.noColor)
+				m.width, m.height = size[0], size[1]
+				m.snapshotPending, m.runtimePending = true, true
+				frame := m.spinnerGlyph()
+				view := m.View()
+				if header := strings.Split(view, "\n")[0]; !strings.Contains(header, frame) {
+					t.Fatalf("workspace header omitted refresh frame %q: %q", frame, header)
+				}
+				for lineNo, line := range strings.Split(view, "\n") {
+					if width := ansi.StringWidth(line); width > size[0] {
+						t.Fatalf("workspace %dx%d line %d rendered %d columns: %q", size[0], size[1], lineNo, width, line)
+					}
+				}
+			})
+
+			t.Run(fmt.Sprintf("%s-project-%dx%d", mode.name, size[0], size[1]), func(t *testing.T) {
+				m := New(Config{ProjectFound: true, Theme: mode.theme, NoColor: mode.noColor})
+				m.route = route{Page: "project"}
+				m.width, m.height = size[0], size[1]
+				m.projectPending, m.supervisorPending = true, true
+				frame := m.spinnerGlyph()
+				view := m.View()
+				if header := strings.Split(view, "\n")[0]; !strings.Contains(header, frame) {
+					t.Fatalf("project header omitted refresh frame %q: %q", frame, header)
+				}
+				for lineNo, line := range strings.Split(view, "\n") {
+					if width := ansi.StringWidth(line); width > size[0] {
+						t.Fatalf("project %dx%d line %d rendered %d columns: %q", size[0], size[1], lineNo, width, line)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestRefreshKeepsNarrowServiceOverflowReadable(t *testing.T) {
+	m := New(Config{ProjectFound: true, WorkspaceID: "ws_health", NoColor: true})
+	m.width, m.height = 40, 12
+	m.route = route{Page: "tasks"}
+	m.snapshot = core.WorkspaceSnapshot{
+		ObservedAt: time.Now(),
+		Status:     core.Status{Workspace: core.Workspace{ID: "ws_health", Title: "Health workspace", Status: "active"}},
+		Services: []core.BackgroundService{
+			{Name: "api", State: "failed"},
+			{Name: "worker", State: "running"},
+		},
+	}
+	m.supervisor = core.SupervisorObservation{State: "running", ObservedAt: time.Now()}
+	m.snapshotPending, m.runtimePending = true, true
+	frame := m.spinnerGlyph()
+	view := m.View()
+	lines := strings.Split(view, "\n")
+	if !strings.Contains(lines[0], frame) {
+		t.Fatalf("narrow header omitted refresh frame %q: %q", frame, lines[0])
+	}
+	if !strings.Contains(lines[len(lines)-2], "services 1 failed") || strings.Contains(lines[len(lines)-2], frame) {
+		t.Fatalf("service overflow was masked by read progress: %q", lines[len(lines)-2])
 	}
 }
 
