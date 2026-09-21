@@ -89,6 +89,9 @@ func TestLiveRunKeepsSpinnerRunningAndStopsWhenGone(t *testing.T) {
 	if m.spinnerGlyph() == before {
 		t.Fatal("spinner frame did not advance with a live run")
 	}
+	if strings.Contains(m.header(), m.spinnerGlyph()) {
+		t.Fatalf("live Run without a pending read created a refresh header icon: %q", m.header())
+	}
 
 	m.snapshot.Status.Sessions = nil
 	m.snapshot.Status.Runs = nil
@@ -117,6 +120,32 @@ func TestRunningGlyphFallsBackWhenIdle(t *testing.T) {
 	}
 }
 
+// TestReadProgressUsesHeaderAndLeavesStatusRowAvailable proves background
+// reads use the compact header frame while the reserved status row remains
+// available for meaningful messages.
+func TestReadProgressUsesHeaderAndLeavesStatusRowAvailable(t *testing.T) {
+	m := idleModel()
+	m.width = 80
+	m.snapshotPending = true
+	m.runtimePending = true
+	frame := m.spinnerGlyph()
+	if header := m.header(); !strings.Contains(header, frame) {
+		t.Fatalf("pending read header omitted the current MiniDot frame %q: %q", frame, header)
+	}
+	if row := m.statusRow(); strings.Contains(row, frame) || strings.Contains(row, "Refreshing") {
+		t.Fatalf("pending read commandeered the status row: %q", row)
+	}
+
+	m.snapshotPending = false
+	if header := m.header(); !strings.Contains(header, frame) {
+		t.Fatalf("header indicator disappeared before all reads completed: %q", header)
+	}
+	m.runtimePending = false
+	if header := m.header(); strings.Contains(header, frame) {
+		t.Fatalf("header indicator survived the final pending read: %q", header)
+	}
+}
+
 // TestStatusRowPresentsStatesDistinctlyWithoutColor checks each state has its
 // own wording and text marker so meaning does not depend on color.
 func TestStatusRowPresentsStatesDistinctlyWithoutColor(t *testing.T) {
@@ -126,12 +155,12 @@ func TestStatusRowPresentsStatesDistinctlyWithoutColor(t *testing.T) {
 		m := idleModel()
 		m.lastSuccess = time.Now()
 		m.snapshotPending = true
-		row := m.statusRow()
-		if !strings.Contains(row, "Refreshing, showing data from") || !strings.Contains(row, "ago") {
-			t.Fatalf("refresh row unclear: %q", row)
+		if header := m.header(); !strings.Contains(header, spin) {
+			t.Fatalf("refresh header omitted the current MiniDot frame: %q", header)
 		}
-		if !strings.Contains(row, spin) {
-			t.Fatalf("refresh row missing the spinner: %q", row)
+		row := m.statusRow()
+		if strings.Contains(row, "Refreshing") || strings.Contains(row, spin) {
+			t.Fatalf("refresh row still contains a read notification or spinner: %q", row)
 		}
 	})
 
@@ -140,7 +169,7 @@ func TestStatusRowPresentsStatesDistinctlyWithoutColor(t *testing.T) {
 		m.actionPending = true
 		m.lastAction = &ActionCall{Action: "delete_workspace", TargetID: "ws_pending"}
 		row := m.statusRow()
-		if !strings.Contains(row, "Deleting workspace") || !strings.Contains(row, "keep this panel open") {
+		if !strings.Contains(row, spin) || !strings.Contains(row, "Deleting workspace") || !strings.Contains(row, "keep this panel open") {
 			t.Fatalf("mutation row unclear: %q", row)
 		}
 		if strings.Contains(row, "Refreshing") {
@@ -161,9 +190,10 @@ func TestStatusRowPresentsStatesDistinctlyWithoutColor(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		m := idleModel()
 		m.actionCompleted = true
-		m.notice = "Action completed. Refreshing workspace…"
+		m.notice = actionCompletedNotice
+		m.snapshotPending = true
 		row := m.statusRow()
-		if !strings.Contains(row, "✓ Action completed") {
+		if !strings.Contains(row, "✓ Action completed.") || strings.Contains(row, "Refreshing") || strings.Contains(row, spin) {
 			t.Fatalf("success row unclear: %q", row)
 		}
 	})
@@ -172,6 +202,7 @@ func TestStatusRowPresentsStatesDistinctlyWithoutColor(t *testing.T) {
 		m := idleModel()
 		m.lastSuccess = time.Now()
 		m.loadError = "network down"
+		m.snapshotPending = true
 		row := m.statusRow()
 		if !strings.Contains(row, "[!] Stale data from") || !strings.Contains(row, "network down") || !strings.Contains(row, "r retry") {
 			t.Fatalf("stale row unclear: %q", row)
@@ -181,8 +212,21 @@ func TestStatusRowPresentsStatesDistinctlyWithoutColor(t *testing.T) {
 	t.Run("notice", func(t *testing.T) {
 		m := idleModel()
 		m.notice = "Saved."
-		if row := m.statusRow(); !strings.Contains(row, "· Saved.") {
+		m.snapshotPending = true
+		if row := m.statusRow(); !strings.Contains(row, "· Saved.") || strings.Contains(row, spin) {
 			t.Fatalf("notice row unclear: %q", row)
+		}
+	})
+
+	t.Run("scroll position", func(t *testing.T) {
+		m := detailFixture()
+		m.width, m.height = 80, 24
+		m.route = route{Page: "task", EntityID: "task_work"}
+		m.rebuildViewport()
+		m.snapshotPending = true
+		row := m.statusRow()
+		if !strings.Contains(row, "line ") || strings.Contains(row, spin) {
+			t.Fatalf("scroll position was masked by read progress: %q", row)
 		}
 	})
 }

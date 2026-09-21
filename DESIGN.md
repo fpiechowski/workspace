@@ -62,6 +62,12 @@ collections, while Results uses this line as secondary result-type navigation; t
 project picker and the primary Tasks, Sessions, Worktrees, and More collections do not
 show it.
 
+The trailing header freshness/health area renders the existing animated MiniDot while
+any read is pending. Its width is reserved before identity truncation, and compact
+headers keep the semantic server and service markers visible at the 40-column minimum;
+service text/counts move to the status row when they overflow. This indicator is
+available in dark, light, and `--no-color` modes on both project and workspace routes.
+
 - Minimum is **40×12**; a smaller terminal shows a size message.
 - One `layoutFor` decision controls every page: **tiny** below 40×12, **compact** for
   medium terminals (one column), and **wide** from 100×24 (list and details side by
@@ -134,7 +140,11 @@ the route is revisited.
 **Status.** A label always accompanies the symbol: `✓` success, `×` error, `!` block,
 `◈` review, `○` waiting, `■` stopped or closed, and `◇` interrupted or exited.
 `running` and `starting` use a Braille animation every 120 ms. The live-agent summary
-animates only for an active current Run; otherwise it shows `○`.
+animates only for an active current Run; otherwise it shows `○`. Background reads use
+the compact animated MiniDot in the header and leave this row for notices, action
+success, stale/error text, scroll position, and service-health overflow. Blocking
+mutations retain the animated spinner and explanatory text. Initial empty project and
+workspace loads remain explicit body messages rather than relying on the header icon.
 
 **Navigation and terminal.** Arrows or `j`/`k` select an entry; `Enter` opens details,
 and `1`–`5` move between Tasks, Sessions, Worktrees, Results, and More. `Tab` changes
@@ -164,6 +174,8 @@ location without relying on color.
 - Keep symbols and labels readable without color and keep the selection and footer
   visible when the terminal is resized.
 - Show missing data, refresh errors, and stale snapshots as explicit text.
+- Keep the header refresh frame visible only while a read is pending; do not mask
+  meaningful status-row content with background-read progress.
 - Do not start processes merely by opening details or refreshing the view.
 - Extend the existing terminal character system; web fonts, raster images, and browser
   components do not belong in this interface.

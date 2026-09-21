@@ -126,23 +126,36 @@ func (m *Model) workspaceRoute() bool {
 
 func (m *Model) fullHeaderHealth() string {
 	server := m.palette.renderHealthIndicator(m.supervisorIndicator(), false)
+	health := server
 	if !m.workspaceRoute() {
-		return server
+		return m.withHeaderRefreshIndicator(health)
 	}
 	services := m.palette.renderHealthIndicator(m.serviceIndicator(), false)
-	return server + " " + services
+	health += " " + services
+	return m.withHeaderRefreshIndicator(health)
 }
 
 func (m *Model) compactHeaderHealth() string {
 	server := m.palette.renderHealthIndicator(m.supervisorIndicator(), false)
+	health := server
 	if !m.workspaceRoute() {
-		return server
+		return m.withHeaderRefreshIndicator(health)
 	}
-	service := m.serviceIndicator()
-	if service.tone == healthNeutral {
-		return server + " " + m.palette.renderHealthIndicator(service, true)
+	// Keep both semantic markers in the compact header. The service label/count
+	// moves to the reserved status row when the full health segment overflows.
+	health += " " + m.palette.renderHealthIndicator(m.serviceIndicator(), true)
+	return m.withHeaderRefreshIndicator(health)
+}
+
+// withHeaderRefreshIndicator keeps the read-progress frame in the trailing
+// header segment. It is deliberately gated by readPending rather than the
+// broader animationNeeded gate, so live Runs and mutations do not look like a
+// background refresh.
+func (m *Model) withHeaderRefreshIndicator(health string) string {
+	if !m.readPending() {
+		return health
 	}
-	return server + " " + m.palette.renderHealthIndicator(service, false)
+	return m.spinnerGlyph() + " " + health
 }
 
 func (m *Model) headerServiceOverflow() string {

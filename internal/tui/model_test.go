@@ -168,8 +168,8 @@ func TestCollectionRefreshKeepsWideSelectionDetails(t *testing.T) {
 	model.snapshotPending = true
 
 	view := strings.Join(model.collectionView(layoutWide), "\n")
-	if !strings.Contains(view, "refreshing…") {
-		t.Fatalf("refresh status was not shown: %q", view)
+	if strings.Contains(view, "refreshing…") {
+		t.Fatalf("collection count still contains a refresh suffix: %q", view)
 	}
 	if !strings.Contains(view, "Selected task") || !strings.Contains(view, "Goal: Keep the selected details visible") {
 		t.Fatalf("refresh dropped the selected row or its details: %q", view)
