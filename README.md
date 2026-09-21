@@ -75,13 +75,61 @@ supervisors and tmux processes keep their old in-memory code until restarted.
 Each release contains one root `workspace` executable per supported target and a
 `checksums.txt` SHA-256 manifest.
 
-For a source build fallback, install Go 1.24 or newer and build explicitly:
+### Development builds from a checkout
+
+Release installation and local development setup are separate workflows. Use the
+published installer and `workspace upgrade` for stable releases; use
+`scripts/setup-dev.sh` when you need the current checkout. The development setup
+requires Go 1.24 or newer and runs on Linux/WSL or macOS. Native Windows runtime is
+not supported, so Windows Terminal users should run it inside WSL.
+
+From any directory, invoke the script through the checkout path; it locates the
+repository from its own path:
 
 ```sh
-go build -trimpath -o bin/workspace ./cmd/workspace
-export PATH="$PWD/bin:$PATH"
-workspace --help
+/path/to/workspace/scripts/setup-dev.sh
 ```
+
+From the checkout itself, the equivalent command is `./scripts/setup-dev.sh`.
+
+For example, in Windows Terminal + WSL:
+
+```sh
+/mnt/c/Users/you/Documents/workspace/scripts/setup-dev.sh
+```
+
+The default stable artifact is `bin/workspace` inside that checkout. The command
+`$HOME/.local/bin/workspace` is a symlink to it, so rerunning the same command after
+source changes atomically refreshes the persistent binary without another shell
+configuration change. Verify the selected command with:
+
+```sh
+command -v workspace
+workspace version
+```
+
+If `$HOME/.local/bin` is not on `PATH`, the setup prints the exact `export` hint;
+apply it in the current shell or add the directory to your shell startup file yourself.
+It does not edit startup files. For isolated tests, set `WORKSPACE_DEV_BUILD_DIR` and
+`WORKSPACE_DEV_INSTALL_DIR`; both may be absolute or relative to the checkout. These
+development-only variables are intentionally distinct from the release installer's
+`WORKSPACE_INSTALL_DIR`:
+
+```sh
+WORKSPACE_DEV_BUILD_DIR="/tmp/workspace-dev-bin" \
+WORKSPACE_DEV_INSTALL_DIR="$HOME/.local/bin" \
+/path/to/workspace/scripts/setup-dev.sh
+```
+
+The setup refuses to replace an unrelated existing regular file or symlink named
+`workspace`; choose another development install directory instead. It has no force
+mode. To return to a release installation, run the release installer again (using
+`WORKSPACE_INSTALL_DIR` if the release belongs in another directory). Do not use
+`workspace upgrade` as the development rebuild command: upgrade intentionally follows
+symlinks and can replace the resolved development artifact with a release binary.
+
+Already-running supervisors and tmux processes retain their old in-memory code. Restart
+them after a development rebuild to exercise runtime changes.
 
 Maintainers create a stable release by pushing an annotated `vMAJOR.MINOR.PATCH` tag
 whose commit is on `master`. The pinned GitHub Actions workflow tests the source,
@@ -482,6 +530,7 @@ temp_dir=$(mktemp -d)
 CGO_ENABLED=0 go build -trimpath -o "$temp_dir/workspace" ./cmd/workspace
 python3 scripts/check-install.py "$temp_dir/workspace"
 python3 scripts/test-install.py
+python3 scripts/test-setup-dev.py
 scripts/build-release.sh v0.1.0 "$temp_dir/release"
 ```
 

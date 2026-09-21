@@ -24,3 +24,8 @@ List of planned improvements. Items are ordered by priority.
   - **Upgrade contract:** `workspace upgrade` works outside a project, accepts only stable `vMAJOR.MINOR.PATCH` releases, never downgrades, verifies the checksum and safe single-file archive, and atomically replaces the resolved executable without `sudo`, `PATH` changes, or runtime-session restarts.
   - **Release contract:** a pinned official-actions workflow validates tags on `master`, builds `workspace_VERSION_{linux_amd64,linux_arm64,darwin_amd64,darwin_arm64}.tar.gz` with embedded metadata, writes `checksums.txt`, and publishes only a complete draft-then-published GitHub Release.
   - **Completion criteria:** the public v0.1.0 repository/release exists, all four assets and checksums validate, the documented installer works in a fresh directory, and `workspace upgrade` passes its no-op verification.
+
+- [x] **Repeatable local development builds** — provide a safe persistent binary workflow for contributors using Linux/macOS or Windows Terminal + WSL.
+  - **Development contract:** `scripts/setup-dev.sh` finds the checkout from its own path, builds an ignored `bin/workspace` artifact atomically, and links a configurable user-writable command directory to that artifact.
+  - **Safety contract:** reruns refresh the existing setup link, failed builds preserve the last working artifact, unrelated command files and symlinks are never silently replaced, and development overrides remain separate from release installer variables.
+  - **Completion criteria:** the documented setup and isolated fixture test cover invocation, refresh, spaces, conflict protection, and failed-build preservation.

@@ -54,7 +54,8 @@ is intentionally outside the release contract and uses the Linux build in WSL.
 - `internal/upgrade/` — project-independent GitHub Release discovery, checksum/archive
   validation, locking and atomic executable replacement.
 - `.workspace/templates/` — project-owned, editable copies of templates and workflow.
-- `scripts/` — POSIX installer, release build, installation checks and fixture tools.
+- `scripts/` — POSIX release installer, development setup, release build, installation
+  checks and fixture tools.
 - `docs/` — narrower operational contracts referenced by this document and the README.
 
 The `core` package is intentionally cohesive and file-oriented rather than splitting
@@ -70,6 +71,15 @@ root `workspace` executable per supported target. The tag-triggered workflow val
 stable tag on `master`, runs the repository checks, builds the archives and checksums,
 then publishes a draft GitHub Release only after all five expected assets are attached.
 
+`scripts/setup-dev.sh` is the boundary for a persistent checkout build. It validates a
+Linux/WSL or macOS host and Go 1.24+, builds with `CGO_ENABLED=0 go build -trimpath
+./cmd/workspace` into a temporary sibling under the ignored checkout `bin/` directory
+by default, and atomically renames the result to `bin/workspace`. It then creates or
+reuses a protected symlink in the user's development bin directory. The build and
+install directories are independently overrideable with `WORKSPACE_DEV_BUILD_DIR` and
+`WORKSPACE_DEV_INSTALL_DIR`; an unrelated regular file or symlink at the command path
+is an error. This setup is local-only and does not publish metadata or release assets.
+
 `workspace upgrade` runs entirely outside bootstrap and the domain service: it does not
 resolve a project, workspace, registry, or tmux session. It queries the latest stable
 GitHub Release with bounded HTTP requests, selects the exact runtime archive, verifies
@@ -80,6 +90,11 @@ before replacement and leaves the current executable untouched. A symlinked laun
 resolved to its target when possible. The updater never invokes `sudo` or changes
 `PATH`; already-running supervisors and tmux processes retain their old in-memory code
 until restarted.
+
+Because upgrade resolves symlinked launchers, running it through a development command
+can replace the resolved development artifact with a release binary. Development rebuilds
+must use `scripts/setup-dev.sh`; release installation remains the supported way to switch
+back to a release command.
 
 ### Project-independent bundled guidance
 

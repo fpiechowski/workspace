@@ -200,6 +200,14 @@ Upgrade never changes project/workspace state, performs privilege escalation, or
 downgrades a stable build. Supervisors and tmux processes already running keep their
 old in-memory code until restarted.
 
+For source development, `scripts/setup-dev.sh` is the separate checkout workflow. It
+requires Go 1.24 or newer on Linux/WSL or macOS, atomically refreshes an ignored
+`bin/workspace` artifact, and installs a protected symlink from the user's development
+bin directory to that artifact. It never silently replaces an unrelated command entry;
+the build and command-install directories can be overridden with
+`WORKSPACE_DEV_BUILD_DIR` and `WORKSPACE_DEV_INSTALL_DIR`. This workflow does not
+change release archive, installer, or upgrade behavior.
+
 `workspace prime` is the corresponding project-independent guidance command. It reads
 the current binary's embedded workspace skill, removes only its leading YAML front
 matter, and prints the Markdown body directly. `workspace prime --json` returns the
