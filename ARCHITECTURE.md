@@ -51,6 +51,13 @@ each domain into a separate package. Responsibility boundaries are defined by fi
 (`project`, `workflow`, `session`, `runtime`, `routing`, `mailbox`, `handoff`, `forge`,
 and others) and by external adapter interfaces.
 
+The TUI obtains supervisor health through a project-scoped `SupervisorObservation`
+query. Project-picker refresh requests the project overview and this observation as
+independent asynchronous reads; workspace refresh composes the supervisor fields from
+the existing runtime observation instead of pinging the supervisor a second time.
+These reads classify runtime failures for display, do not persist observations, and
+have no start, stop, or reconcile side effects.
+
 ## Domain Model
 
 | Object | Responsibility |

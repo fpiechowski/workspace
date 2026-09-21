@@ -468,7 +468,7 @@ func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
 	m.loadError = ""
 	m.notice = actionCompletedNotice
 	m.generation++
-	m.projectPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false
+	m.projectPending, m.supervisorPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false, false
 	if message.call.Action == "delete_workspace" {
 		m.workspaceID = ""
 		m.stack = nil

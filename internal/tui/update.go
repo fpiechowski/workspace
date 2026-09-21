@@ -57,7 +57,23 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.validateSelection()
 		}
 		m.rebuildViewport()
-		return m, m.scheduleRefresh()
+		return m, m.scheduleIfIdle()
+	case supervisorMsg:
+		if msg.generation != m.generation {
+			return m, nil
+		}
+		m.supervisorPending = false
+		if msg.err != nil {
+			m.supervisorReadError = sanitizeLine(msg.err.Error())
+			m.lastFailure = time.Now()
+		} else {
+			m.supervisor = msg.value
+			m.supervisorReadError = ""
+			m.lastSuccess = time.Now()
+			m.completeAction()
+		}
+		m.rebuildViewport()
+		return m, m.scheduleIfIdle()
 	case snapshotMsg:
 		if msg.generation != m.generation {
 			return m, nil
@@ -85,6 +101,14 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.runtime = msg.value
 			m.runtimeError = sanitizeLine(msg.value.Error)
+			if msg.value.SupervisorState != "" || !msg.value.SupervisorAt.IsZero() {
+				m.supervisor = core.SupervisorObservation{
+					State:      msg.value.SupervisorState,
+					Error:      msg.value.SupervisorError,
+					ObservedAt: msg.value.SupervisorAt,
+				}
+				m.supervisorReadError = ""
+			}
 		}
 		m.rebuildViewport()
 		return m, m.scheduleIfIdle()
@@ -217,7 +241,7 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.quit = true
 		return m, tea.Quit
 	case refreshTimerMsg:
-		if m.snapshotPending || m.runtimePending || m.uiPending || m.projectPending {
+		if m.snapshotPending || m.runtimePending || m.uiPending || m.projectPending || m.supervisorPending {
 			return m, m.scheduleRefresh()
 		}
 		return m, m.beginRefresh()
@@ -236,7 +260,7 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) scheduleIfIdle() tea.Cmd {
-	if m.projectPending || m.snapshotPending || m.runtimePending || m.uiPending || m.worktreePending || m.previewPending {
+	if m.projectPending || m.supervisorPending || m.snapshotPending || m.runtimePending || m.uiPending || m.worktreePending || m.previewPending {
 		return nil
 	}
 	return m.scheduleRefresh()
@@ -361,8 +385,8 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if keybind.Matches(msg, m.keys.Refresh) {
 		m.generation++
-		m.projectPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false
-		m.loadError, m.runtimeError, m.uiError = "", "", ""
+		m.projectPending, m.supervisorPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false, false
+		m.loadError, m.supervisorReadError, m.runtimeError, m.uiError = "", "", "", ""
 		return m, m.beginRefresh()
 	}
 	if keybind.Matches(msg, m.keys.Sort) && m.isCollectionPage() {

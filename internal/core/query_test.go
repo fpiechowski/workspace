@@ -115,6 +115,45 @@ func (r *topologyRuntime) ObserveTopology(context.Context, string) (TmuxTopology
 	return r.topology, r.err
 }
 
+func TestSupervisorObservationClassifiesAllHealthStates(t *testing.T) {
+	runtime := Tmux{Socket: "expected"}
+	cases := []struct {
+		name, socket, state, message string
+		runtime                      Runtime
+		err                          error
+	}{
+		{name: "running", socket: "expected", state: "running", runtime: runtime},
+		{name: "stopped", state: "stopped", runtime: runtime, err: os.ErrNotExist},
+		{name: "conflict", socket: "other", state: "conflict", message: "supervisor is using a different tmux server", runtime: runtime},
+		{name: "unavailable", state: "unavailable", message: "connection refused", runtime: runtime, err: errors.New("connection refused")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			observation := classifySupervisorObservation(tc.runtime, SupervisorInfo{TmuxSocket: tc.socket}, tc.err)
+			if observation.State != tc.state || observation.ObservedAt.IsZero() {
+				t.Fatalf("observation = %+v, want state %q", observation, tc.state)
+			}
+			if tc.message != "" && observation.Error != tc.message {
+				t.Fatalf("observation error = %q, want %q", observation.Error, tc.message)
+			}
+			if tc.message == "" && observation.Error != "" {
+				t.Fatalf("unexpected observation error: %q", observation.Error)
+			}
+		})
+	}
+}
+
+func TestObserveSupervisorIsReadOnlyAndReportsMissingSocketAsStopped(t *testing.T) {
+	s, _ := fixture(t)
+	observation, err := s.ObserveSupervisor(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observation.State != "stopped" || observation.Error != "" || observation.ObservedAt.IsZero() {
+		t.Fatalf("unexpected missing-supervisor observation: %+v", observation)
+	}
+}
+
 func TestWorkspaceRuntimeAndNavigationUseVerifiedOwnership(t *testing.T) {
 	s, id := fixture(t)
 	runtime := &topologyRuntime{
@@ -142,7 +181,7 @@ func TestWorkspaceRuntimeAndNavigationUseVerifiedOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if observation.State != "present" || observation.SupervisorState != "stopped" || observation.ObservedAt.IsZero() {
+	if observation.State != "present" || observation.SupervisorState != "stopped" || observation.ObservedAt.IsZero() || observation.SupervisorAt.IsZero() || observation.SupervisorError != "" {
 		t.Fatalf("unexpected runtime observation: %+v", observation)
 	}
 	runtime.topology.Panes[0].RunID = "run_foreign"

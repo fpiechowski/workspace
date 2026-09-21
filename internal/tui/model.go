@@ -88,34 +88,37 @@ type Model struct {
 	stack       []route
 	routeMemory map[routeKey]routeMemory
 
-	project            core.ProjectOverview
-	snapshot           core.WorkspaceSnapshot
-	runtime            core.RuntimeObservation
-	uiStatus           core.UIStatus
-	worktreeInspection map[string]core.WorktreeObservation
-	preview            core.Preview
-	loadError          string
-	runtimeError       string
-	uiError            string
-	lastSuccess        time.Time
-	lastFailure        time.Time
-	generation         uint64
-	managed            bool
-	hidePending        bool
-	hideKey            string
-	projectPending     bool
-	snapshotPending    bool
-	runtimePending     bool
-	uiPending          bool
-	previewPending     bool
-	navigationPending  bool
-	worktreePending    bool
-	mutationPending    bool
-	closed             bool
-	spinner            spinner.Model
-	animating          bool
-	externalProcess    *ExternalProcessRequest
-	resumeCmd          tea.Cmd
+	project             core.ProjectOverview
+	supervisor          core.SupervisorObservation
+	snapshot            core.WorkspaceSnapshot
+	runtime             core.RuntimeObservation
+	uiStatus            core.UIStatus
+	worktreeInspection  map[string]core.WorktreeObservation
+	preview             core.Preview
+	loadError           string
+	supervisorReadError string
+	runtimeError        string
+	uiError             string
+	lastSuccess         time.Time
+	lastFailure         time.Time
+	generation          uint64
+	managed             bool
+	hidePending         bool
+	hideKey             string
+	projectPending      bool
+	supervisorPending   bool
+	snapshotPending     bool
+	runtimePending      bool
+	uiPending           bool
+	previewPending      bool
+	navigationPending   bool
+	worktreePending     bool
+	mutationPending     bool
+	closed              bool
+	spinner             spinner.Model
+	animating           bool
+	externalProcess     *ExternalProcessRequest
+	resumeCmd           tea.Cmd
 }
 
 // ExternalProcessRequest is a prepared interactive process which must run
@@ -132,6 +135,11 @@ type ExternalProcessRequest struct {
 type projectMsg struct {
 	generation uint64
 	value      core.ProjectOverview
+	err        error
+}
+type supervisorMsg struct {
+	generation uint64
+	value      core.SupervisorObservation
 	err        error
 }
 type snapshotMsg struct {
@@ -334,6 +342,9 @@ func (m *Model) pop() {
 		if m.workspaceID != "" {
 			m.workspaceID = ""
 			m.generation++
+			m.projectPending, m.supervisorPending = false, false
+			m.snapshotPending, m.runtimePending, m.uiPending = false, false, false
+			m.previewPending, m.worktreePending = false, false
 			m.activateRoute(route{Page: "project"})
 			return
 		}
@@ -365,6 +376,7 @@ func (m *Model) setWorkspace(id string) tea.Cmd {
 	m.runtimeError = ""
 	m.uiError = ""
 	m.snapshotPending = false
+	m.supervisorPending = false
 	m.runtimePending = false
 	m.uiPending = false
 	m.previewPending = false

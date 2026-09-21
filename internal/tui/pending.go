@@ -14,7 +14,7 @@ const animationInterval = 120 * time.Millisecond
 // load, background refresh, worktree inspection, preview read, workflow lookup
 // and terminal navigation.
 func (m *Model) readPending() bool {
-	return m.projectPending || m.snapshotPending || m.runtimePending ||
+	return m.projectPending || m.supervisorPending || m.snapshotPending || m.runtimePending ||
 		m.uiPending || m.previewPending || m.navigationPending || m.worktreePending
 }
 
@@ -119,10 +119,12 @@ func (m *Model) statusKind() statusKind {
 		return statusRefresh
 	case m.notice != "":
 		return statusNotice
-	case m.loadError != "":
+	case m.visibleReadError() != "":
 		return statusStale
 	case m.isDetailPage() && m.scrollPosition() != "":
 		return statusScroll
+	case m.headerServiceOverflow() != "":
+		return statusNotice
 	default:
 		return statusNone
 	}
@@ -131,24 +133,44 @@ func (m *Model) statusKind() statusKind {
 // statusLine returns the status text and its text marker. Markers keep every
 // state recognizable without color.
 func (m *Model) statusLine() (string, string) {
+	health := m.headerServiceOverflow()
+	appendHealth := func(text string) string {
+		if health == "" {
+			return text
+		}
+		if text == "" {
+			return health
+		}
+		return health + " · " + text
+	}
 	switch m.statusKind() {
 	case statusFailure:
-		return "Action failed: " + m.loadError + " · y retry · a new action", "[!] "
+		return appendHealth("Action failed: " + m.loadError + " · y retry · a new action"), "[!] "
 	case statusMutation:
-		return m.mutationStatus(), ""
+		return appendHealth(m.mutationStatus()), ""
 	case statusStale:
-		return m.staleStatus(), "[!] "
+		return appendHealth(m.staleStatus()), "[!] "
 	case statusSuccess:
-		return m.notice, "✓ "
+		return appendHealth(m.notice), "✓ "
 	case statusRefresh:
-		return m.refreshStatus(), ""
+		return appendHealth(m.refreshStatus()), ""
 	case statusNotice:
-		return m.notice, "· "
+		return appendHealth(m.notice), "· "
 	case statusScroll:
-		return m.scrollPosition(), ""
+		return appendHealth(m.scrollPosition()), ""
 	default:
+		if health != "" {
+			return health, "· "
+		}
 		return "", ""
 	}
+}
+
+func (m *Model) visibleReadError() string {
+	if m.loadError != "" {
+		return m.loadError
+	}
+	return m.supervisorReadError
 }
 
 // refreshStatus names non-blocking reads and keeps the last good data explicit.
@@ -176,10 +198,11 @@ func (m *Model) mutationStatus() string {
 // staleStatus keeps failed refreshes explicit while the previous snapshot stays
 // on screen.
 func (m *Model) staleStatus() string {
+	error := m.visibleReadError()
 	if !m.lastSuccess.IsZero() {
-		return "Stale data from " + timeAgo(m.lastSuccess) + " ago · " + m.loadError + " · r retry"
+		return "Stale data from " + timeAgo(m.lastSuccess) + " ago · " + error + " · r retry"
 	}
-	return "Refresh failed: " + m.loadError + " · r retry"
+	return "Refresh failed: " + error + " · r retry"
 }
 
 // actionVerb is the short present-tense label used by the blocking status row.

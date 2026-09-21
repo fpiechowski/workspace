@@ -181,6 +181,15 @@ the persisted workspace state remains available. The screen and shortcut contrac
 described in
 [docs/tui.md](docs/tui.md).
 
+The TUI shell also shows the current project supervisor health in the project picker
+and on every workspace route. A running supervisor is shown as a green dot and
+`server running`; stopped, conflicting, or unavailable supervision is shown as a red
+dot with the explicit state. Workspace routes add the effective auxiliary-service
+health: the latest record for each service name determines the active/failed counts,
+so a successful restart supersedes an older failure. These indicators are read-only,
+refresh independently, retain the last good observation after a read error, and keep
+their marker and state/count text in `--no-color` mode.
+
 Installation and usage instructions are in [README.md](README.md). Technical details
 are described in [ARCHITECTURE.md](ARCHITECTURE.md), and planned changes are maintained
 in [TODO.md](TODO.md).

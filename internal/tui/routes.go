@@ -358,10 +358,19 @@ func (m *Model) attentionItems() []collectionItem {
 	} else if m.uiStatus.LastError != "" && m.uiStatus.Desired && m.uiStatus.State != "disabled" {
 		items = append(items, collectionItem{ID: "managed_ui", Kind: "runtime", Title: "Managed interface " + m.uiStatus.State, Subtitle: m.uiStatus.LastError, State: "error"})
 	}
-	if m.runtimeError != "" {
+	if m.workspaceRoute() && m.runtimeError != "" {
 		items = append(items, collectionItem{ID: "runtime_error", Kind: "runtime", Title: "Runtime unavailable", Subtitle: m.runtimeError, State: "error"})
-	} else if m.runtime.SupervisorState == "unavailable" || m.runtime.SupervisorState == "conflict" {
+	} else if m.workspaceRoute() && (m.runtime.SupervisorState == "unavailable" || m.runtime.SupervisorState == "conflict") {
 		items = append(items, collectionItem{ID: "supervisor", Kind: "runtime", Title: "Supervisor " + m.runtime.SupervisorState, Subtitle: m.runtime.SupervisorError, State: "error"})
+	} else if m.workspaceRoute() && (m.supervisor.State == "unavailable" || m.supervisor.State == "conflict") {
+		items = append(items, collectionItem{ID: "supervisor", Kind: "runtime", Title: "Supervisor " + m.supervisor.State, Subtitle: m.supervisor.Error, State: "error"})
+	} else if m.workspaceRoute() && m.supervisorReadError != "" {
+		items = append(items, collectionItem{ID: "supervisor", Kind: "runtime", Title: "Supervisor observation unavailable", Subtitle: m.supervisorReadError, State: "error"})
+	}
+	if m.route.Page == "project" && (m.supervisor.State == "unavailable" || m.supervisor.State == "conflict") {
+		items = append(items, collectionItem{ID: "project_supervisor", Kind: "runtime", Title: "Supervisor " + m.supervisor.State, Subtitle: m.supervisor.Error, State: "error"})
+	} else if m.route.Page == "project" && m.supervisorReadError != "" {
+		items = append(items, collectionItem{ID: "project_supervisor", Kind: "runtime", Title: "Supervisor observation unavailable", Subtitle: m.supervisorReadError, State: "error"})
 	}
 	if m.loadError != "" {
 		items = append(items, collectionItem{ID: "read_error", Kind: "runtime", Title: "Refresh failed", Subtitle: m.loadError, State: "error"})
