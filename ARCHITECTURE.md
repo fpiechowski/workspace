@@ -30,6 +30,11 @@ Session runtime requires Linux, macOS, or Linux in WSL because it relies on tmux
 CLI core also builds and is tested on Windows; process-dependent code has
 platform-specific implementations.
 
+Published distribution has a separate boundary from project/workspace state. GitHub
+Releases for `fpiechowski/workspace` are canonical and contain versioned archives for
+Linux amd64/arm64 and macOS amd64/arm64 plus `checksums.txt`; native Windows runtime
+is intentionally outside the release contract and uses the Linux build in WSL.
+
 ## Code Organization
 
 - `cmd/workspace/` — binary entry point.
@@ -42,14 +47,37 @@ platform-specific implementations.
   it does not accept raw target strings from the interface.
 - `internal/core/` — domain model, use cases, persistence, and process adapters.
 - `internal/core/templates/` — built-in templates installed by `project init`.
+- `internal/buildinfo/` — link-time version, commit, build-date and runtime metadata.
+- `internal/release/` — public repository identity, supported targets and asset naming.
+- `internal/upgrade/` — project-independent GitHub Release discovery, checksum/archive
+  validation, locking and atomic executable replacement.
 - `.workspace/templates/` — project-owned, editable copies of templates and workflow.
-- `scripts/` — installation checks and integration-test tools.
+- `scripts/` — POSIX installer, release build, installation checks and fixture tools.
 - `docs/` — narrower operational contracts referenced by this document and the README.
 
 The `core` package is intentionally cohesive and file-oriented rather than splitting
 each domain into a separate package. Responsibility boundaries are defined by files
 (`project`, `workflow`, `session`, `runtime`, `routing`, `mailbox`, `handoff`, `forge`,
 and others) and by external adapter interfaces.
+
+### Build, release, and upgrade boundary
+
+Source builds default to `dev`, `unknown` commit and `unknown` build date. Release builds
+set those values with `-ldflags -X`, use `CGO_ENABLED=0` and `-trimpath`, and package one
+root `workspace` executable per supported target. The tag-triggered workflow validates a
+stable tag on `master`, runs the repository checks, builds the archives and checksums,
+then publishes a draft GitHub Release only after all five expected assets are attached.
+
+`workspace upgrade` runs entirely outside bootstrap and the domain service: it does not
+resolve a project, workspace, registry, or tmux session. It queries the latest stable
+GitHub Release with bounded HTTP requests, selects the exact runtime archive, verifies
+the SHA-256 manifest entry, rejects unsafe tar layouts, stages the executable in its
+destination directory, syncs it, and atomically renames it into place. A lock serializes
+concurrent upgrades. Any network, validation, permission, or rename failure occurs
+before replacement and leaves the current executable untouched. A symlinked launcher is
+resolved to its target when possible. The updater never invokes `sudo` or changes
+`PATH`; already-running supervisors and tmux processes retain their old in-memory code
+until restarted.
 
 ## Domain Model
 
@@ -350,6 +378,10 @@ Changes to processes, concurrency, or tmux integration require the full race/tmu
 on Linux or WSL. Installation or build changes additionally require building the binary
 at a new location and running `scripts/check-install.py` according to
 [README.md](README.md#verification).
+
+Release validation additionally runs `scripts/test-install.py`, cross-builds the four
+release targets and a non-published Windows portability binary, verifies
+`checksums.txt`, and executes the packaged Linux amd64 binary's version/help commands.
 
 Tests use isolated repositories, private tmux servers, and local client/forge fixtures.
 Ordinary verification does not publish change requests or invoke paid model runs.

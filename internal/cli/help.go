@@ -88,6 +88,14 @@ var commandHelpSpecs = map[string]commandHelp{
 		"Copy the workspace skill into the project-specific discovery directory. Existing modified skill files are not overwritten.",
 		"workspace skill install --client codex",
 	),
+	"workspace version": h(
+		"Show the embedded version, source commit, build date and runtime target. This command works from any directory and does not inspect project state.",
+		"workspace version --json",
+	),
+	"workspace upgrade": h(
+		"Download the newest stable release for the current supported target, verify its checksum and archive layout, then atomically replace the running executable. Existing supervisors and tmux processes keep their old in-memory code until restarted.",
+		"workspace upgrade",
+	),
 	"workspace doctor": h(
 		"Inspect Git, tmux, project configuration and the local execution environment. Use --json when another tool will consume the result.",
 		"workspace doctor --json",

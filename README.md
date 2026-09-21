@@ -16,14 +16,64 @@ technical model and reference map are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Installation
 
-Requirements: Go 1.24+, Git, and tmux. Runtime runs on Linux/macOS or Linux in WSL.
-Windows supports building and core tests; run sessions with a Linux binary in WSL.
+Published releases are the canonical installation and upgrade source. The installer
+requires only `curl`, `tar`, `awk`, `mktemp`, and either `sha256sum` or `shasum`.
+Go is not required for an installed release.
 
 ```sh
-go build -o bin/workspace ./cmd/workspace
+curl -fsSL https://raw.githubusercontent.com/fpiechowski/workspace/master/scripts/install.sh | sh
+```
+
+By default the installer places the executable at `$HOME/.local/bin/workspace` and
+prints a `PATH` hint when that directory is not already on `PATH`. Choose another
+directory without root access with `WORKSPACE_INSTALL_DIR`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/fpiechowski/workspace/master/scripts/install.sh \
+  | WORKSPACE_INSTALL_DIR="$HOME/bin" sh
+```
+
+Release archives are published for `linux/amd64`, `linux/arm64`, `darwin/amd64`, and
+`darwin/arm64`. Native Windows binaries are not published: Windows users run the
+Linux amd64 or arm64 release inside WSL. Native Windows remains supported for the
+portable core's build and tests only; tmux sessions require Linux/macOS or WSL.
+
+The installed binary reports its embedded release metadata without reading project
+state:
+
+```sh
+workspace version
+workspace version --json
+```
+
+Upgrade checks the latest published, non-draft, non-prerelease GitHub Release for the
+current target, verifies the exact archive's SHA-256 entry, validates the archive
+layout, and atomically replaces the executable in its existing directory:
+
+```sh
+workspace upgrade
+```
+
+An equal or newer stable version is a successful `updated: false` no-op; a `dev`
+source build may upgrade to the latest stable release. The updater never downgrades,
+uses `sudo`, changes `PATH`, or mutates a project/workspace. Already-running
+supervisors and tmux processes keep their old in-memory code until restarted.
+Each release contains one root `workspace` executable per supported target and a
+`checksums.txt` SHA-256 manifest.
+
+For a source build fallback, install Go 1.24 or newer and build explicitly:
+
+```sh
+go build -trimpath -o bin/workspace ./cmd/workspace
 export PATH="$PWD/bin:$PATH"
 workspace --help
 ```
+
+Maintainers create a stable release by pushing an annotated `vMAJOR.MINOR.PATCH` tag
+whose commit is on `master`. The pinned GitHub Actions workflow tests the source,
+builds the four archives with embedded version/commit/date metadata, verifies the
+checksums, creates a draft release, uploads all five assets, and publishes it only
+after the complete asset set is present.
 
 Help is available at every command level. You can follow the path from the root command
 or request help directly after a command:
@@ -372,9 +422,22 @@ edit registries or WORKSPACE.md outside the CLI during active work.
 go test ./...
 go vet ./...
 WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 90s
-go build -o bin/workspace ./cmd/workspace
-python3 scripts/check-install.py bin/workspace
+temp_dir=$(mktemp -d)
+CGO_ENABLED=0 go build -trimpath -o "$temp_dir/workspace" ./cmd/workspace
+python3 scripts/check-install.py "$temp_dir/workspace"
+python3 scripts/test-install.py
+scripts/build-release.sh v0.1.0 "$temp_dir/release"
 ```
+
+The release build can also be smoke-tested with:
+
+```sh
+(cd "$temp_dir/release" && sha256sum -c checksums.txt)
+tar -xzf "$temp_dir/release/workspace_0.1.0_linux_amd64.tar.gz" -C "$temp_dir"
+"$temp_dir/workspace" --json version
+```
+
+On macOS use `shasum -a 256 -c checksums.txt` when `sha256sum` is unavailable.
 
 Tests use isolated repositories and private tmux servers. The full workflow test runs
 deterministic agent processes, real Git/CLI/handoff/check flows, and the tester. Forge

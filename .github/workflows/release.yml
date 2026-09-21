@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate and build release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          check-latest: false
+
+      - name: Verify stable tag and master ancestry
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          TAG_COMMIT: ${{ github.sha }}
+        run: |
+          set -eu
+          printf '%s\n' "$RELEASE_TAG" | awk '
+          function component(value) { return value == "0" || value ~ /^[1-9][0-9]*$/ }
+          {
+              if ($0 !~ /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/) exit 1
+              split(substr($0, 2), parts, ".")
+              if (!component(parts[1]) || !component(parts[2]) || !component(parts[3])) exit 1
+          }
+          '
+          git fetch origin master --no-tags
+          test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$TAG_COMMIT"
+          git merge-base --is-ancestor "$TAG_COMMIT" origin/master
+
+      - name: Run Go tests and vet
+        run: |
+          set -eu
+          go test ./...
+          go vet ./...
+
+      - name: Run installation and release smoke tests
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          temp_dir=$(mktemp -d)
+          trap 'rm -rf "$temp_dir"' EXIT
+          CGO_ENABLED=0 go build -trimpath -o "$temp_dir/workspace" ./cmd/workspace
+          python3 scripts/check-install.py "$temp_dir/workspace"
+          python3 scripts/test-install.py
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o "$temp_dir/workspace.exe" ./cmd/workspace
+
+          release_dir="$temp_dir/release"
+          scripts/build-release.sh "$RELEASE_TAG" "$release_dir"
+          for target in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+            test -f "$release_dir/workspace_${RELEASE_TAG#v}_${target}.tar.gz"
+          done
+          test -f "$release_dir/checksums.txt"
+          (cd "$release_dir" && sha256sum -c checksums.txt)
+
+          mkdir "$temp_dir/packaged"
+          tar -xzf "$release_dir/workspace_${RELEASE_TAG#v}_linux_amd64.tar.gz" -C "$temp_dir/packaged"
+          version_json=$("$temp_dir/packaged/workspace" --json version)
+          printf '%s\n' "$version_json" | python3 -c 'import json, sys; response=json.load(sys.stdin); assert response["data"]["version"] == sys.argv[1], response' "$RELEASE_TAG"
+          "$temp_dir/packaged/workspace" --help >/dev/null
+
+  publish:
+    name: Publish GitHub Release
+    needs: validate
+    if: ${{ needs.validate.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          check-latest: false
+
+      - name: Build and publish complete draft release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          temp_dir=$(mktemp -d)
+          trap 'rm -rf "$temp_dir"' EXIT
+          release_dir="$temp_dir/release"
+          scripts/build-release.sh "$RELEASE_TAG" "$release_dir"
+
+          gh release create "$RELEASE_TAG" --draft --generate-notes --title "$RELEASE_TAG"
+          for target in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+            gh release upload "$RELEASE_TAG" "$release_dir/workspace_${RELEASE_TAG#v}_${target}.tar.gz"
+          done
+          gh release upload "$RELEASE_TAG" "$release_dir/checksums.txt"
+
+          expected_assets="checksums.txt workspace_${RELEASE_TAG#v}_darwin_amd64.tar.gz workspace_${RELEASE_TAG#v}_darwin_arm64.tar.gz workspace_${RELEASE_TAG#v}_linux_amd64.tar.gz workspace_${RELEASE_TAG#v}_linux_arm64.tar.gz"
+          actual_assets=$(gh release view "$RELEASE_TAG" --json assets --jq '[.assets[].name] | sort | join(" ")')
+          test "$actual_assets" = "$expected_assets"
+          gh release edit "$RELEASE_TAG" --draft=false

@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"workspace/internal/buildinfo"
 	"workspace/internal/core"
 )
 
@@ -41,6 +42,26 @@ func TestStructuredErrorsAndWorkflowDiscovery(t *testing.T) {
 	code = Execute([]string{"--json", "--project", t.TempDir(), "status"}, nil, &out, &errOut)
 	if code != 1 || !bytes.Contains(out.Bytes(), []byte(`"code":"project_not_found"`)) {
 		t.Fatalf("expected structured error: %d %s", code, out.String())
+	}
+}
+
+func TestVersionCommandWorksOutsideAProject(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"--json", "version"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("version failed: %d %s", code, errOut.String())
+	}
+	var response struct {
+		OK   bool           `json:"ok"`
+		Data buildinfo.Info `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.OK || response.Data.Version == "" || response.Data.GOOS == "" || response.Data.GOARCH == "" {
+		t.Fatalf("invalid version response: %s", out.String())
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("version wrote stderr: %s", errOut.String())
 	}
 }
 

@@ -115,6 +115,8 @@ The current scope includes:
   or conversion to a workflow;
 - an interactive TUI for browsing the same state, navigating tasks, and running
   explicitly permitted core operations.
+- installation from the published GitHub Release archives and an explicit
+  `workspace upgrade` path that verifies and atomically installs a newer stable release.
 
 Outside the current scope are remote workers, multi-computer coordination,
 cryptographic confirmation of human identity, account-wide token or cost accounting,
@@ -179,6 +181,17 @@ for review, and archive cleans it up. Without tmux, runtime navigation is limite
 the persisted workspace state remains available. The screen and shortcut contract is
 described in
 [docs/tui.md](docs/tui.md).
+
+### Distribution and upgrades
+
+The public GitHub repository and its published Releases are the canonical distribution
+source. The supported release targets are Linux amd64/arm64 and macOS amd64/arm64;
+Windows users run the Linux build in WSL. `workspace version` is available outside a
+project, and `workspace upgrade` explicitly checks the newest stable Release, verifies
+its checksum and archive shape, and atomically replaces the installed executable.
+Upgrade never changes project/workspace state, performs privilege escalation, or
+downgrades a stable build. Supervisors and tmux processes already running keep their
+old in-memory code until restarted.
 
 Installation and usage instructions are in [README.md](README.md). Technical details
 are described in [ARCHITECTURE.md](ARCHITECTURE.md), and planned changes are maintained

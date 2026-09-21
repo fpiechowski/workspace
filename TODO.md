@@ -18,8 +18,8 @@ List of planned improvements. Items are ordered by priority.
   - **Completion criteria:** the TUI supports keyboard navigation and terminal resizing, presents states and errors clearly, and shares operation logic with the existing CLI. Existing commands and YAML/JSON output remain available to agents and automation.
 
 - [ ] **Releases, distribution, and upgrades** — simplify installing and upgrading `workspace`.
-  - **Goal:** users can quickly install the tool and keep it up to date without manually building the binary.
-  - **Installation:** prepare a one-liner in the README that downloads the appropriate release and installs it on the user's machine.
-  - **Upgrade:** add a `workspace upgrade` command that downloads and installs a newer release.
-  - **Release process:** automatically build and publish versioned packages/binaries for supported platforms; document supported systems and architectures.
-  - **Completion criteria:** a new user can install `workspace` with the command from the README, and an existing user can upgrade through `workspace upgrade`, without manually replacing the binary.
+  - **Goal:** users can install the tool from GitHub Releases and keep it up to date without manually building or replacing the binary.
+  - **Installation contract:** the README one-liner installs the exact archive selected from `checksums.txt` into `$HOME/.local/bin` or `WORKSPACE_INSTALL_DIR`; it supports Linux/macOS amd64/arm64 and directs Windows users to WSL.
+  - **Upgrade contract:** `workspace upgrade` works outside a project, accepts only stable `vMAJOR.MINOR.PATCH` releases, never downgrades, verifies the checksum and safe single-file archive, and atomically replaces the resolved executable without `sudo`, `PATH` changes, or runtime-session restarts.
+  - **Release contract:** a pinned official-actions workflow validates tags on `master`, builds `workspace_VERSION_{linux_amd64,linux_arm64,darwin_amd64,darwin_arm64}.tar.gz` with embedded metadata, writes `checksums.txt`, and publishes only a complete draft-then-published GitHub Release.
+  - **Completion criteria:** the public v0.1.0 repository/release exists, all four assets and checksums validate, the documented installer works in a fresh directory, and `workspace upgrade` passes its no-op verification.

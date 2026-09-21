@@ -17,8 +17,10 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"workspace/internal/bootstrap"
+	"workspace/internal/buildinfo"
 	"workspace/internal/core"
 	"workspace/internal/terminal"
+	"workspace/internal/upgrade"
 )
 
 type options struct {
@@ -273,6 +275,19 @@ func newRoot(o *options) *cobra.Command {
 	installSkill.Flags().StringVar(&skillClient, "client", "codex", "codex, claude or opencode")
 	skill.AddCommand(installSkill)
 	root.AddCommand(skill)
+	root.AddCommand(command("version", "Show workspace version and build metadata", func(c *cobra.Command, _ []string) error {
+		return o.emit(buildinfo.Current())
+	}))
+	root.AddCommand(command("upgrade", "Upgrade the installed workspace executable from the latest stable GitHub Release", func(c *cobra.Command, _ []string) error {
+		result, err := upgrade.Upgrade(c.Context(), upgrade.Options{})
+		if err != nil {
+			return &core.Error{Code: "upgrade_failed", Message: err.Error()}
+		}
+		if result.Updated {
+			fmt.Fprintln(o.errOut, "workspace was upgraded; restart already-running supervisors and tmux processes to load the new binary")
+		}
+		return o.emit(result)
+	}))
 	root.AddCommand(command("doctor", "Inspect local runtime prerequisites", func(c *cobra.Command, _ []string) error {
 		checks := map[string]any{"os": runtime.GOOS, "session_runtime_supported": runtime.GOOS != "windows"}
 		for _, name := range []string{"git", "tmux"} {
