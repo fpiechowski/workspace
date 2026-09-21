@@ -85,8 +85,8 @@ Each confirmed operation receives a `tui_<ULID>` key. A retry after an uncertain
 uses the same key and payload; double confirmation does not perform the mutation again.
 `tui show` and `tui hide` write separate receipts to `.runtime/ui.json`, not to the
 Session/Run registry. `q` in a managed panel records the same durable hide intent before
-restoring the terminal and ending the process; the supervisor removes the panel later
-after verifying its identity.
+restoring the terminal and ending the process. The managed pane is user-owned; the
+supervisor does not restore it after an external kill or process exit.
 
 Delete in the TUI requires retyping the full ID. A Task and Session are logically deleted
 through an auditable tombstone; the receipt remains in the workspace registry, and the

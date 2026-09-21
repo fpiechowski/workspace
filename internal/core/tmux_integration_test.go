@@ -144,7 +144,18 @@ func TestTmuxEndToEnd(t *testing.T) {
 	if orch.WorktreeID != "" || orch.CWD == w.Path {
 		t.Fatal("orchestrator must run from workspace directory")
 	}
-	ui := waitUIStatus(t, s, id, func(status UIStatus) bool { return status.State == "running" && status.PaneID != "" })
+	initialUI, err := s.UIPaneStatus(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if initialUI.Desired || initialUI.State != "disabled" || initialUI.PaneID != "" {
+		t.Fatalf("workspace start unexpectedly enabled the managed UI: %+v", initialUI)
+	}
+	ui, err := s.SetUIPaneDesired(ctx, id, true, "tmux-ui-show")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui = waitUIStatus(t, s, id, func(status UIStatus) bool { return status.State == "running" && status.PaneID != "" })
 	if ui.WindowID != orch.WindowID || activeWindowID(t, rt, id) != activeWindowBeforeOrchestrator {
 		t.Fatalf("managed UI did not share the orchestrator window without stealing focus: ui=%+v orchestrator=%+v", ui, orch)
 	}
@@ -162,11 +173,9 @@ func TestTmuxEndToEnd(t *testing.T) {
 	if _, err := rt.call(ctx, "send-keys", "-t", ui.PaneID, "q"); err != nil {
 		t.Fatal(err)
 	}
-	hidden := waitUIStatus(t, s, id, func(status UIStatus) bool { return !status.Desired && status.State == "disabled" })
-	if hidden.PaneID != "" {
-		t.Fatalf("hidden managed UI retained a pane: %+v", hidden)
-	}
-	shown, err := s.SetUIPaneDesired(ctx, id, true, "tmux-ui-show")
+	waitUIStatus(t, s, id, func(status UIStatus) bool { return !status.Desired && status.State == "disabled" })
+	waitUIPaneGone(t, rt, id, ui.PaneID)
+	shown, err := s.SetUIPaneDesired(ctx, id, true, "tmux-ui-show-again")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,11 +260,25 @@ func TestTmuxEndToEnd(t *testing.T) {
 	if _, err := rt.call(ctx, "kill-pane", "-t", shown.PaneID); err != nil {
 		t.Fatal(err)
 	}
-	recoveredUI := waitUIStatus(t, s, id, func(status UIStatus) bool {
+	waitUIPaneGone(t, rt, id, shown.PaneID)
+	topologyAfterKill, err := rt.ObserveTopology(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pane := range topologyAfterKill.Panes {
+		if pane.Kind == "tui" && pane.WorkspaceID == id {
+			t.Fatalf("supervisor restored the managed UI after an external pane kill: %+v", topologyAfterKill.Panes)
+		}
+	}
+	recoveredUI, err := s.SetUIPaneDesired(ctx, id, true, "tmux-ui-show-after-kill")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recoveredUI = waitUIStatus(t, s, id, func(status UIStatus) bool {
 		return status.State == "running" && status.PaneID != "" && status.PaneID != shown.PaneID
 	})
 	if recoveredUI.Generation <= shown.Generation || activePaneID(t, rt, orch.WindowID) != resumedOrchestrator.PaneID {
-		t.Fatalf("lost UI pane was not recovered without changing orchestrator focus: before=%+v after=%+v", shown, recoveredUI)
+		t.Fatalf("explicit UI show did not recover the pane without changing orchestrator focus: before=%+v after=%+v", shown, recoveredUI)
 	}
 	recoveredTopology, err := rt.ObserveTopology(ctx, id)
 	if err != nil {
@@ -316,6 +339,10 @@ func TestTmuxEndToEnd(t *testing.T) {
 	}
 	if recoveredOrchestrator.ID == "" {
 		t.Fatal("supervisor did not recover the orchestrator after its whole tmux window was lost")
+	}
+	recoveredUI, err = s.SetUIPaneDesired(ctx, id, true, "tmux-ui-show-after-window-loss")
+	if err != nil {
+		t.Fatal(err)
 	}
 	recoveredUI = waitUIStatus(t, s, id, func(status UIStatus) bool {
 		return status.State == "running" && status.PaneID != "" && status.WindowID == recoveredOrchestrator.WindowID && status.PaneID != recoveredUI.PaneID
@@ -445,6 +472,29 @@ func waitUIStatus(t *testing.T, service *Service, workspaceID string, ready func
 	}
 	t.Fatalf("managed TUI did not reach the expected state: %+v", status)
 	return status
+}
+
+func waitUIPaneGone(t *testing.T, runtime Tmux, workspaceID, oldPaneID string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		topology, err := runtime.ObserveTopology(context.Background(), workspaceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gone := true
+		for _, pane := range topology.Panes {
+			if pane.ID == oldPaneID || pane.Kind == "tui" && pane.WorkspaceID == workspaceID {
+				gone = false
+				break
+			}
+		}
+		if gone {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("managed UI pane did not disappear: %s", oldPaneID)
 }
 
 func waitTUIFrame(t *testing.T, runtime Tmux, paneID, title string) string {

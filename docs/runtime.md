@@ -154,33 +154,24 @@ Documents, artifacts and decisions remain available after cleanup.
 ## Managed terminal interface
 
 The optional managed TUI is a separate runtime owner, not a Session, Run, service or
-repository writer. Its desired state, generation, pane identity, retry status and
-idempotency receipts live in `.runtime/ui.json`; this does not change the public
-workspace status schema or add UI records to agent lists.
+repository writer. Its desired state, generation, pane identity and idempotency
+receipts live in `.runtime/ui.json`; this does not change the public workspace status
+schema or add UI records to agent lists. A workspace without a UI record starts with
+the interface disabled.
 
-After orchestrator history exists, the supervisor can start one TUI pane in the same
-orchestrator window. The split is detached and does not take focus. A manual
-`workspace tui` read or refresh never starts the supervisor. `workspace tui show`
-records desired state and reconciles immediately when runtime is available;
-`hide` disables the panel and removes only a pane whose UI ownership is verified;
-`status` reports desired state, generation, ownership, errors and backoff. The
-supervisor reconciles UI independently from agent recovery and message delivery, so a
-failure in one does not skip the others.
+The managed TUI is user-operated. `workspace tui show` explicitly records desired state
+and performs one reconcile when runtime is available, creating at most one detached
+split in the existing orchestrator window without changing focus. `workspace tui hide`
+disables the panel and removes only a pane whose UI ownership is verified. `status`
+reports desired state, generation, ownership, errors and the last known runtime state.
+The supervisor, workspace start, and the general `reconcile` operation do not start or
+restore the TUI.
 
-If the managed process still runs but its pane metadata is missing or damaged, the
-reconciler can verify the exact runner command and restore the metadata in place. It
-does not remove adjacent panes without a verified UI identity. Losing the entire
-orchestrator window recovers the orchestrator first and then creates one managed pane
-in the replacement window; unrelated worker runs are not restarted.
-
-In a managed pane, `q` or `Ctrl+C` outside a form records a durable hide request, restores
-the terminal, and exits; the next supervisor pass removes the pane. `Ctrl+C` inside a
-form cancels that form. An external pane kill leaves desired state enabled and can be
-recovered after backoff. A hide request is durable and prevents restart. Paused and
-completed workspaces may keep the interface available for inspection. Archive disables
-and cleans up the verified pane; UI ownership is not counted as an active domain
-process and does not block `clean`. Before downgrading the binary, run `workspace tui
-hide`, since an older launcher cannot identify the new pane type.
+If the managed process exits or its pane is killed, the panel remains absent until the
+user runs `workspace tui show` again. Explicit UI operations can verify the exact runner
+command and repair metadata without removing adjacent panes. The UI does not count as
+an active domain process and does not block `clean`. Before downgrading the binary, run
+`workspace tui hide`, since an older launcher cannot identify the new pane type.
 
 Project-picker Delete Workspace is a separate destructive discard, not an archive or
 clean shortcut. After typed-ID confirmation it kills the complete workspace tmux session,

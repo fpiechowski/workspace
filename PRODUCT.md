@@ -172,10 +172,11 @@ terminal to be opened or explicitly resumed. If a pane is missing during navigat
 the TUI proposes a reconcile that requires user confirmation and then retries opening
 the same target.
 
-The TUI can run manually as a browser or as a managed pane next to the orchestrator.
-The supervisor restores only a pane with recorded, verified identity; `q` in that pane
+The TUI can run manually as a browser or, after an explicit user action, as a managed
+pane next to the orchestrator. The supervisor does not start, restore, or stop the TUI;
+`workspace tui show` and `workspace tui hide` own that lifecycle, while `q` in the pane
 records hide before exiting. During pause and completed, the pane may remain available
-for review, and archive cleans it up. Without tmux, runtime navigation is limited, but
+for review until the user closes it. Without tmux, runtime navigation is limited, but
 the persisted workspace state remains available. The screen and shortcut contract is
 described in
 [docs/tui.md](docs/tui.md).

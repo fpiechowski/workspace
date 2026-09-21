@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"errors"
 )
 
 // StartSupervisedSession is the shared CLI/TUI entry point. The supervisor is
@@ -67,13 +66,7 @@ func (s *Service) ResumeSession(ctx context.Context, selector, sessionOrRunID, k
 	return s.StartSession(ctx, selector, opt)
 }
 
-// ReconcileWorkspace applies both domain runtime recovery and the independent
-// managed-interface policy. A UI failure never suppresses agent recovery.
+// ReconcileWorkspace applies domain runtime recovery for client panes.
 func (s *Service) ReconcileWorkspace(ctx context.Context, selector string, keys ...string) (Status, error) {
-	status, agentErr := s.Reconcile(ctx, selector, keys...)
-	var uiErr error
-	if _, managed := s.Runtime.(ManagedUIRuntime); managed {
-		uiErr = s.ReconcileInterface(ctx, selector)
-	}
-	return status, errors.Join(agentErr, uiErr)
+	return s.Reconcile(ctx, selector, keys...)
 }

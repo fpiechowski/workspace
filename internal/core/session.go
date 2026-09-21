@@ -510,13 +510,6 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		}
 		return launchErr
 	})
-	if err == nil && out.AgentSnapshot.Role == "orchestrator" {
-		if _, managed := s.Runtime.(ManagedUIRuntime); managed {
-			// The orchestrator is already durable and running. A UI startup error
-			// is recorded by ReconcileInterface and must not undo that operation.
-			_ = s.ReconcileInterface(ctx, selector)
-		}
-	}
 	return out, err
 }
 func priorOrchestratorPane(d *Document, newRunID string) (windowID, paneID, sessionID, runID string) {

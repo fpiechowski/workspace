@@ -164,11 +164,23 @@ func managedFixture(t *testing.T) (*Service, string, *managedFakeRuntime) {
 			ID: "%orch", WindowID: "@orch", Kind: "agent", WorkspaceID: workspaceID,
 			SessionID: sessionID, RunID: runID, SessionName: TmuxName(workspaceID),
 		})
+		runtime.fakeRuntime.panes["%orch"] = runtime.topology.Panes[len(runtime.topology.Panes)-1]
 		return saveDocument(d)
 	}); err != nil {
 		t.Fatal(err)
 	}
 	return s, workspaceID, runtime
+}
+
+func TestUIPaneStatusDefaultsToDisabled(t *testing.T) {
+	s, workspaceID, _ := managedFixture(t)
+	status, err := s.UIPaneStatus(context.Background(), workspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Desired || status.State != "disabled" || status.PaneID != "" {
+		t.Fatalf("UI without an explicit show intent is not disabled: %+v", status)
+	}
 }
 
 func TestManagedInterfaceReceiptsConcurrencyAndOwnership(t *testing.T) {
@@ -226,7 +238,7 @@ func TestManagedInterfaceReceiptsConcurrencyAndOwnership(t *testing.T) {
 	}
 }
 
-func TestManagedInterfaceHideWaitsForItsRunnerToExit(t *testing.T) {
+func TestManagedInterfaceHideDoesNotRequireSupervisorCleanup(t *testing.T) {
 	s, workspaceID, runtime := managedFixture(t)
 	ctx := context.Background()
 	status, err := s.SetUIPaneDesired(ctx, workspaceID, true, "show:hide-test")
@@ -248,21 +260,11 @@ func TestManagedInterfaceHideWaitsForItsRunnerToExit(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if record.Desired || !record.ExitRequested || record.State != "running" {
-		t.Fatalf("q did not persist hide-before-exit intent: %+v", record)
-	}
-	if err := s.ReconcileInterface(ctx, workspaceID); err != nil {
-		t.Fatal(err)
+	if record.Desired || record.ExitRequested || record.State != "disabled" {
+		t.Fatalf("q did not persist the user-owned hide intent: %+v", record)
 	}
 	if runtime.uiStops != 0 {
-		t.Fatal("supervisor killed the live TUI before terminal restoration")
-	}
-	uiPane.Dead = true
-	runtime.fakeRuntime.panes[uiPane.ID] = uiPane
-	for i := range runtime.topology.Panes {
-		if runtime.topology.Panes[i].ID == uiPane.ID {
-			runtime.topology.Panes[i] = uiPane
-		}
+		t.Fatal("q unexpectedly cleaned the live TUI before terminal restoration")
 	}
 	if err := s.ReconcileInterface(ctx, workspaceID); err != nil {
 		t.Fatal(err)
@@ -272,7 +274,41 @@ func TestManagedInterfaceHideWaitsForItsRunnerToExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	if status.Desired || status.State != "disabled" || status.PaneID != "" || runtime.uiStops != 1 {
-		t.Fatalf("dead hidden pane was not cleaned up: status=%+v stops=%d", status, runtime.uiStops)
+		t.Fatalf("explicit UI cleanup did not remove the hidden pane: status=%+v stops=%d", status, runtime.uiStops)
+	}
+}
+
+func TestSupervisorDoesNotRestoreManagedInterface(t *testing.T) {
+	s, workspaceID, runtime := managedFixture(t)
+	ctx := context.Background()
+	status, err := s.SetUIPaneDesired(ctx, workspaceID, true, "show:supervisor-no-restore")
+	if err != nil {
+		t.Fatal(err)
+	}
+	uiPane := runtime.topology.Panes[len(runtime.topology.Panes)-1]
+	if err := s.ClaimUIPane(ctx, workspaceID, status.UIID, status.Generation, uiPane.UIToken, uiPane.ID); err != nil {
+		t.Fatal(err)
+	}
+	delete(runtime.fakeRuntime.panes, uiPane.ID)
+	kept := runtime.topology.Panes[:0]
+	for _, pane := range runtime.topology.Panes {
+		if pane.ID != uiPane.ID {
+			kept = append(kept, pane)
+		}
+	}
+	runtime.topology.Panes = kept
+	launches := runtime.uiLaunches
+	if err := s.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.uiLaunches != launches {
+		t.Fatalf("supervisor restored the managed UI: launches before=%d after=%d", launches, runtime.uiLaunches)
+	}
+	if _, err := s.SetUIPaneDesired(ctx, workspaceID, true, "show:explicit-restore"); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.uiLaunches != launches+1 {
+		t.Fatalf("explicit show did not restore the managed UI: launches before=%d after=%d", launches, runtime.uiLaunches)
 	}
 }
 
