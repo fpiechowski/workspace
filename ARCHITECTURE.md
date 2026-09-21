@@ -47,6 +47,8 @@ is intentionally outside the release contract and uses the Linux build in WSL.
   it does not accept raw target strings from the interface.
 - `internal/core/` — domain model, use cases, persistence, and process adapters.
 - `internal/core/templates/` — built-in templates installed by `project init`.
+- `internal/core/skill/workspace/SKILL.md` — binary-owned general agent guidance,
+  embedded for both skill installation and the project-independent `prime` command.
 - `internal/buildinfo/` — link-time version, commit, build-date and runtime metadata.
 - `internal/release/` — public repository identity, supported targets and asset naming.
 - `internal/upgrade/` — project-independent GitHub Release discovery, checksum/archive
@@ -78,6 +80,20 @@ before replacement and leaves the current executable untouched. A symlinked laun
 resolved to its target when possible. The updater never invokes `sudo` or changes
 `PATH`; already-running supervisors and tmux processes retain their old in-memory code
 until restarted.
+
+### Project-independent bundled guidance
+
+`workspace prime` is a read-only root command that also runs outside bootstrap and the
+domain service. `internal/core/skill.go` reads the embedded
+`internal/core/skill/workspace/SKILL.md` bytes through one shared accessor: skill
+installation preserves the complete file and its overwrite protection, while
+`PrimeInstructions` validates the leading YAML front-matter boundary and returns only
+the Markdown body. Normal `prime` output is that body directly with its final newline;
+`prime --json` uses the standard `{ok:true,data:{instructions:"..."}}` envelope. The
+command never reads mutable installed skills, project files, prompts, memories, or live
+workspace state, and never starts runtime processes or records an operation. Agents use
+`workspace status` and `workspace menu` for live state and actions; the embedded guide
+is the current binary's general context-recovery input rather than a workspace snapshot.
 
 ### TUI health queries
 

@@ -113,6 +113,83 @@ func TestVersionCommandWorksOutsideAProject(t *testing.T) {
 	}
 }
 
+func TestPrimeCommandWorksOutsideAProject(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	before, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"prime"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("prime failed: %d %s", code, errOut.String())
+	}
+	raw := out.String()
+	if raw == "" || !strings.HasSuffix(raw, "\n") {
+		t.Fatalf("prime did not return Markdown with a final newline: %q", raw)
+	}
+	if strings.HasPrefix(strings.TrimSpace(raw), "---") || strings.HasPrefix(strings.TrimSpace(raw), "{") {
+		t.Fatalf("prime returned front matter or JSON instead of raw Markdown: %q", raw[:min(len(raw), 80)])
+	}
+	if !strings.HasPrefix(strings.TrimLeft(raw, "\r\n"), "# Workspace") {
+		t.Fatalf("prime returned unexpected Markdown: %q", raw[:min(len(raw), 80)])
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("prime wrote stderr: %s", errOut.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Execute([]string{"--short", "prime"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("short prime failed: %d %s", code, errOut.String())
+	}
+	if out.String() != raw {
+		t.Fatal("--short truncated or changed prime instructions")
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Execute([]string{"--json", "prime"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("JSON prime failed: %d %s", code, errOut.String())
+	}
+	var response struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Instructions string `json:"instructions"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.OK || response.Data.Instructions != raw {
+		t.Fatalf("JSON prime did not expose the raw instructions: %s", out.String())
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("JSON prime wrote stderr: %s", errOut.String())
+	}
+
+	after, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != len(after) {
+		t.Fatalf("prime created files in an uninitialized directory: before=%v after=%v", before, after)
+	}
+}
+
+func TestPrimeHelpDescribesBundledGuidance(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"prime", "--help"}, nil, &out, &errOut); code != 0 || errOut.Len() != 0 {
+		t.Fatalf("prime help failed: %d %s", code, errOut.String())
+	}
+	for _, want := range []string{"bundled", "context compaction", "without a project", "live workspace state"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("prime help lacks %q:\n%s", want, out.String())
+		}
+	}
+}
+
 func TestCreateAcceptsIntentArgument(t *testing.T) {
 	project := t.TempDir()
 	ctx := context.Background()

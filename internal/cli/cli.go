@@ -278,6 +278,21 @@ func newRoot(o *options) *cobra.Command {
 	root.AddCommand(command("version", "Show workspace version and build metadata", func(c *cobra.Command, _ []string) error {
 		return o.emit(buildinfo.Current())
 	}))
+	root.AddCommand(command("prime", "Print the current binary's bundled agent guidance", func(c *cobra.Command, _ []string) error {
+		instructions, err := core.PrimeInstructions()
+		if err != nil {
+			return err
+		}
+		if o.json {
+			key := o.key
+			o.key = ""
+			err := o.emit(map[string]string{"instructions": instructions})
+			o.key = key
+			return err
+		}
+		_, err = io.WriteString(o.out, instructions)
+		return err
+	}))
 	root.AddCommand(command("upgrade", "Upgrade the installed workspace executable from the latest stable GitHub Release", func(c *cobra.Command, _ []string) error {
 		result, err := upgrade.Upgrade(c.Context(), upgrade.Options{})
 		if err != nil {

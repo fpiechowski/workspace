@@ -19,6 +19,12 @@ The primary user is a developer using CLI agents while working on an existing
 repository. The second audience is the agent itself: a stable CLI, JSON/YAML, and an
 installable skill let it perform operations without guessing the state.
 
+At the beginning of a new agent session, or after context compaction, the agent can run
+`workspace prime` to read the current binary's bundled general operational guidance.
+This is a project-independent, read-only context-recovery aid; it does not replace
+`workspace status` or `workspace menu`, which remain the sources for live workspace
+state and available actions.
+
 The tool is especially useful when a task:
 
 - requires diagnosis and a plan first;
@@ -193,6 +199,13 @@ its checksum and archive shape, and atomically replaces the installed executable
 Upgrade never changes project/workspace state, performs privilege escalation, or
 downgrades a stable build. Supervisors and tmux processes already running keep their
 old in-memory code until restarted.
+
+`workspace prime` is the corresponding project-independent guidance command. It reads
+the current binary's embedded workspace skill, removes only its leading YAML front
+matter, and prints the Markdown body directly. `workspace prime --json` returns the
+same text in `data.instructions` within the normal success envelope. Neither form
+resolves project state or reports the current workspace; agents use `status` and
+`menu` for those live queries.
 
 ### TUI health indicators
 

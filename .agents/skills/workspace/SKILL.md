@@ -10,6 +10,11 @@ definition; a Session is a durable logical conversation and a Run is one concret
 client/tmux execution. The workspace orchestrator delegates code changes and keeps
 durable state in WORKSPACE.md; workers return handoffs and artifacts.
 
+At the start of a new session, or after context compaction, run `workspace prime` once
+to refresh this general guidance from the current binary. `prime` does not report live
+workspace state; use `workspace status --workspace <id> --json` and
+`workspace menu --workspace <id> --json` for that.
+
 For a new issue or work description:
 
 1. Run `workspace doctor --json`. If the project is uninitialized, use `workspace
