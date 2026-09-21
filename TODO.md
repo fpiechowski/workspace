@@ -4,7 +4,7 @@ List of planned improvements. Items are ordered by priority.
 
 ## Planned
 
-- [ ] **CI build verification** — add a GitHub Actions pipeline that builds the project on pushes to `master` and on pull requests targeting `master`.
+- [x] **CI build verification** — add a GitHub Actions pipeline that builds the project on pushes to `master` and on pull requests targeting `master`.
 - [ ] **`workspace prime` command** — add a CLI command that provides the agent with current operational instructions.
 - [ ] **TUI as a tmux sidebar** — consider one TUI instance serving all workspaces in a project; consider nested tmux, with one instance acting as the project selector and the other as the workspace selector.
 - [x] **Server status in the TUI** — add an indicator for the supervisor process and related service status in the TUI (green/red dot).
