@@ -117,17 +117,6 @@ func Upgrade(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, err
 	}
 
-	// The process-wide mutex avoids duplicate work in one process. The lock
-	// file extends the same guarantee to two workspace processes sharing an
-	// installation directory.
-	upgradeMu.Lock()
-	defer upgradeMu.Unlock()
-	unlock, err := lockDestination(filepath.Dir(executable))
-	if err != nil {
-		return Result{}, err
-	}
-	defer unlock()
-
 	releaseInfo, err := fetchLatest(ctx, opts)
 	if err != nil {
 		return Result{}, err
@@ -144,6 +133,18 @@ func Upgrade(ctx context.Context, opts Options) (Result, error) {
 	} else if !ok && !isDevelopmentVersion(current) {
 		return Result{}, fmt.Errorf("current workspace version %q is not a stable vMAJOR.MINOR.PATCH version", current)
 	}
+
+	// The process-wide mutex avoids duplicate work in one process. The lock
+	// file extends the same guarantee to two workspace processes sharing an
+	// installation directory. Both are acquired only after the no-op decision,
+	// so a read-only installation can still report updated: false successfully.
+	upgradeMu.Lock()
+	defer upgradeMu.Unlock()
+	unlock, err := lockDestination(filepath.Dir(executable))
+	if err != nil {
+		return Result{}, err
+	}
+	defer unlock()
 
 	archiveName := release.ArchiveName(latest.String(), target)
 	archiveAsset, err := exactAsset(releaseInfo.Assets, archiveName)
