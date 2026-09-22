@@ -47,8 +47,14 @@ words remain visible with `--no-color`; rendered shell lines stay within the sup
 
 ## Screens and Navigation
 
-The project picker shows the title, status, phase, active Runs, issues, full ID, path,
-input source, and creation date. When the list is empty, it shows a title, one-sentence
+At project scope the top tabs are `1 Workspaces`, `2 Issues`, and `3 Dispatcher`.
+The Workspaces picker shows the title, status, phase, active Runs, Issue relationship,
+full ID, path,
+input source, and creation date. The Issues tab lists durable Issue revisions, local
+status, source, digest, and linked Workspace states. Opening an Issue shows its full
+description and exact linked revisions; `a` can create a Workspace with a frozen Issue
+input. The Dispatcher tab shows project-scoped state and offers explicit start/stop
+actions. When the list is empty, it shows a title, one-sentence
 explanation, and one valid action (`a` creates a workspace), so it no longer contradicts
 the Create workspace action. In wide mode, it shows selection details (ID, path, input
 source, creation date, and state) next to the list without a panel border. Selecting a
@@ -140,7 +146,8 @@ to go to Tasks, Sessions, Worktrees, Results, and More respectively.
 
 | Key | Action |
 |---|---|
-| `1`–`5` | Tasks, Sessions, Worktrees, Results, More |
+| `1`–`3` (project) | Workspaces, Issues, Dispatcher |
+| `1`–`5` (Workspace) | Tasks, Sessions, Worktrees, Results, More |
 | `Up`/`Down`, `j`/`k` | Change selection or scroll details |
 | `PgUp`/`PgDn` | Scroll the document or move the selection by one page in a collection |
 | `Home`/`End` | Start or end of a document or collection |

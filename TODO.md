@@ -8,7 +8,12 @@ List of planned improvements. Items are ordered by priority.
 - [x] **`workspace prime` command** — provide the agent with current operational instructions from the running binary.
 - [ ] **TUI as a tmux sidebar** — consider one TUI instance serving all workspaces in a project; consider nested tmux, with one instance acting as the project selector and the other as the workspace selector.
 - [x] **Server status in the TUI** — add an indicator for the supervisor process and related service status in the TUI (green/red dot).
-- [ ] **Issues as a first-class entity** — add an Issues view at project level in the TUI; allow creating workspaces for an issue, treating the issue as their input, and show this relationship in the list view.
+- [x] **Issues as a first-class entity** — persist project Issues with source provenance,
+  revisions and history; expose list/detail/refresh/status/dispatch operations in the
+  CLI and project TUI; create Workspaces from an exact Issue snapshot and show links.
+- [x] **Project Dispatcher** — add a project-scoped Dispatcher lifecycle with durable
+  state, profile fallback/override, verified runtime ownership, Issue-to-Workspace
+  dispatch, and idempotent start/stop operations.
 - [ ] **Concurrency monitoring statistics** — add monitoring for the number of agents and sessions running in parallel.
 - [x] **Refresh indicator in the TUI** — replace the current refresh notification with an icon indicating that a refresh is in progress.
 - [ ] **`idle` session status** — extend session statuses with `idle` and detect it when the agent is not doing work.

@@ -17,29 +17,38 @@ type Backend interface {
 	ResolveNavigationTarget(context.Context, string, core.EntityRef) (core.NavigationTarget, error)
 }
 
+// IssueBackend is optional so lightweight read-only test backends and custom
+// integrations do not need to implement project Issue details just to render
+// the rest of the TUI.
+type IssueBackend interface {
+	ShowIssue(context.Context, string) (core.IssueDetail, error)
+}
+
 type Navigator interface {
 	Select(context.Context, core.NavigationTarget) error
 	PrepareAttach(context.Context, core.NavigationTarget) (*exec.Cmd, error)
 }
 
 type ActionCall struct {
-	NavigationRef      *core.EntityRef
-	OpenTerminal       bool
-	Action             string
-	TargetID           string
-	WorkspaceID        string
-	TargetName         string
-	TargetDetails      string
-	Reason             string
-	Input              string
-	Workflow           string
-	NoWorkflow         bool
-	Key                string
-	ExpectedRevision   int
-	ExpectedRunID      string
-	ExpectedAttempt    int
-	ExpectedRunIDs     []string
-	ExpectedServiceIDs []string
+	NavigationRef         *core.EntityRef
+	OpenTerminal          bool
+	Action                string
+	TargetID              string
+	WorkspaceID           string
+	TargetName            string
+	TargetDetails         string
+	Reason                string
+	Input                 string
+	Workflow              string
+	NoWorkflow            bool
+	Key                   string
+	ExpectedRevision      int
+	ExpectedIssueRevision int
+	ExpectedIssueDigest   string
+	ExpectedRunID         string
+	ExpectedAttempt       int
+	ExpectedRunIDs        []string
+	ExpectedServiceIDs    []string
 }
 
 type ActionBackend interface {
@@ -63,6 +72,9 @@ type CoreBackend struct{ Service *core.Service }
 func (b CoreBackend) ProjectOverview(ctx context.Context) (core.ProjectOverview, error) {
 	return b.Service.ProjectOverview(ctx)
 }
+func (b CoreBackend) ShowIssue(ctx context.Context, selector string) (core.IssueDetail, error) {
+	return b.Service.ShowIssue(ctx, selector)
+}
 func (b CoreBackend) ObserveSupervisor(ctx context.Context) (core.SupervisorObservation, error) {
 	return b.Service.ObserveSupervisor(ctx)
 }
@@ -83,6 +95,14 @@ func (b CoreBackend) ResolveNavigationTarget(ctx context.Context, selector strin
 }
 func (b CoreBackend) PerformAction(ctx context.Context, selector string, call ActionCall) error {
 	switch call.Action {
+	case "start_dispatcher":
+		_, err := b.Service.StartDispatcher(ctx, "", call.Key)
+		return err
+	case "stop_dispatcher":
+		return b.Service.StopDispatcher(ctx, call.Key)
+	case "create_workspace_from_issue":
+		_, err := b.Service.CreateFromIssue(ctx, call.TargetID, core.CreateOptions{Title: call.TargetName, IssueRevision: call.ExpectedIssueRevision, IssueDigest: call.ExpectedIssueDigest, OperationKey: call.Key})
+		return err
 	case "start_orchestrator":
 		_, err := b.Service.StartSupervisedOrchestrator(ctx, selector, call.Key)
 		return err

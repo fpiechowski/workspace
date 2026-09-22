@@ -28,6 +28,12 @@ func (m *Model) detailContent() string {
 	if m.route.Page == "orchestrator" {
 		return m.orchestratorContent()
 	}
+	if m.route.Page == "issue" {
+		return m.issueContent()
+	}
+	if m.route.Page == "dispatcher" {
+		return m.dispatcherContent()
+	}
 	id := m.route.EntityID
 	doc := newDetailDoc(m.palette, m.detailWidth())
 	switch m.route.Page {
@@ -315,6 +321,77 @@ func (m *Model) detailContent() string {
 		doc.title(m.collectionTitle(), "", "")
 		doc.provenance("ID", id)
 	}
+	return doc.render()
+}
+
+func (m *Model) issueContent() string {
+	doc := newDetailDoc(m.palette, m.detailWidth())
+	if m.issue.ID == "" {
+		if m.issuePending {
+			doc.title("Issue", m.route.EntityID, "loading")
+			doc.body("Loading durable Issue details…")
+		} else {
+			return m.missingEntity("Issue", m.route.EntityID)
+		}
+		return doc.render()
+	}
+	doc.title("Issue", m.issue.Title, m.issue.Status)
+	doc.action("a create a linked workspace · Esc back")
+	doc.section("Facts")
+	doc.field("ID", m.issue.ID)
+	doc.field("Project", m.issue.ProjectID)
+	doc.field("Revision", fmt.Sprint(m.issue.Revision))
+	doc.field("Digest", m.issue.Digest)
+	doc.field("Source", firstNonempty(m.issue.Source, "manual intake"))
+	doc.field("Updated", formatTime(m.issue.UpdatedAt))
+	if m.issue.StatusReason != "" {
+		doc.field("Status reason", m.issue.StatusReason)
+	}
+	doc.section("Description")
+	doc.body(m.issue.Body)
+	doc.section("Linked workspaces")
+	if len(m.issue.LinkedWorkspaces) == 0 {
+		doc.body("No workspace has been created from this Issue.")
+	} else {
+		for _, link := range m.issue.LinkedWorkspaces {
+			doc.bullet(fmt.Sprintf("%s · %s · revision %d", firstNonempty(link.Title, link.WorkspaceID), link.Status, link.IssueRevision))
+		}
+	}
+	doc.section("Provenance")
+	doc.provenance("Created", formatTime(m.issue.CreatedAt))
+	if m.issue.RetrievedAt != nil {
+		doc.provenance("Retrieved", formatTime(*m.issue.RetrievedAt))
+	}
+	if m.issue.LastCheckedAt != nil {
+		doc.provenance("Last checked", formatTime(*m.issue.LastCheckedAt))
+	}
+	return doc.render()
+}
+
+func (m *Model) dispatcherContent() string {
+	doc := newDetailDoc(m.palette, m.detailWidth())
+	d := m.project.Dispatcher
+	doc.title("Project Dispatcher", "", d.State)
+	doc.action("a start or stop Dispatcher · r refresh")
+	doc.section("Facts")
+	doc.field("State", firstNonempty(d.State, "never_started"))
+	doc.field("Role", firstNonempty(d.Role, "dispatcher"))
+	doc.field("Profile", d.Profile)
+	doc.field("Agent", d.AgentID)
+	doc.field("Session", d.SessionID)
+	doc.field("Current run", d.CurrentRunID)
+	doc.field("Last run", d.LastRunID)
+	doc.field("Runs", fmt.Sprint(d.RunCount))
+	doc.field("Stop requested", fmt.Sprintf("%t", d.StopRequested))
+	if d.Error != "" {
+		doc.section("Error")
+		doc.warning(d.Error)
+	}
+	doc.section("Scope")
+	doc.body("The Dispatcher is project-scoped. It may intake and route Issues and create linked Workspaces, but it does not implement code or advance Workspace workflow state.")
+	doc.section("Provenance")
+	doc.provenance("Project", m.projectID)
+	doc.provenance("Updated", formatTime(d.UpdatedAt))
 	return doc.render()
 }
 

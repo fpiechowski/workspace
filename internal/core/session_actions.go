@@ -7,6 +7,9 @@ import (
 // StartSupervisedSession is the shared CLI/TUI entry point. The supervisor is
 // ready before the domain operation reserves and launches a Run.
 func (s *Service) StartSupervisedSession(ctx context.Context, selector string, opt SessionOptions) (Session, error) {
+	if err := s.requireWorkspaceScope(); err != nil {
+		return Session{}, err
+	}
 	if err := s.EnsureSupervisor(ctx); err != nil {
 		return Session{}, err
 	}
@@ -18,6 +21,9 @@ func (s *Service) StartSupervisedOrchestrator(ctx context.Context, selector, key
 }
 
 func (s *Service) ResumeSupervisedAgent(ctx context.Context, selector, agent, key string) (Session, error) {
+	if err := s.requireWorkspaceScope(); err != nil {
+		return Session{}, err
+	}
 	if err := s.EnsureSupervisor(ctx); err != nil {
 		return Session{}, err
 	}
@@ -28,6 +34,9 @@ func (s *Service) ResumeSupervisedAgent(ctx context.Context, selector, agent, ke
 // including legacy sess_* Run aliases, resolve to their owning Session here so
 // terminal adapters and TUI use the same lineage rules as the CLI.
 func (s *Service) ResumeSession(ctx context.Context, selector, sessionOrRunID, key string) (Session, error) {
+	if err := s.requireWorkspaceScope(); err != nil {
+		return Session{}, err
+	}
 	var opt SessionOptions
 	err := s.With(ctx, selector, func(d *Document) error {
 		session, err := findSession(d, sessionOrRunID)

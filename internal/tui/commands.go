@@ -36,6 +36,18 @@ func (m *Model) beginRefresh() tea.Cmd {
 				return supervisorMsg{generation: gen, value: value, err: err}
 			})
 		}
+		if m.route.Page == "issue" {
+			if backend, ok := m.backend.(IssueBackend); ok && !m.issuePending {
+				m.issuePending = true
+				backend, id := backend, m.route.EntityID
+				cmds = append(cmds, func() tea.Msg {
+					ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+					defer cancel()
+					value, err := backend.ShowIssue(ctx, id)
+					return issueMsg{generation: gen, value: value, err: err}
+				})
+			}
+		}
 		return tea.Batch(cmds...)
 	}
 	var cmds []tea.Cmd
@@ -81,6 +93,23 @@ func (m *Model) scheduleRefresh() tea.Cmd {
 		delay = 2 * time.Second
 	}
 	return tea.Tick(delay, func(time.Time) tea.Msg { return refreshTimerMsg{} })
+}
+
+func (m *Model) readIssue(id string) tea.Cmd {
+	backend, ok := m.backend.(IssueBackend)
+	if !ok || id == "" {
+		m.loadError = "this backend does not support Issue details"
+		m.rebuildViewport()
+		return nil
+	}
+	m.issuePending = true
+	backend, gen := backend, m.generation
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		value, err := backend.ShowIssue(ctx, id)
+		return issueMsg{generation: gen, value: value, err: err}
+	}
 }
 
 func (m *Model) inspectWorktree(id string) tea.Cmd {

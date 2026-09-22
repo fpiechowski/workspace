@@ -109,6 +109,10 @@ The current scope includes:
 - tmux as visible process runtime;
 - agent personas, logical sessions, and the history of specific executions;
 - a durable inbox, handoffs, immutable artifacts, and captured command results;
+- durable project-scoped Issues with immutable revision snapshots, source provenance,
+  refresh/status history, and guarded Workspace links;
+- a project-scoped Dispatcher that can inspect Issues and create linked Workspaces
+  through the same durable, idempotent operations as the CLI;
 - client, provider, and model routing through profiles;
 - Codex, Claude, OpenCode, and custom-command adapters;
 - change integration and change-request preparation/publication;
@@ -131,7 +135,7 @@ and protection against processes running with the same system permissions.
 ## User Experience
 
 The CLI and machine-readable formats remain the primary interface for agents and
-automation. A developer can use the TUI to browse workspaces, tasks, executions,
+automation. A developer can use the TUI to browse Issues, workspaces, tasks, executions,
 worktrees, results, and runtime, then jump to a verified tmux pane. The TUI uses the
 same core queries and operations as the CLI; every mutation has confirmation and a
 guard for the current revision, attempt, or RunID. It does not add actions for sending
@@ -179,6 +183,12 @@ results, distinguishes process execution from result acceptance, and allows the
 terminal to be opened or explicitly resumed. If a pane is missing during navigation,
 the TUI proposes a reconcile that requires user confirmation and then retries opening
 the same target.
+
+At project scope, the TUI exposes Issues and Dispatcher alongside Workspaces. An Issue
+detail shows its source, retrieved revision, status reason, linked Workspaces, and the
+guarded action to create a Workspace from that exact snapshot. Dispatcher start, status,
+stop, and attach actions are project-scoped; Dispatcher text is treated as untrusted
+input and cannot expand project mutation authority.
 
 The TUI can run manually as a browser or, after an explicit user action, as a managed
 pane next to the orchestrator. The supervisor does not start, restore, or stop the TUI;

@@ -13,6 +13,15 @@ pause/resume, reconcile, `reopen` for a completed workspace, archive, and clean.
 Reads, `clean --dry-run`, interactive attach, and the continuously running `serve`
 command are not one-shot mutations that require a receipt.
 
+Project Issue intake, refresh, local status updates, linked Workspace creation, and
+Dispatcher start/stop use the same retry contract. Issue receipts live under
+`.workspace/issues/.runtime/operations/`; Dispatcher receipts are stored in
+`.workspace/dispatcher/state.json`. A linked Workspace records the selected Issue
+revision and digest, so replaying or refreshing the Issue cannot alter that input.
+Project reads (`issue list/show`, `dispatcher status`, and the project TUI overview) do
+not create Issue or Dispatcher stores, and a fresh project does not gain a runtime lock
+directory merely from those reads.
+
 A successful retry returns the preserved result. It may describe an older state: retrying
 `session start` after the session was stopped returns the earlier response and does not
 start it again. Read the current state through `status`, `session list`, or the relevant

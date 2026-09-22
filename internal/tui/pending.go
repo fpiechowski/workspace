@@ -14,7 +14,7 @@ const animationInterval = 120 * time.Millisecond
 // load, background refresh, worktree inspection, preview read, workflow lookup
 // and terminal navigation.
 func (m *Model) readPending() bool {
-	return m.projectPending || m.supervisorPending || m.snapshotPending || m.runtimePending ||
+	return m.projectPending || m.issuePending || m.supervisorPending || m.snapshotPending || m.runtimePending ||
 		m.uiPending || m.previewPending || m.navigationPending || m.worktreePending
 }
 

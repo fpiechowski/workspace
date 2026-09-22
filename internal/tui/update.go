@@ -58,6 +58,21 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.rebuildViewport()
 		return m, m.scheduleIfIdle()
+	case issueMsg:
+		if msg.generation != m.generation {
+			return m, nil
+		}
+		m.issuePending = false
+		if msg.err != nil {
+			m.loadError = sanitizeLine(msg.err.Error())
+			m.lastFailure = time.Now()
+		} else {
+			m.issue = msg.value
+			m.loadError = ""
+			m.lastSuccess = time.Now()
+		}
+		m.rebuildViewport()
+		return m, m.scheduleIfIdle()
 	case supervisorMsg:
 		if msg.generation != m.generation {
 			return m, nil
@@ -241,7 +256,7 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.quit = true
 		return m, tea.Quit
 	case refreshTimerMsg:
-		if m.snapshotPending || m.runtimePending || m.uiPending || m.projectPending || m.supervisorPending {
+		if m.snapshotPending || m.runtimePending || m.uiPending || m.projectPending || m.issuePending || m.supervisorPending {
 			return m, m.scheduleRefresh()
 		}
 		return m, m.beginRefresh()
@@ -260,7 +275,7 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) scheduleIfIdle() tea.Cmd {
-	if m.projectPending || m.supervisorPending || m.snapshotPending || m.runtimePending || m.uiPending || m.worktreePending || m.previewPending {
+	if m.projectPending || m.issuePending || m.supervisorPending || m.snapshotPending || m.runtimePending || m.uiPending || m.worktreePending || m.previewPending {
 		return nil
 	}
 	return m.scheduleRefresh()
@@ -385,7 +400,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if keybind.Matches(msg, m.keys.Refresh) {
 		m.generation++
-		m.projectPending, m.supervisorPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false, false
+		m.projectPending, m.issuePending, m.supervisorPending, m.snapshotPending, m.runtimePending, m.uiPending = false, false, false, false, false, false
 		m.loadError, m.supervisorReadError, m.runtimeError, m.uiError = "", "", "", ""
 		return m, m.beginRefresh()
 	}
@@ -472,6 +487,17 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.push(route{Page: "results", ParentID: m.route.EntityID, Tab: "handoffs"})
 		}
 		return m, nil
+	}
+	if m.workspaceID == "" && (m.route.Page == "project" || m.route.Page == "issues" || m.route.Page == "issue" || m.route.Page == "dispatcher") && (key == "1" || key == "2" || key == "3") {
+		switch key {
+		case "1":
+			m.navigate(route{Page: "project"})
+		case "2":
+			m.navigate(route{Page: "issues"})
+		case "3":
+			m.navigate(route{Page: "dispatcher"})
+		}
+		return m, m.beginRefresh()
 	}
 	switch {
 	case keybind.Matches(msg, m.keys.Primary[0]):
@@ -640,7 +666,7 @@ func (m *Model) validateSelection() {
 
 func (m *Model) isCollectionPage() bool {
 	switch m.route.Page {
-	case "project", "tasks", "worktrees", "results", "more", "sessions", "runs", "agents", "services", "decisions", "change_requests", "attention", "activity", "documents":
+	case "project", "issues", "tasks", "worktrees", "results", "more", "sessions", "runs", "agents", "services", "decisions", "change_requests", "attention", "activity", "documents":
 		return true
 	default:
 		return false
@@ -649,7 +675,7 @@ func (m *Model) isCollectionPage() bool {
 
 func (m *Model) isDetailPage() bool {
 	switch m.route.Page {
-	case "task", "worktree", "session", "run", "agent", "service", "artifact", "handoff", "check", "decision", "change_request", "preview", "orchestrator", "runtime", "error":
+	case "task", "worktree", "session", "run", "agent", "service", "artifact", "handoff", "check", "decision", "change_request", "issue", "dispatcher", "preview", "orchestrator", "runtime", "error":
 		return true
 	default:
 		return false
@@ -667,6 +693,10 @@ func (m *Model) openSelection() (tea.Model, tea.Cmd) {
 	}
 	if item.Kind == "workspace" {
 		return m, m.setWorkspace(item.ID)
+	}
+	if item.Kind == "issue" {
+		m.push(route{Page: "issue", EntityID: item.ID})
+		return m, m.readIssue(item.ID)
 	}
 	if item.Kind == "page" {
 		m.push(route{Page: item.ID})

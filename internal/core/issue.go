@@ -27,7 +27,7 @@ type CLITracker struct {
 
 func (t CLITracker) Fetch(ctx context.Context, source string) (IssueContent, error) {
 	u, err := url.Parse(source)
-	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil {
+	if err != nil || u.Host == "" || (strings.ToLower(u.Scheme) != "https" && strings.ToLower(u.Scheme) != "http") || u.User != nil {
 		return IssueContent{}, fail("invalid_issue_url", "provide an HTTP(S) issue URL without credentials")
 	}
 	adapter := t.Config.Adapter
