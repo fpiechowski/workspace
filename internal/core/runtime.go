@@ -17,13 +17,14 @@ type Launch struct {
 	ProjectRoot, ProjectID, WorkspaceID, WorkspaceDir, SessionID, RunID, WorktreeID, WorktreeName, CWD, Executable string
 	ReplacePaneID, ReplaceSessionID, ReplaceRunID, PreferredOrchestratorWindowID                                   string
 	Orchestrator                                                                                                   bool
+	Scope, AgentID, Role                                                                                           string
 }
 type Pane struct {
-	ID, WindowID, SessionID, RunID        string
-	Kind, WorkspaceID, UIID, UIToken      string
-	StartCommand, SessionName, WindowName string
-	UIGeneration                          int
-	Dead, Active                          bool
+	ID, WindowID, SessionID, RunID                                    string
+	Kind, WorkspaceID, ProjectID, AgentID, Role, Scope, UIID, UIToken string
+	StartCommand, SessionName, WindowName                             string
+	UIGeneration                                                      int
+	Dead, Active                                                      bool
 }
 type TmuxWindow struct {
 	ID, Name, Kind, WorktreeID string
@@ -32,6 +33,8 @@ type TmuxWindow struct {
 }
 type TmuxTopology struct {
 	WorkspaceID   string
+	ProjectID     string
+	Scope         string
 	SessionName   string
 	SessionExists bool
 	Windows       []TmuxWindow
@@ -80,6 +83,8 @@ func (t Tmux) call(ctx context.Context, args ...string) (string, error) {
 }
 func TmuxName(id string) string { return "workspace-" + id }
 
+func DispatcherTmuxName(projectID string) string { return "workspace-dispatcher-" + projectID }
+
 func tmuxMissingSession(err error) bool {
 	var ce *Error
 	if !errors.As(err, &ce) || ce.Code != "tmux_error" {
@@ -100,7 +105,12 @@ func (t Tmux) runnerCommand(l Launch) string {
 	if executionID == "" {
 		executionID = l.SessionID
 	}
-	args := []string{l.Executable, "--project", l.ProjectRoot, "--workspace", l.WorkspaceID, "--tmux-socket", t.Socket, verb, executionID}
+	args := []string{l.Executable, "--project", l.ProjectRoot, "--tmux-socket", t.Socket}
+	if l.Scope == "project" {
+		args = append(args, "--scope", "project", "_dispatcher-exec", executionID)
+	} else {
+		args = append(args, "--workspace", l.WorkspaceID, verb, executionID)
+	}
 	quoted := make([]string, len(args))
 	for i, a := range args {
 		quoted[i] = shellQuote(a)
@@ -117,6 +127,9 @@ func paneKind(l Launch) string {
 
 func (t Tmux) setWindowMetadata(ctx context.Context, window string, l Launch, kind string) error {
 	options := [][2]string{{"@workspace_window_kind", kind}, {"@workspace_id", l.WorkspaceID}, {"@workspace_project_id", l.ProjectID}}
+	if l.Scope == "project" {
+		options = [][2]string{{"@workspace_window_kind", "dispatcher"}, {"@workspace_scope", "project"}, {"@workspace_project_id", l.ProjectID}, {"@workspace_agent_id", l.AgentID}, {"@workspace_role", l.Role}}
+	}
 	if kind == "worktree" {
 		options = append(options, [2]string{"@workspace_worktree_id", l.WorktreeID})
 	}
@@ -134,6 +147,23 @@ func (t Tmux) setWindowMetadata(ctx context.Context, window string, l Launch, ki
 func (t Tmux) setRuntimeMetadata(ctx context.Context, l Launch, pane, window string) error {
 	if _, err := t.call(ctx, "set-option", "-w", "-t", window, "remain-on-exit", "on"); err != nil {
 		return err
+	}
+	if l.Scope == "project" {
+		for _, option := range [][2]string{{"@workspace_scope", "project"}, {"@workspace_project_id", l.ProjectID}, {"@workspace_agent_id", l.AgentID}, {"@workspace_role", l.Role}, {"@workspace_session_id", l.SessionID}, {"@workspace_run_id", l.RunID}} {
+			if option[1] == "" {
+				continue
+			}
+			if _, err := t.call(ctx, "set-option", "-p", "-t", pane, option[0], option[1]); err != nil {
+				return err
+			}
+		}
+		if err := t.setWindowMetadata(ctx, window, l, "dispatcher"); err != nil {
+			return err
+		}
+		if _, err := t.call(ctx, "set-option", "-p", "-t", pane, "@workspace_kind", "dispatcher"); err != nil {
+			return err
+		}
+		return nil
 	}
 	if _, err := t.call(ctx, "set-option", "-t", pane, "@workspace_id", l.WorkspaceID); err != nil {
 		return err
@@ -250,9 +280,54 @@ func (t Tmux) ObserveTopology(ctx context.Context, workspaceID string) (TmuxTopo
 	return out, nil
 }
 
+// ObserveProjectTopology is the project-scope counterpart to ObserveTopology.
+// It deliberately reads @workspace_scope/project and never treats a pane with
+// only a project ID as a Workspace pane.
+func (t Tmux) ObserveProjectTopology(ctx context.Context, projectID string) (TmuxTopology, error) {
+	out := TmuxTopology{ProjectID: projectID, Scope: "project", SessionName: DispatcherTmuxName(projectID), ObservedAt: nowUTC()}
+	if runtime.GOOS == "windows" {
+		return out, fail("runtime_unsupported", "run tmux sessions with the Linux build inside WSL")
+	}
+	if _, err := t.call(ctx, "has-session", "-t", "="+out.SessionName); err != nil {
+		if tmuxMissingSession(err) {
+			return out, nil
+		}
+		return out, err
+	}
+	out.SessionExists = true
+	windows, err := t.call(ctx, "list-windows", "-t", "="+out.SessionName, "-F", "#{window_id}\t#{window_name}\t#{@workspace_window_kind}\t#{@workspace_scope}\t#{@workspace_project_id}\t#{window_width}\t#{window_height}\t#{window_active}")
+	if err != nil {
+		return out, err
+	}
+	for _, line := range strings.Split(windows, "\n") {
+		fields := strings.SplitN(line, "\t", 8)
+		if len(fields) != 8 || fields[3] != "project" || fields[4] != projectID {
+			continue
+		}
+		width, _ := strconv.Atoi(fields[5])
+		height, _ := strconv.Atoi(fields[6])
+		out.Windows = append(out.Windows, TmuxWindow{ID: fields[0], Name: fields[1], Kind: fields[2], Width: width, Height: height, Active: fields[7] == "1"})
+	}
+	panes, err := t.call(ctx, "list-panes", "-a", "-t", "="+out.SessionName, "-F", "#{pane_id}\t#{window_id}\t#{pane_dead}\t#{pane_active}\t#{@workspace_scope}\t#{@workspace_project_id}\t#{@workspace_agent_id}\t#{@workspace_role}\t#{@workspace_session_id}\t#{@workspace_run_id}\t#{@workspace_kind}\t#{pane_start_command}\t#{session_name}\t#{window_name}")
+	if err != nil {
+		return out, err
+	}
+	for _, line := range strings.Split(panes, "\n") {
+		fields := strings.SplitN(line, "\t", 14)
+		if len(fields) != 14 || fields[4] != "project" || fields[5] != projectID {
+			continue
+		}
+		out.Panes = append(out.Panes, Pane{ID: fields[0], WindowID: fields[1], Dead: fields[2] == "1", Active: fields[3] == "1", Scope: fields[4], ProjectID: fields[5], AgentID: fields[6], Role: fields[7], SessionID: fields[8], RunID: fields[9], Kind: fields[10], StartCommand: fields[11], SessionName: fields[12], WindowName: fields[13]})
+	}
+	return out, nil
+}
+
 // Recover closes the gap between creating a pane and recording its ID. The
 // exact runner command is unique to the concrete Run, including its ULID.
 func (t Tmux) Recover(ctx context.Context, l Launch) (Pane, error) {
+	if l.Scope == "project" {
+		return t.recoverDispatcher(ctx, l)
+	}
 	out, err := t.call(ctx, "list-panes", "-a", "-F", "#{pane_id}\t#{window_id}\t#{pane_dead}\t#{@workspace_session_id}\t#{@workspace_run_id}\t#{@workspace_kind}\t#{@workspace_id}\t#{@workspace_ui_id}\t#{@workspace_ui_generation}\t#{@workspace_ui_token}\t#{pane_start_command}")
 	if err != nil {
 		return Pane{}, err
@@ -279,6 +354,9 @@ func (t Tmux) Recover(ctx context.Context, l Launch) (Pane, error) {
 	return Pane{}, fail("pane_missing", "no pane for session %s", l.SessionID)
 }
 func (t Tmux) Launch(ctx context.Context, l Launch) (Pane, error) {
+	if l.Scope == "project" {
+		return t.launchDispatcher(ctx, l)
+	}
 	name := TmuxName(l.WorkspaceID)
 	command := t.runnerCommand(l)
 	format := "#{pane_id}\t#{window_id}"
@@ -369,6 +447,73 @@ func (t Tmux) Launch(ctx context.Context, l Launch) (Pane, error) {
 	}
 	return Pane{ID: parts[0], WindowID: parts[1], SessionID: l.SessionID, RunID: l.RunID, Kind: paneKind(l), WorkspaceID: l.WorkspaceID}, nil
 }
+
+func (t Tmux) launchDispatcher(ctx context.Context, l Launch) (Pane, error) {
+	name := DispatcherTmuxName(l.ProjectID)
+	command := t.runnerCommand(l)
+	format := "#{pane_id}\t#{window_id}"
+	if _, err := t.call(ctx, "has-session", "-t", "="+name); err != nil {
+		output, err := t.call(ctx, "new-session", "-d", "-P", "-F", format, "-x", "160", "-y", "48", "-s", name, "-n", "dispatcher", "-c", l.CWD, command)
+		if err != nil {
+			return Pane{}, fail("launch_uncertain", "%s", err)
+		}
+		parts := strings.Split(output, "\t")
+		if len(parts) != 2 {
+			return Pane{}, fail("launch_uncertain", "invalid tmux pane: %q", output)
+		}
+		if err := t.setRuntimeMetadata(ctx, l, parts[0], parts[1]); err != nil {
+			return Pane{}, fail("launch_uncertain", "%s", err)
+		}
+		return Pane{ID: parts[0], WindowID: parts[1], SessionID: l.SessionID, RunID: l.RunID, Kind: "dispatcher", ProjectID: l.ProjectID, Scope: "project", AgentID: l.AgentID, Role: l.Role, SessionName: name}, nil
+	}
+	windows, err := t.call(ctx, "list-windows", "-t", "="+name, "-F", "#{window_id}\t#{@workspace_window_kind}\t#{@workspace_scope}\t#{@workspace_project_id}")
+	if err != nil {
+		return Pane{}, err
+	}
+	window := ""
+	for _, line := range strings.Split(windows, "\n") {
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) == 4 && parts[1] == "dispatcher" && parts[2] == "project" && parts[3] == l.ProjectID {
+			window = parts[0]
+			break
+		}
+	}
+	var output string
+	if window == "" {
+		output, err = t.call(ctx, "new-window", "-d", "-P", "-F", format, "-t", "="+name, "-n", "dispatcher", "-c", l.CWD, command)
+	} else {
+		output, err = t.call(ctx, "split-window", "-d", "-P", "-F", format, "-t", window, "-c", l.CWD, command)
+	}
+	if err != nil {
+		return Pane{}, fail("launch_uncertain", "%s", err)
+	}
+	parts := strings.Split(output, "\t")
+	if len(parts) != 2 {
+		return Pane{}, fail("launch_uncertain", "invalid tmux pane: %q", output)
+	}
+	if err := t.setRuntimeMetadata(ctx, l, parts[0], parts[1]); err != nil {
+		return Pane{}, fail("launch_uncertain", "%s", err)
+	}
+	return Pane{ID: parts[0], WindowID: parts[1], SessionID: l.SessionID, RunID: l.RunID, Kind: "dispatcher", ProjectID: l.ProjectID, Scope: "project", AgentID: l.AgentID, Role: l.Role, SessionName: name}, nil
+}
+
+func (t Tmux) recoverDispatcher(ctx context.Context, l Launch) (Pane, error) {
+	rows, err := t.call(ctx, "list-panes", "-a", "-F", "#{pane_id}\t#{window_id}\t#{pane_dead}\t#{@workspace_scope}\t#{@workspace_project_id}\t#{@workspace_agent_id}\t#{@workspace_session_id}\t#{@workspace_run_id}\t#{@workspace_kind}\t#{pane_start_command}")
+	if err != nil {
+		return Pane{}, err
+	}
+	for _, line := range strings.Split(rows, "\n") {
+		parts := strings.SplitN(line, "\t", 10)
+		if len(parts) != 10 || parts[2] == "1" || parts[3] != "project" || parts[4] != l.ProjectID || parts[6] != l.SessionID || parts[7] != l.RunID || parts[8] != "dispatcher" {
+			continue
+		}
+		if err := t.setRuntimeMetadata(ctx, l, parts[0], parts[1]); err != nil {
+			return Pane{}, err
+		}
+		return Pane{ID: parts[0], WindowID: parts[1], SessionID: l.SessionID, RunID: l.RunID, Kind: "dispatcher", ProjectID: l.ProjectID, Scope: "project", AgentID: l.AgentID, Role: l.Role, StartCommand: parts[9], SessionName: DispatcherTmuxName(l.ProjectID)}, nil
+	}
+	return Pane{}, fail("pane_missing", "no Dispatcher pane for session %s", l.SessionID)
+}
 func (t Tmux) Inspect(ctx context.Context, pane string) (Pane, error) {
 	out, err := t.call(ctx, "list-panes", "-a", "-F", "#{pane_id}\t#{window_id}\t#{pane_dead}\t#{pane_active}\t#{@workspace_session_id}\t#{@workspace_run_id}\t#{@workspace_kind}\t#{@workspace_id}\t#{@workspace_ui_id}\t#{@workspace_ui_generation}\t#{@workspace_ui_token}\t#{pane_start_command}\t#{session_name}\t#{window_name}")
 	if err != nil {
@@ -379,6 +524,20 @@ func (t Tmux) Inspect(ctx context.Context, pane string) (Pane, error) {
 		if len(p) == 14 && p[0] == pane {
 			generation, _ := strconv.Atoi(p[9])
 			return Pane{ID: p[0], WindowID: p[1], Dead: p[2] == "1", Active: p[3] == "1", SessionID: p[4], RunID: p[5], Kind: p[6], WorkspaceID: p[7], UIID: p[8], UIGeneration: generation, UIToken: p[10], StartCommand: p[11], SessionName: p[12], WindowName: p[13]}, nil
+		}
+	}
+	return Pane{}, fail("pane_missing", "%s", pane)
+}
+
+func (t Tmux) InspectProject(ctx context.Context, pane, projectID string) (Pane, error) {
+	out, err := t.call(ctx, "list-panes", "-a", "-F", "#{pane_id}\t#{window_id}\t#{pane_dead}\t#{@workspace_scope}\t#{@workspace_project_id}\t#{@workspace_agent_id}\t#{@workspace_role}\t#{@workspace_session_id}\t#{@workspace_run_id}\t#{@workspace_kind}\t#{pane_start_command}\t#{session_name}\t#{window_name}")
+	if err != nil {
+		return Pane{}, err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		p := strings.SplitN(line, "\t", 13)
+		if len(p) == 13 && p[0] == pane && p[3] == "project" && p[4] == projectID {
+			return Pane{ID: p[0], WindowID: p[1], Dead: p[2] == "1", Scope: p[3], ProjectID: p[4], AgentID: p[5], Role: p[6], SessionID: p[7], RunID: p[8], Kind: p[9], StartCommand: p[10], SessionName: p[11], WindowName: p[12]}, nil
 		}
 	}
 	return Pane{}, fail("pane_missing", "%s", pane)
@@ -397,6 +556,51 @@ func (t Tmux) StopWorkspace(ctx context.Context, workspaceID string) error {
 		return nil
 	}
 	return err
+}
+
+func (t Tmux) StopDispatcher(ctx context.Context, projectID string) error {
+	_, err := t.call(ctx, "kill-session", "-t", "="+DispatcherTmuxName(projectID))
+	if tmuxMissingSession(err) {
+		return nil
+	}
+	return err
+}
+
+func (t Tmux) AttachProject(ctx context.Context, projectID, pane string) error {
+	name := DispatcherTmuxName(projectID)
+	if os.Getenv("TMUX") != "" {
+		currentSocket := strings.Split(os.Getenv("TMUX"), ",")[0]
+		currentName := filepath.Base(currentSocket)
+		expectedName := t.Socket
+		if expectedName == "" {
+			expectedName = "default"
+		}
+		if currentName != expectedName {
+			return fail("tmux_server_mismatch", "attach from outside the current tmux server to use this project socket")
+		}
+	}
+	if _, err := t.call(ctx, "has-session", "-t", "="+name); err != nil {
+		return fail("pane_missing", "tmux Dispatcher session %s does not exist", name)
+	}
+	if pane != "" {
+		p, err := t.InspectProject(ctx, pane, projectID)
+		if err != nil {
+			return err
+		}
+		if _, err := t.call(ctx, "select-window", "-t", p.WindowID); err != nil {
+			return err
+		}
+		if _, err := t.call(ctx, "select-pane", "-t", pane); err != nil {
+			return err
+		}
+	}
+	verb := "attach-session"
+	if os.Getenv("TMUX") != "" {
+		verb = "switch-client"
+	}
+	cmd := exec.CommandContext(ctx, "tmux", t.args(verb, "-t", "="+name)...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return cmd.Run()
 }
 func (t Tmux) Attach(ctx context.Context, workspaceID, pane string) error {
 	topology, err := t.ObserveTopology(ctx, workspaceID)

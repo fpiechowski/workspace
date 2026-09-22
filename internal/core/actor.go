@@ -2,7 +2,21 @@ package core
 
 // Actor is an explicit local role contract. An empty actor represents a user at
 // the terminal. It is not a sandbox or a cryptographic proof of human identity.
-type Actor struct{ AgentID, SessionID, RunID string }
+type Actor struct{ AgentID, SessionID, RunID, Scope string }
+
+// requireWorkspaceScope keeps a project-scoped Dispatcher out of the generic
+// Workspace mutation surface. The explicit Issue dispatch aggregate clears the
+// actor for its narrow linked-Workspace steps, so those steps remain allowed
+// without granting the Dispatcher arbitrary Workspace authority.
+func (s *Service) requireWorkspaceScope() error {
+	if s.Actor.AgentID == "" && s.Actor.SessionID == "" && s.Actor.RunID == "" {
+		return nil
+	}
+	if s.Actor.Scope == "project" {
+		return fail("forbidden", "project Dispatcher can mutate Issues and dispatch linked Workspaces only")
+	}
+	return nil
+}
 
 func (s *Service) actor(d *Document) (*Session, error) {
 	if s.Actor.AgentID == "" && s.Actor.SessionID == "" && s.Actor.RunID == "" {

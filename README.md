@@ -10,6 +10,10 @@ run manually without a workflow, using explicit tasks, worktrees, handoffs, and 
 - **Run**: one concrete client and tmux-pane execution; stores the model, argv, prompt,
   process result, and exact operation provenance.
 - **Workspace**: WORKSPACE.md, AGENTS.md, WORKFLOW.md, tasks, artifacts, and worktrees.
+- **Issue**: a durable project input with revisioned snapshots, local status, source,
+  digest, history, and links to Workspaces created from an exact revision.
+- **Dispatcher**: a project-scoped Agent that may intake and route Issues, create linked
+  Workspaces, and explicitly start their orchestrators; it cannot implement code.
 
 The product vision and boundaries are described in [PRODUCT.md](PRODUCT.md), while the
 technical model and reference map are in [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -168,6 +172,8 @@ profiles:
       - {id: worker, client: opencode, provider: YOUR_PROVIDER, model: YOUR_PROVIDER/YOUR_WORKER_MODEL, max_concurrency: 3}
 defaults:
   orchestrator_profile: orchestrator
+  # Optional; falls back to orchestrator_profile when omitted.
+  dispatcher_profile: orchestrator
 workflows:
   plan-first:
     profiles:
@@ -237,6 +243,15 @@ Give the agent a ticket or description and use the `workspace` skill, or run:
 ```sh
 workspace create --issue https://github.com/OWNER/REPO/issues/142 \
   --workflow plan-first --operation-key issue-142
+# First-class Issue intake and durable revision history:
+workspace issue create --issue https://github.com/OWNER/REPO/issues/142 \
+  --operation-key intake-142
+workspace issue list
+workspace issue show issue_ID
+workspace issue dispatch issue_ID --workflow plan-first --start \
+  --operation-key dispatch-142
+# Create from an existing local Issue revision; the Workspace input is frozen:
+workspace create --from-issue issue_ID --operation-key workspace-142
 # You can also provide the description directly as an argument or through --input-file issue.md.
 workspace create "Improve workspace creation" --workflow plan-first
 # --input-file can optionally be combined with --issue URL to preserve the source.
@@ -254,6 +269,13 @@ delegating), and `--no-workflow` creates an active manual workspace — without 
 advance, or release, with task delegation, handoffs, checks, and a fixed limit of 3
 parallel workers. `--workflow` and `--no-workflow` cannot be combined, and a manual
 workspace cannot later be converted to a workflow. [Trackers and snapshots](docs/trackers.md).
+
+Issue operations are project-scoped and local. `workspace issue refresh` reads the
+configured tracker but never changes it; `issue update` changes only local status.
+`workspace dispatcher start|status|stop|attach` manages the separate project-scoped
+Dispatcher runtime. A Dispatcher may route Issues and create linked Workspaces, but
+workspace actors cannot mutate project Issues. Every linked Workspace records the
+Issue ID, revision, and digest in its durable input.
 
 Returning to an existing workspace does not require remembering its ID:
 
@@ -277,7 +299,8 @@ Detaching the user does not stop processes.
 
 ## Terminal User Interface (TUI)
 
-Run `workspace tui` to browse a project's workspaces and their tasks, worktrees,
+Run `workspace tui` to browse a project's Workspaces, durable Issues, project Dispatcher,
+and their tasks, worktrees,
 sessions, runs, results, and runtime state. Scope selection works the same as in the
 CLI; you can pass `--project` and `--workspace`, and without a workspace the TUI opens
 a picker. Reading also works on Windows, but tmux, jump, and a managed panel require a
@@ -295,7 +318,11 @@ workspace tui status --workspace ws_ID
 workspace tui hide --workspace ws_ID
 ```
 
-Opening or selecting a workspace lands on Tasks. `1`–`5` open Tasks, Sessions,
+Without a workspace, the project tabs are `1 Workspaces`, `2 Issues`, and `3 Dispatcher`.
+The Issues tab shows durable revisions and linked Workspaces; opening an Issue shows its
+frozen description and `a` can create a linked Workspace. The Dispatcher tab shows its
+project-scoped state and offers start/stop actions. Opening or selecting a workspace
+lands on Tasks. `1`–`5` open Tasks, Sessions,
 Worktrees, Results, and More; below 60 columns the tabs shorten to `1 Tasks`,
 `2 Sess`, `3 Trees`, `4 Out`, and `5 More`. Sessions is a plain collection without
 secondary tabs: `f` switches between the current and history views, `Enter` opens the

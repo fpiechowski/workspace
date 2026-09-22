@@ -75,6 +75,25 @@ func (s *Service) assessRoutes(cfg Config, profile string) (RoutingDecision, err
 			}
 		}
 	}
+	if cfg, cfgErr := s.Config(); cfgErr == nil {
+		if dispatcher, exists, stateErr := loadDispatcherState(s.Root, cfg.ProjectID); stateErr == nil && exists {
+			for _, run := range dispatcher.Runs {
+				key := run.Route.Client + "/" + run.Route.Provider + "/" + run.Route.Model
+				if run.Active() {
+					active[key]++
+				}
+				if run.CreatedAt.After(now.Add(-24*time.Hour)) && (run.State != "failed" || run.ExitCode != nil) {
+					counts[run.Route.Provider]++
+					routeCount[key]++
+				} else if run.Active() {
+					counts[run.Route.Provider]++
+				}
+				if run.State == "failed" && run.ExitCode == nil && run.CreatedAt.After(failures[key]) {
+					failures[key] = run.CreatedAt
+				}
+			}
+		}
+	}
 	bestScore := math.Inf(1)
 	bestActive, bestCount := math.MaxInt, math.MaxInt
 	for _, r := range p.Routes {

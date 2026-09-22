@@ -136,7 +136,7 @@ func InitProject(ctx context.Context, dir string, keys ...string) (Config, error
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Config{}, err
 	}
-	for _, rule := range []string{"/.workspace/ws_*/", "/.workspace/.runtime/", "/.workspace/.creating-*/", "/work-products/"} {
+	for _, rule := range []string{"/.workspace/ws_*/", "/.workspace/.runtime/", "/.workspace/.creating-*/", "/.workspace/issues/", "/.workspace/dispatcher/", "/work-products/"} {
 		if !strings.Contains("\n"+string(b)+"\n", "\n"+rule+"\n") {
 			b = append(b, []byte("\n"+rule+"\n")...)
 		}
@@ -219,6 +219,11 @@ func (s *Service) Config() (Config, error) {
 	if profile := cfg.Defaults.OrchestratorProfile; profile != "" {
 		if _, ok := cfg.Profiles[profile]; !ok {
 			return cfg, fail("invalid_config", "defaults.orchestrator_profile references unknown profile %q", profile)
+		}
+	}
+	if profile := cfg.Defaults.DispatcherProfile; profile != "" {
+		if _, ok := cfg.Profiles[profile]; !ok {
+			return cfg, fail("invalid_config", "defaults.dispatcher_profile references unknown profile %q", profile)
 		}
 	}
 	for name, w := range cfg.Workflows {
@@ -341,6 +346,10 @@ func (s *Service) Status(ctx context.Context, selector string) (Status, error) {
 
 type CreateOptions struct {
 	Title, Input, Source, Workflow, Base, OperationKey string
+	IssueID, FromIssue                                 string
+	IssueRevision                                      int
+	IssueDigest                                        string
+	OperationRequest                                   any `json:"-" yaml:"-"`
 	// NoWorkflow creates an active workspace with a nil workflow for explicit
 	// manual orchestration. It cannot be combined with Workflow and is kept in
 	// the idempotency payload so retries cannot reinterpret the earlier choice.
@@ -376,6 +385,29 @@ func WorkflowNames(root string, cfg Config) []string {
 }
 
 func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error) {
+	if opt.OperationKey != "" {
+		if replay, found, err := s.replayWorkspaceCreate(ctx, opt); err != nil {
+			return Status{}, err
+		} else if found {
+			return replay, nil
+		}
+	}
+	if opt.FromIssue != "" {
+		return s.CreateFromIssue(ctx, opt.FromIssue, opt)
+	}
+	if opt.IssueID != "" {
+		return s.CreateFromIssue(ctx, opt.IssueID, opt)
+	}
+	if opt.Source != "" {
+		return s.CreateFromIssueURL(ctx, opt)
+	}
+	if err := s.requireWorkspaceScope(); err != nil {
+		return Status{}, err
+	}
+	return s.createWorkspaceLegacy(ctx, opt, "", 0, "")
+}
+
+func (s *Service) createWorkspaceLegacy(ctx context.Context, opt CreateOptions, issueID string, issueRevision int, issueDigest string) (Status, error) {
 	if opt.NoWorkflow && opt.Workflow != "" {
 		return Status{}, fail("invalid_option", "--workflow and --no-workflow are mutually exclusive")
 	}
@@ -409,7 +441,11 @@ func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error)
 		if err != nil {
 			return Status{}, err
 		}
-		id, err := d.previous("create:"+opt.OperationKey, opt)
+		operationRequest := any(opt)
+		if opt.OperationRequest != nil {
+			operationRequest = opt.OperationRequest
+		}
+		id, err := d.previous("create:"+opt.OperationKey, operationRequest)
 		if opt.OperationKey != "" {
 			if err != nil {
 				return Status{}, err
@@ -465,9 +501,9 @@ func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error)
 	if opt.NoWorkflow {
 		status = "active"
 	}
-	d := &Document{Dir: dir, State: Workspace{SchemaVersion: 1, ID: id, ProjectID: cfg.ProjectID, Title: opt.Title, Revision: 1, Status: status, Input: Input{opt.Source, "inputs/issue.md"}, Base: Base{baseRef, base}, CreatedAt: time.Now().UTC()}, Registry: Registry{SchemaVersion: registrySchemaVersion, Agents: []Agent{}, Worktrees: []Worktree{}, Sessions: []Session{}, Runs: []Run{}, Operations: map[string]Operation{}}}
+	d := &Document{Dir: dir, State: Workspace{SchemaVersion: 1, ID: id, ProjectID: cfg.ProjectID, Title: opt.Title, Revision: 1, Status: status, Input: Input{Source: opt.Source, Snapshot: "inputs/issue.md", IssueID: issueID, IssueRevision: issueRevision, IssueDigest: issueDigest}, Base: Base{baseRef, base}, CreatedAt: time.Now().UTC()}, Registry: Registry{SchemaVersion: registrySchemaVersion, Agents: []Agent{}, Worktrees: []Worktree{}, Sessions: []Session{}, Runs: []Run{}, Operations: map[string]Operation{}}}
 	d.State.ProjectRoot = s.Root
-	orch := Agent{ID("agent"), "orchestrator", "orchestrator", cfg.Defaults.OrchestratorProfile, "orchestrator", "Coordinate the workflow; delegate all code changes to workers."}
+	orch := Agent{ID: ID("agent"), Name: "orchestrator", Role: "orchestrator", Profile: cfg.Defaults.OrchestratorProfile, PromptTemplate: "orchestrator", Instructions: "Coordinate the workflow; delegate all code changes to workers.", Scope: "workspace"}
 	d.State.OrchestratorAgentID = orch.ID
 	d.Registry.Agents = append(d.Registry.Agents, orch)
 	for _, sub := range []string{"inputs", "prompts", "tasks", "artifacts", "worktrees", ".runtime"} {
@@ -491,7 +527,11 @@ func (s *Service) Create(ctx context.Context, opt CreateOptions) (Status, error)
 	}
 	d.Body = string(body)
 	if opt.OperationKey != "" {
-		d.remember("create:"+opt.OperationKey, request, id)
+		rememberRequest := any(request)
+		if opt.OperationRequest != nil {
+			rememberRequest = opt.OperationRequest
+		}
+		d.remember("create:"+opt.OperationKey, rememberRequest, id)
 		op := d.Registry.Operations["create:"+opt.OperationKey]
 		op.Revision = d.State.Revision
 		result := d.Status()

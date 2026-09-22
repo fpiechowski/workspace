@@ -50,6 +50,9 @@ func (s *Service) chooseRoute(cfg Config, profile string) (Route, error) {
 	return Route{}, fail("no_route", "no eligible route in profile %q; use workspace profile explain", profile)
 }
 func (s *Service) StartSession(ctx context.Context, selector string, opt SessionOptions) (Session, error) {
+	if err := s.requireWorkspaceScope(); err != nil {
+		return Session{}, err
+	}
 	var out Session
 	err := s.With(ctx, selector, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
@@ -693,7 +696,7 @@ func (s *Service) sessionCommandEnv(state Workspace, dir string, session Session
 			cmdEnv = append(cmdEnv, e)
 		}
 	}
-	cmdEnv = append(cmdEnv, "WORKSPACE_PROJECT_DIR="+s.Root, "WORKSPACE_PROJECT_ID="+state.ProjectID, "WORKSPACE_ID="+state.ID, "WORKSPACE_DIR="+dir, "WORKSPACE_AGENT_ID="+session.AgentID, "WORKSPACE_SESSION_ID="+session.ID, "WORKSPACE_RUN_ID="+run.ID, "WORKSPACE_ORCHESTRATOR_ID="+state.OrchestratorAgentID, "WORKSPACE_PARENT_AGENT_ID="+session.ParentAgentID, "WORKSPACE_PARENT_SESSION_ID="+session.ParentSessionID, "WORKSPACE_WORKTREE_ID="+session.WorktreeID, "WORKSPACE_ROLE="+session.AgentSnapshot.Role)
+	cmdEnv = append(cmdEnv, "WORKSPACE_SCOPE=workspace", "WORKSPACE_PROJECT_DIR="+s.Root, "WORKSPACE_PROJECT_ID="+state.ProjectID, "WORKSPACE_ID="+state.ID, "WORKSPACE_DIR="+dir, "WORKSPACE_AGENT_ID="+session.AgentID, "WORKSPACE_SESSION_ID="+session.ID, "WORKSPACE_RUN_ID="+run.ID, "WORKSPACE_ORCHESTRATOR_ID="+state.OrchestratorAgentID, "WORKSPACE_PARENT_AGENT_ID="+session.ParentAgentID, "WORKSPACE_PARENT_SESSION_ID="+session.ParentSessionID, "WORKSPACE_WORKTREE_ID="+session.WorktreeID, "WORKSPACE_ROLE="+session.AgentSnapshot.Role)
 	cmdEnv = append(cmdEnv, "WORKSPACE_TASK_ID="+session.TaskID)
 	if session.ReadOnly {
 		cmdEnv = append(cmdEnv, "WORKSPACE_READ_ONLY=1")

@@ -12,10 +12,10 @@ import (
 )
 
 type Request struct {
-	Project, Workspace, Socket string
-	CWD, Executable            string
-	Env                        map[string]string
-	ProjectOnly                bool
+	Project, Workspace, Socket, Scope string
+	CWD, Executable                   string
+	Env                               map[string]string
+	ProjectOnly                       bool
 }
 
 type Scope struct {
@@ -73,6 +73,10 @@ func Resolve(request Request) (*Scope, error) {
 	if socket == "" {
 		socket = env["WORKSPACE_TMUX_SOCKET"]
 	}
+	actorScope := env["WORKSPACE_SCOPE"]
+	if request.Scope != "" {
+		actorScope = request.Scope
+	}
 	s := &core.Service{
 		Root:       project,
 		Runtime:    core.Tmux{Socket: socket},
@@ -81,6 +85,7 @@ func Resolve(request Request) (*Scope, error) {
 			AgentID:   env["WORKSPACE_AGENT_ID"],
 			SessionID: env["WORKSPACE_SESSION_ID"],
 			RunID:     env["WORKSPACE_RUN_ID"],
+			Scope:     actorScope,
 		},
 	}
 	out := &Scope{Service: s, ProjectRoot: project, CWD: canonicalCWD, ProjectFound: true}

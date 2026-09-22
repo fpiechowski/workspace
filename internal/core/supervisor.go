@@ -83,12 +83,12 @@ func (s *Service) StopSupervisor(ctx context.Context, keys ...string) error {
 	return err
 }
 func (s *Service) EnsureSupervisor(ctx context.Context) error {
-	if runtime.GOOS == "windows" {
-		return fail("runtime_unsupported", "run the Linux build in WSL for tmux sessions")
-	}
 	rt, ok := s.Runtime.(Tmux)
 	if !ok {
 		return nil
+	}
+	if runtime.GOOS == "windows" {
+		return fail("runtime_unsupported", "run the Linux build in WSL for tmux sessions")
 	}
 	if info, err := s.SupervisorStatus(ctx); err == nil {
 		if info.TmuxSocket != rt.Socket {
@@ -232,17 +232,121 @@ func (s *Service) Serve(ctx context.Context) error {
 	}
 }
 func (s *Service) Tick(ctx context.Context) error {
-	workspaces, err := s.List(ctx)
+	var failures []error
+	overview, overviewErr := s.ProjectOverview(ctx)
+	if overviewErr != nil {
+		failures = append(failures, fmt.Errorf("project overview: %w", overviewErr))
+	} else {
+		for _, row := range overview.Workspaces {
+			if row.Error != "" {
+				failures = append(failures, fmt.Errorf("%s: %s", row.ID, row.Error))
+				continue
+			}
+			status, err := s.Status(ctx, row.ID)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("%s: %w", row.ID, err))
+				continue
+			}
+			if err := s.tickWorkspace(ctx, status); err != nil {
+				failures = append(failures, fmt.Errorf("%s: %w", status.Workspace.ID, err))
+			}
+		}
+	}
+	if err := s.tickDispatcher(ctx); err != nil {
+		failures = append(failures, fmt.Errorf("dispatcher: %w", err))
+	}
+	return errors.Join(failures...)
+}
+
+// tickDispatcher reconciles the project-scoped Dispatcher independently from
+// Workspace agents. Only a verified lost owned pane is eligible for resume;
+// normal client exit, explicit stop and observation failures never trigger a
+// blind duplicate launch.
+func (s *Service) tickDispatcher(ctx context.Context) error {
+	var projectID, runID, paneID, sessionID, agentID string
+	var active bool
+	err := withProjectLock(ctx, s.Root, func() error {
+		cfg, err := s.Config()
+		if err != nil {
+			return err
+		}
+		state, exists, err := loadDispatcherState(s.Root, cfg.ProjectID)
+		if err != nil || !exists || state.StopRequested {
+			return err
+		}
+		projectID = cfg.ProjectID
+		for _, session := range state.Sessions {
+			if session.AgentID != state.Agent.ID || !session.Active() || session.CurrentRunID == "" {
+				continue
+			}
+			run, findErr := findDispatcherRun(&state, session.CurrentRunID)
+			if findErr != nil {
+				return findErr
+			}
+			active, runID, paneID, sessionID, agentID = true, run.ID, run.PaneID, session.ID, state.Agent.ID
+			break
+		}
+		return nil
+	})
+	if err != nil || !active {
+		return err
+	}
+	if paneID == "" {
+		return nil
+	}
+	var inspectErr error
+	if inspector, ok := s.Runtime.(interface {
+		InspectProject(context.Context, string, string) (Pane, error)
+	}); ok {
+		pane, err := inspector.InspectProject(ctx, paneID, projectID)
+		inspectErr = err
+		if inspectErr == nil {
+			owned := pane.Scope == "project" && pane.ProjectID == projectID && pane.AgentID == agentID && pane.SessionID == sessionID && pane.RunID == runID && pane.Role == "dispatcher"
+			if !owned {
+				return fail("dispatcher_pane_conflict", "live pane does not carry the current Dispatcher ownership metadata")
+			}
+			if !pane.Dead {
+				return nil
+			}
+			inspectErr = fail("pane_missing", "Dispatcher pane is dead or ownership metadata does not match")
+		}
+	} else {
+		return fail("runtime_unsupported", "runtime cannot verify project Dispatcher pane ownership")
+	}
+	if inspectErr == nil {
+		return nil
+	}
+	var runtimeErr *Error
+	if !errors.As(inspectErr, &runtimeErr) || runtimeErr.Code != "pane_missing" {
+		return inspectErr
+	}
+	// Persist the interruption under the project lock and verify the same Run
+	// still owns the Session before resuming it.
+	err = withProjectLock(ctx, s.Root, func() error {
+		state, exists, err := loadDispatcherState(s.Root, projectID)
+		if err != nil || !exists || state.StopRequested {
+			return err
+		}
+		session := latestDispatcherSession(state)
+		if session == nil || session.CurrentRunID != runID {
+			return nil
+		}
+		run, err := findDispatcherRun(&state, runID)
+		if err != nil || !run.Active() {
+			return err
+		}
+		run.State, run.Error = "interrupted", "Dispatcher pane is absent or no longer owned"
+		now := nowUTC()
+		run.FinishedAt = &now
+		session.CurrentRunID = ""
+		syncDispatcherSession(&state, session)
+		return saveDispatcherState(s.Root, state)
+	})
 	if err != nil {
 		return err
 	}
-	var failures []error
-	for _, status := range workspaces {
-		if err := s.tickWorkspace(ctx, status); err != nil {
-			failures = append(failures, fmt.Errorf("%s: %w", status.Workspace.ID, err))
-		}
-	}
-	return errors.Join(failures...)
+	_, err = s.StartDispatcher(ctx, "", "dispatcher-recover:"+runID)
+	return err
 }
 func (s *Service) tickWorkspace(ctx context.Context, status Status) error {
 	var failures []error

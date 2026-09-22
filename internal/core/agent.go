@@ -64,7 +64,7 @@ func (s *Service) CreateAgent(ctx context.Context, selector string, opt AgentOpt
 			}
 			profile = workflowProfile(cfg, d, opt.Role, def[0])
 		}
-		out = Agent{ID("agent"), opt.Name, opt.Role, profile, opt.PromptTemplate, opt.Instructions}
+		out = Agent{ID: ID("agent"), Name: opt.Name, Role: opt.Role, Profile: profile, PromptTemplate: opt.PromptTemplate, Instructions: opt.Instructions, Scope: "workspace"}
 		d.Registry.Agents = append(d.Registry.Agents, out)
 		d.remember(opt.OperationKey, opt, out.ID)
 		return saveResource(d, opt.OperationKey, out)

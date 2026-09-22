@@ -19,6 +19,34 @@ than restarted silently.
 `server status` inspects it; `server stop` stops supervision without killing agents.
 `serve` runs supervision in the foreground.
 
+## Project Dispatcher
+
+The project-scoped Dispatcher is separate from every Workspace Agent. Its durable state
+lives in `.workspace/dispatcher/state.json`; its stable Agent role is `dispatcher`, its
+scope is `project`, and its tmux session is `workspace-dispatcher-<project-id>`. Configure
+`defaults.dispatcher_profile` to select its model profile; when omitted, the configured
+orchestrator profile is used.
+
+```sh
+workspace dispatcher start --operation-key dispatcher-1
+workspace dispatcher status
+workspace dispatcher stop --operation-key dispatcher-stop-1
+workspace dispatcher attach
+```
+
+Dispatcher panes carry explicit project scope, project ID, Agent ID, role, Session ID,
+and Run ID metadata. Status verifies those fields before exposing a pane as attachable or
+eligible for recovery. The supervisor restarts only a verified lost Dispatcher pane;
+normal client exit, explicit stop, a dead/unowned pane, or an observation error never
+causes a blind duplicate launch. Workspace actors cannot mutate project Issues, and a
+Dispatcher cannot use its project identity to perform arbitrary Workspace mutations.
+
+The Dispatcher may intake, inspect, refresh, defer, reopen, or close local Issues, create
+a Workspace from an exact Issue revision, and explicitly start that Workspace's
+Orchestrator. Issue text is untrusted data and never grants permissions. The Dispatcher
+does not implement code, create Tasks or Worktrees, accept results, publish changes, or
+mutate the external tracker.
+
 The supervisor reconciles durable state with actual pane ownership. A verified lost
 orchestrator pane is marked as an interrupted Run and resumed in the same compatible
 logical Session with a new Run. Recovery also applies to an active manually orchestrated

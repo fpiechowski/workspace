@@ -26,19 +26,29 @@ For a new issue or work description:
    workspace without `--workflow` starts in `needs_workflow` for interactive selection.
    Use `--no-workflow` instead when the user asks for manual orchestration: the
    workspace is active with no workflow, so do not select one for it.
-3. For a ticket URL, `create --issue URL` retrieves supported/configured trackers.
-   Otherwise pass the supplied description as the positional intent or save it as an input
-   file. Preserve the source URL, relevant acceptance criteria and retrieval date. If tracker
-   access is unavailable, ask for the description instead of inventing issue contents.
-4. Use `workspace create "<intent>" --title <title> --workflow plan-first
-   --operation-key <stable-key> --json`; include `--issue <url>` when applicable.
-   For longer or file-based descriptions, use `--input-file <file>` instead of the
-   positional intent.
+3. For a ticket URL, create a durable project Issue first with
+   `workspace issue create --issue URL --operation-key <stable-key> --json`.
+   Otherwise use `workspace issue create --input-file <file>` (or the equivalent body
+   input) when the work should be tracked as an Issue. Preserve the source URL, relevant
+   acceptance criteria and retrieval date. If tracker access is unavailable, ask for the
+   description instead of inventing issue contents.
+4. Inspect `workspace issue show <issue-id> --json`, then create a Workspace from the
+   exact frozen revision with `workspace create --from-issue <issue-id> --workflow plan-first
+   --operation-key <stable-key> --json`.
    Replace `--workflow plan-first` with `--no-workflow` for an explicit manual workspace.
-   Retain the returned workspace ID; repeat the same operation key on transport retry.
+   For free-form work that is not an Issue, pass the description as the positional intent
+   or use `--input-file <file>`. Retain the returned workspace ID; repeat the same
+   operation key on transport retry.
 5. Run `workspace start --workspace <id> --operation-key <start-key> --json`.
    Return its workspace ID and `workspace attach --workspace <id>` to the user.
    Starting creates the orchestrator's tmux session without changing your current view.
+
+For project-level intake, `workspace issue list`, `issue show`, `issue refresh`, and
+`issue update` are read/guarded mutation operations. `issue dispatch <issue-id>` creates
+a linked Workspace and can start its orchestrator as one idempotent operation. The
+project Dispatcher is managed separately with `workspace dispatcher start|status|stop|attach`;
+its session and Runs are project-scoped and must not be confused with a Workspace
+orchestrator.
 
 For existing work, inspect `workspace status --workspace <id> --json` and
 `workspace menu --workspace <id> --json`. Reuse the existing orchestrator Agent;

@@ -109,6 +109,59 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace create --issue https://github.com/OWNER/REPO/issues/142 --workflow plan-first\nworkspace create \"Improve workspace creation\" --no-workflow",
 		optionalArgument("intent", "Issue or task description supplied inline; do not combine it with --input-file."),
 	),
+	"workspace issue": h(
+		"Manage durable project Issues. Issue content is local input data; tracker adapters remain read-only and linked Workspace inputs are frozen revisions.",
+		"workspace issue list\nworkspace issue create --issue https://tracker.example/issues/142",
+	),
+	"workspace issue create": h(
+		"Create a project Issue from one manual description, file, or HTTP(S) source. A source URL is fetched only when no local body is supplied.",
+		"workspace issue create \"Improve retry handling\" --title \"Retry handling\"",
+		optionalArgument("intent", "Manual Issue description; do not combine it with --input-file."),
+	),
+	"workspace issue list": h(
+		"List bounded Issue summaries, local status, revision and derived linked Workspace counts without loading full bodies.",
+		"workspace issue list --short",
+	),
+	"workspace issue show": h(
+		"Show one Issue's canonical content, revision metadata and derived linked Workspaces.",
+		"workspace issue show issue_01",
+		requiredArgument("issue", "Durable Issue ID."),
+	),
+	"workspace issue refresh": h(
+		"Refresh a sourced Issue through the configured read-only tracker. Tracker failures never create guessed content.",
+		"workspace issue refresh issue_01 --expected-revision 2 --operation-key refresh:issue_01:2",
+		requiredArgument("issue", "Durable sourced Issue ID."),
+	),
+	"workspace issue update": h(
+		"Change only the local Issue status with an exact revision guard. Deferred and closed statuses require a reason.",
+		"workspace issue update issue_01 --status deferred --reason \"Waiting for product decision\" --expected-revision 2",
+		requiredArgument("issue", "Durable Issue ID."),
+	),
+	"workspace issue dispatch": h(
+		"Create a Workspace from the selected frozen Issue revision and optionally start its Workspace Orchestrator.",
+		"workspace issue dispatch issue_01 --workflow plan-first --start --operation-key dispatch:issue_01",
+		requiredArgument("issue", "Durable Issue ID."),
+	),
+	"workspace dispatcher": h(
+		"Manage the singleton project-scoped Dispatcher. It handles project Issue intake and routing only; Workspace Orchestrators own execution.",
+		"workspace dispatcher status\nworkspace dispatcher start --profile dispatcher",
+	),
+	"workspace dispatcher start": h(
+		"Explicitly start or resume the project Dispatcher. The profile falls back from defaults.dispatcher_profile to defaults.orchestrator_profile.",
+		"workspace dispatcher start --profile dispatcher --operation-key dispatcher:start",
+	),
+	"workspace dispatcher status": h(
+		"Read Dispatcher Agent, logical Sessions, Runs and verified project-scope tmux ownership without starting runtime state.",
+		"workspace dispatcher status --json",
+	),
+	"workspace dispatcher stop": h(
+		"Stop the current Dispatcher Run idempotently and persist an explicit no-auto-restart intent.",
+		"workspace dispatcher stop --operation-key dispatcher:stop",
+	),
+	"workspace dispatcher attach": h(
+		"Attach to the exact verified project Dispatcher tmux session and pane.",
+		"workspace dispatcher attach",
+	),
 	"workspace list": h(
 		"List workspaces known to this project. Use --short (or --map) for a compact name-to-ID map.",
 		"workspace list --short",
@@ -539,6 +592,30 @@ var flagHelpSpecs = map[string]map[string]string{
 		"workflow":    "Configured workflow name; omit it to choose a workflow later.",
 		"no-workflow": "Create an active workspace with no workflow for manual orchestration; cannot be combined with --workflow.",
 		"base":        "Base Git revision to freeze for the workspace.",
+		"from-issue":  "Existing durable Issue ID; mutually exclusive with intent, --input-file and --issue.",
+	},
+	"workspace issue create": {
+		"title":      "Issue title; tracker title is used when omitted.",
+		"input-file": "File containing a manual Issue body.",
+		"issue":      "HTTP(S) source URL; tracker access is read-only and skipped when a body is supplied.",
+	},
+	"workspace issue refresh": {
+		"expected-revision": "Exact current Issue revision required before refresh.",
+	},
+	"workspace issue update": {
+		"status":            "Local status: open, deferred, or closed.",
+		"reason":            "Required for deferred/closed; recorded when reopening to open if supplied.",
+		"expected-revision": "Exact current Issue revision required before update.",
+	},
+	"workspace issue dispatch": {
+		"workflow":    "Configured workflow; mutually exclusive with --no-workflow.",
+		"no-workflow": "Create an active manual Workspace.",
+		"base":        "Base Git revision to freeze for the Workspace.",
+		"title":       "Workspace title override; defaults to the Issue title.",
+		"start":       "Explicitly start the linked Workspace Orchestrator after creation.",
+	},
+	"workspace dispatcher start": {
+		"profile": "Explicit Dispatcher profile override; otherwise use defaults.dispatcher_profile, then defaults.orchestrator_profile.",
 	},
 	"workspace workflow advance": {"to": "Expected next phase; fail if the workflow would advance from a different phase."},
 	"workspace workflow migrate": {
@@ -741,7 +818,7 @@ func normalizeHelpArgs(args []string) []string {
 		return args
 	}
 	for _, arg := range args[:len(args)-1] {
-		if arg == "--" || arg == "_session-exec" || arg == "_service-exec" {
+		if arg == "--" || arg == "_session-exec" || arg == "_service-exec" || arg == "_dispatcher-exec" {
 			return args
 		}
 	}

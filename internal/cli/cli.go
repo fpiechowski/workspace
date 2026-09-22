@@ -26,6 +26,7 @@ import (
 type options struct {
 	commandPath                     string
 	project, workspace, socket, key string
+	scopeName                       string
 	json, short, nonInteractive     bool
 	in                              io.Reader
 	out, errOut                     io.Writer
@@ -67,6 +68,8 @@ func (o *options) emit(v any) error {
 				switch o.commandPath {
 				case "workspace create":
 					key = "create:" + key
+				case "workspace issue dispatch":
+					key = "issue.dispatch:" + key
 				case "workspace project init", "workspace skill install", "workspace server stop":
 					selector = ""
 				}
@@ -132,7 +135,7 @@ func (o *options) scope() (*core.Service, string, error) {
 }
 
 func (o *options) bootstrapScope(projectOnly bool) (*bootstrap.Scope, error) {
-	return bootstrap.Resolve(bootstrap.Request{Project: o.project, Workspace: o.workspace, Socket: o.socket, ProjectOnly: projectOnly})
+	return bootstrap.Resolve(bootstrap.Request{Project: o.project, Workspace: o.workspace, Socket: o.socket, Scope: o.scopeName, ProjectOnly: projectOnly})
 }
 func command(use, short string, fn func(*cobra.Command, []string) error) *cobra.Command {
 	return &cobra.Command{Use: use, Short: short, Args: cobra.NoArgs, RunE: fn}
@@ -238,10 +241,12 @@ func newRoot(o *options) *cobra.Command {
 	f.StringVar(&o.project, "project", "", "Project path (also WORKSPACE_PROJECT_DIR)")
 	f.StringVar(&o.workspace, "workspace", "", "Workspace ID (also WORKSPACE_ID)")
 	f.StringVar(&o.socket, "tmux-socket", os.Getenv("WORKSPACE_TMUX_SOCKET"), "Optional isolated tmux server name")
+	f.StringVar(&o.scopeName, "scope", "", "Internal runtime scope (project or workspace)")
 	f.StringVar(&o.key, "operation-key", "", "Idempotency key for a mutation; changed payload with the same key is rejected")
 	f.BoolVar(&o.json, "json", false, "Print structured JSON")
 	f.BoolVar(&o.short, "short", false, "Print a compact human-readable summary")
 	f.BoolVar(&o.nonInteractive, "non-interactive", false, "Never ask terminal questions")
+	_ = f.MarkHidden("scope")
 	project := &cobra.Command{Use: "project", Short: "Configure a Git project"}
 	project.AddCommand(command("init", "Install project config and workflow templates", func(c *cobra.Command, _ []string) error {
 		dir := o.project
@@ -331,6 +336,9 @@ func newRoot(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
+		if create.FromIssue != "" && (len(args) > 0 || inputFile != "" || create.Source != "") {
+			return &core.Error{Code: "input_conflict", Message: "--from-issue is mutually exclusive with positional intent, --input-file, and --issue"}
+		}
 		if len(args) == 1 {
 			if inputFile != "" {
 				return &core.Error{Code: "input_conflict", Message: "provide the intent either as an argument or with --input-file, not both"}
@@ -355,6 +363,7 @@ func newRoot(o *options) *cobra.Command {
 	createCmd.Flags().StringVar(&create.Title, "title", "", "Workspace title")
 	createCmd.Flags().StringVar(&inputFile, "input-file", "", "Saved issue/description file")
 	createCmd.Flags().StringVar(&create.Source, "issue", "", "Issue URL; fetch from configured tracker unless an intent or --input-file is supplied")
+	createCmd.Flags().StringVar(&create.FromIssue, "from-issue", "", "Create from an existing durable Issue ID; mutually exclusive with intent, --input-file and --issue")
 	createCmd.Flags().StringVar(&create.Workflow, "workflow", "", "Workflow name; omit to choose a workflow later")
 	createCmd.Flags().BoolVar(&create.NoWorkflow, "no-workflow", false, "Create an active workspace with no workflow for manual orchestration")
 	createCmd.Flags().StringVar(&create.Base, "base", "HEAD", "Base Git revision")
@@ -491,6 +500,9 @@ func newRoot(o *options) *cobra.Command {
 		}
 		root.AddCommand(group)
 	}
+	root.AddCommand(issueCommands(o))
+	dispatcher, dispatcherRunner := dispatcherCommands(o)
+	root.AddCommand(dispatcher, dispatcherRunner)
 	root.AddCommand(agentCommands(o), worktreeCommands(o), sessionCommands(o), runCommands(o))
 	root.AddCommand(taskCommands(o), messageCommands(o), inboxCommands(o), handoffCommands(o), artifactCommands(o))
 	root.AddCommand(integrationCommands(o), decisionCommands(o), stateCommands(o), releaseCommands(o))

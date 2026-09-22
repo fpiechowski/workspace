@@ -86,6 +86,19 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 			add("Jump to the workspace tmux session", "jump")
 			add("Permanently delete workspace and all local work", "delete_workspace")
 		}
+	case "issue":
+		for _, issue := range m.project.Issues {
+			if issue.ID == targetID && issue.Error == "" {
+				add("Create a linked workspace from this Issue", "create_workspace_from_issue")
+				break
+			}
+		}
+	case "dispatcher":
+		if m.project.Dispatcher.State == "running" {
+			add("Stop project Dispatcher", "stop_dispatcher")
+		} else {
+			add("Start or resume project Dispatcher", "start_dispatcher")
+		}
 	case "project":
 		add("Create a new workspace", "create_workspace")
 	case "orchestrator", "runtime":
@@ -206,6 +219,19 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 			call.TargetName = firstNonempty(service.Name, service.ID)
 			call.TargetDetails = "Worktree " + firstNonempty(service.WorktreeID, "none")
 		}
+	case "create_workspace_from_issue":
+		for _, issue := range m.project.Issues {
+			if issue.ID == targetID {
+				call.TargetName = firstNonempty(issue.Title, issue.ID)
+				call.ExpectedIssueRevision = issue.Revision
+				call.ExpectedIssueDigest = issue.Digest
+				call.TargetDetails = "Create a Workspace with this exact frozen Issue revision. Later Issue refreshes will not change the Workspace input."
+				break
+			}
+		}
+	case "start_dispatcher", "stop_dispatcher":
+		call.TargetName = "Project Dispatcher"
+		call.TargetDetails = "This is a project-scoped actor. It can route durable Issues and create linked Workspaces; it cannot implement code or advance Workspace workflow state."
 	case "pause_interrupt":
 		call.ExpectedRunIDs = make([]string, 0)
 		for _, session := range m.snapshot.Status.Sessions {
@@ -498,6 +524,12 @@ func actionCaption(call ActionCall) string {
 		return "Start or resume the orchestrator in workspace " + call.WorkspaceID
 	case "create_workspace":
 		return "Create workspace " + firstNonempty(call.TargetName, "Untitled issue")
+	case "create_workspace_from_issue":
+		return "Create a linked workspace from Issue " + targetID
+	case "start_dispatcher":
+		return "Start or resume the project Dispatcher"
+	case "stop_dispatcher":
+		return "Stop the project Dispatcher"
 	case "delete_workspace":
 		return "Permanently delete workspace " + targetName + " · " + targetID
 	case "archive_workspace":

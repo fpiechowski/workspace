@@ -26,7 +26,23 @@ func (m *Model) allItems() []collectionItem {
 			if workspace.Error != "" {
 				state = "error"
 			}
-			items = append(items, collectionItem{ID: workspace.ID, Kind: "workspace", Title: title, Subtitle: fmt.Sprintf("%s · %s · active %d · problems %d", workspace.Phase, shortID(workspace.ID), workspace.ActiveRuns, workspace.Problems), State: state, At: workspace.CreatedAt})
+			subtitle := fmt.Sprintf("%s · %s · active %d · problems %d", workspace.Phase, shortID(workspace.ID), workspace.ActiveRuns, workspace.Problems)
+			if workspace.IssueID != "" {
+				subtitle += " · issue " + shortID(workspace.IssueID)
+			}
+			items = append(items, collectionItem{ID: workspace.ID, Kind: "workspace", Title: title, Subtitle: subtitle, State: state, At: workspace.CreatedAt})
+		}
+	case "issues":
+		for _, issue := range m.project.Issues {
+			state := issue.Status
+			if issue.Error != "" {
+				state = "error"
+			}
+			subtitle := fmt.Sprintf("%s · revision %d · linked %d", firstNonempty(issue.LinkedStateSummary, "no linked workspaces"), issue.Revision, issue.LinkedWorkspaceCount)
+			if issue.Source != "" {
+				subtitle += " · " + issue.Source
+			}
+			items = append(items, collectionItem{ID: issue.ID, Kind: "issue", Title: firstNonempty(issue.Title, issue.ID), Subtitle: subtitle, State: state, At: issue.UpdatedAt})
 		}
 	case "more":
 		items = []collectionItem{

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -49,24 +50,30 @@ func (s *Service) WorkspaceSnapshot(ctx context.Context, selector string) (Works
 // WorkspaceSummary is a light project-picker row. Error is populated for an
 // unreadable workspace directory without hiding healthy siblings.
 type WorkspaceSummary struct {
-	ID          string    `json:"id"`
-	ProjectID   string    `json:"project_id,omitempty"`
-	Title       string    `json:"title,omitempty"`
-	Directory   string    `json:"directory"`
-	Status      string    `json:"status"`
-	Phase       string    `json:"phase,omitempty"`
-	InputSource string    `json:"input_source,omitempty"`
-	CreatedAt   time.Time `json:"created_at,omitempty"`
-	ActiveRuns  int       `json:"active_runs"`
-	Problems    int       `json:"problems"`
-	Revision    int       `json:"revision"`
-	Error       string    `json:"error,omitempty"`
+	ID            string    `json:"id"`
+	ProjectID     string    `json:"project_id,omitempty"`
+	Title         string    `json:"title,omitempty"`
+	Directory     string    `json:"directory"`
+	Status        string    `json:"status"`
+	Phase         string    `json:"phase,omitempty"`
+	InputSource   string    `json:"input_source,omitempty"`
+	IssueID       string    `json:"issue_id,omitempty"`
+	IssueTitle    string    `json:"issue_title,omitempty"`
+	IssueRevision int       `json:"issue_revision,omitempty"`
+	IssueDigest   string    `json:"issue_digest,omitempty"`
+	CreatedAt     time.Time `json:"created_at,omitempty"`
+	ActiveRuns    int       `json:"active_runs"`
+	Problems      int       `json:"problems"`
+	Revision      int       `json:"revision"`
+	Error         string    `json:"error,omitempty"`
 }
 
 type ProjectOverview struct {
 	ProjectRoot string             `json:"project_root"`
 	ProjectID   string             `json:"project_id"`
 	Workspaces  []WorkspaceSummary `json:"workspaces"`
+	Issues      []IssueSummary     `json:"issues"`
+	Dispatcher  DispatcherSummary  `json:"dispatcher"`
 	ObservedAt  time.Time          `json:"observed_at"`
 }
 
@@ -74,7 +81,7 @@ type ProjectOverview struct {
 // List retains its existing fail-fast contract for CLI compatibility.
 func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) {
 	var out ProjectOverview
-	err := withProjectLock(ctx, s.Root, func() error {
+	err := withProjectReadLock(ctx, s.Root, func() error {
 		cfg, err := s.Config()
 		if err != nil {
 			return err
@@ -86,9 +93,8 @@ func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) 
 		out = ProjectOverview{ProjectRoot: s.Root, ProjectID: cfg.ProjectID, ObservedAt: nowUTC()}
 		entries, err := os.ReadDir(root)
 		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		if err != nil {
+			entries = nil
+		} else if err != nil {
 			return err
 		}
 		for _, entry := range entries {
@@ -122,6 +128,7 @@ func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) 
 			row.ID, row.ProjectID = doc.State.ID, doc.State.ProjectID
 			row.Title, row.Status, row.CreatedAt, row.Revision = doc.State.Title, doc.State.Status, doc.State.CreatedAt, doc.State.Revision
 			row.InputSource = doc.State.Input.Source
+			row.IssueID, row.IssueRevision, row.IssueDigest = doc.State.Input.IssueID, doc.State.Input.IssueRevision, doc.State.Input.IssueDigest
 			row.Phase = doc.State.PhaseLabel()
 			doc, err := loadDocument(dir)
 			if err != nil {
@@ -137,8 +144,9 @@ func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) 
 				Directory:   status.Directory,
 				Status:      status.Workspace.Status,
 				InputSource: status.Workspace.Input.Source,
-				CreatedAt:   status.Workspace.CreatedAt,
-				Revision:    status.Workspace.Revision,
+				IssueID:     status.Workspace.Input.IssueID, IssueRevision: status.Workspace.Input.IssueRevision, IssueDigest: status.Workspace.Input.IssueDigest,
+				CreatedAt: status.Workspace.CreatedAt,
+				Revision:  status.Workspace.Revision,
 			}
 			row.Phase = status.Workspace.PhaseLabel()
 			for _, run := range status.Runs {
@@ -162,6 +170,61 @@ func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) 
 			}
 			return a.ID < b.ID
 		})
+		if err := recoverIssueWrite(s.Root); err != nil {
+			return err
+		}
+		issueEntries, err := os.ReadDir(issueRoot(s.Root))
+		if errors.Is(err, os.ErrNotExist) {
+			issueEntries = nil
+		} else if err != nil {
+			return err
+		}
+		for _, entry := range issueEntries {
+			if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "issue_") {
+				continue
+			}
+			row := IssueSummary{ID: entry.Name(), Status: "unknown"}
+			file, openErr := os.Open(filepath.Join(issueDir(s.Root, entry.Name()), "ISSUE.md"))
+			if openErr != nil {
+				row.Error = openErr.Error()
+				out.Issues = append(out.Issues, row)
+				continue
+			}
+			i, parseErr := parseIssueHeader(file)
+			_ = file.Close()
+			if parseErr != nil {
+				row.Error = parseErr.Error()
+				out.Issues = append(out.Issues, row)
+				continue
+			}
+			row = issueSummary(i)
+			for _, workspace := range out.Workspaces {
+				if workspace.Error == "" && workspace.IssueID == row.ID {
+					row.LinkedWorkspaces = append(row.LinkedWorkspaces, IssueWorkspaceLink{WorkspaceID: workspace.ID, Title: workspace.Title, Status: workspace.Status, IssueRevision: workspace.IssueRevision, IssueDigest: workspace.IssueDigest})
+				}
+			}
+			row.LinkedWorkspaceCount = len(row.LinkedWorkspaces)
+			row.LinkedStateSummary = linkedStateSummary(row.LinkedWorkspaces)
+			out.Issues = append(out.Issues, row)
+		}
+		issueTitles := make(map[string]string, len(out.Issues))
+		for _, issue := range out.Issues {
+			if issue.Error == "" {
+				issueTitles[issue.ID] = issue.Title
+			}
+		}
+		for i := range out.Workspaces {
+			if out.Workspaces[i].IssueTitle == "" {
+				out.Workspaces[i].IssueTitle = issueTitles[out.Workspaces[i].IssueID]
+			}
+		}
+		sort.SliceStable(out.Issues, func(i, j int) bool {
+			if !out.Issues[i].UpdatedAt.Equal(out.Issues[j].UpdatedAt) {
+				return out.Issues[i].UpdatedAt.After(out.Issues[j].UpdatedAt)
+			}
+			return out.Issues[i].ID < out.Issues[j].ID
+		})
+		out.Dispatcher = dispatcherSummaryLocked(s.Root, cfg.ProjectID)
 		return nil
 	})
 	return out, err
@@ -174,6 +237,24 @@ func withProjectLock(ctx context.Context, root string, fn func() error) error {
 	}
 	defer unlock()
 	return fn()
+}
+
+// withProjectReadLock preserves the read-only query contract for a fresh
+// project: if no writer lock exists yet, observing state must not create the
+// .workspace/.runtime directory merely to acquire a lock. Once a writer has
+// established the lock, readers coordinate with it normally. An interrupted
+// Issue write is treated as a recovery write and therefore takes the lock.
+func withProjectReadLock(ctx context.Context, root string, fn func() error) error {
+	lockPath := filepath.Join(root, ".workspace", ".runtime", "project.lock")
+	if _, err := os.Stat(lockPath); errors.Is(err, os.ErrNotExist) {
+		if _, pendingErr := os.Stat(issuePendingPath(root)); pendingErr == nil {
+			return withProjectLock(ctx, root, fn)
+		}
+		return fn()
+	} else if err != nil {
+		return err
+	}
+	return withProjectLock(ctx, root, fn)
 }
 
 func (s *Service) withReadableWorkspace(ctx context.Context, selector string, fn func(*Document) error) error {

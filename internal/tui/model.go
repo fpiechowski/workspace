@@ -89,6 +89,7 @@ type Model struct {
 	routeMemory map[routeKey]routeMemory
 
 	project             core.ProjectOverview
+	issue               core.IssueDetail
 	supervisor          core.SupervisorObservation
 	snapshot            core.WorkspaceSnapshot
 	runtime             core.RuntimeObservation
@@ -106,6 +107,7 @@ type Model struct {
 	hidePending         bool
 	hideKey             string
 	projectPending      bool
+	issuePending        bool
 	supervisorPending   bool
 	snapshotPending     bool
 	runtimePending      bool
@@ -135,6 +137,11 @@ type ExternalProcessRequest struct {
 type projectMsg struct {
 	generation uint64
 	value      core.ProjectOverview
+	err        error
+}
+type issueMsg struct {
+	generation uint64
+	value      core.IssueDetail
 	err        error
 }
 type supervisorMsg struct {
@@ -342,9 +349,10 @@ func (m *Model) pop() {
 		if m.workspaceID != "" {
 			m.workspaceID = ""
 			m.generation++
-			m.projectPending, m.supervisorPending = false, false
+			m.projectPending, m.issuePending, m.supervisorPending = false, false, false
 			m.snapshotPending, m.runtimePending, m.uiPending = false, false, false
 			m.previewPending, m.worktreePending = false, false
+			m.issue = core.IssueDetail{}
 			m.activateRoute(route{Page: "project"})
 			return
 		}
@@ -367,6 +375,7 @@ func (m *Model) setWorkspace(id string) tea.Cmd {
 	m.generation++
 	m.stack = nil
 	m.snapshot = core.WorkspaceSnapshot{}
+	m.issue = core.IssueDetail{}
 	m.runtime = core.RuntimeObservation{}
 	m.uiStatus = core.UIStatus{}
 	m.preview = core.Preview{}
@@ -381,7 +390,7 @@ func (m *Model) setWorkspace(id string) tea.Cmd {
 	m.uiPending = false
 	m.previewPending = false
 	m.worktreePending = false
-	m.projectPending = false
+	m.projectPending, m.issuePending = false, false
 	m.activateRoute(route{Page: "tasks"})
 	return m.beginRefresh()
 }

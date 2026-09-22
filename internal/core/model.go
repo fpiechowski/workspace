@@ -39,6 +39,7 @@ type Config struct {
 }
 type DefaultsConfig struct {
 	OrchestratorProfile string `yaml:"orchestrator_profile,omitempty" json:"orchestrator_profile,omitempty"`
+	DispatcherProfile   string `yaml:"dispatcher_profile,omitempty" json:"dispatcher_profile,omitempty"`
 }
 type ForgeConfig struct {
 	Adapter     string   `yaml:"adapter" json:"adapter"`
@@ -157,8 +158,11 @@ type Workflow struct {
 	Phase          string `yaml:"phase" json:"phase"`
 }
 type Input struct {
-	Source   string `yaml:"source,omitempty" json:"source,omitempty"`
-	Snapshot string `yaml:"snapshot" json:"snapshot"`
+	Source        string `yaml:"source,omitempty" json:"source,omitempty"`
+	Snapshot      string `yaml:"snapshot" json:"snapshot"`
+	IssueID       string `yaml:"issue_id,omitempty" json:"issue_id,omitempty"`
+	IssueRevision int    `yaml:"issue_revision,omitempty" json:"issue_revision,omitempty"`
+	IssueDigest   string `yaml:"issue_digest,omitempty" json:"issue_digest,omitempty"`
 }
 type Base struct {
 	Ref    string `yaml:"ref" json:"ref"`
@@ -174,6 +178,7 @@ type Agent struct {
 	Profile        string `json:"profile" yaml:"profile"`
 	PromptTemplate string `json:"prompt_template" yaml:"prompt_template"`
 	Instructions   string `json:"instructions" yaml:"instructions"`
+	Scope          string `json:"scope,omitempty" yaml:"scope,omitempty"`
 }
 type Worktree struct {
 	ID         string `json:"id" yaml:"id"`
@@ -202,6 +207,8 @@ type Session struct {
 	ClosedAt        *time.Time `json:"closed_at,omitempty" yaml:"closed_at,omitempty"`
 	CloseReason     string     `json:"close_reason,omitempty" yaml:"close_reason,omitempty"`
 	LifecycleState  string     `json:"lifecycle_state" yaml:"lifecycle_state"`
+	Scope           string     `json:"scope,omitempty" yaml:"scope,omitempty"`
+	ProjectID       string     `json:"project_id,omitempty" yaml:"project_id,omitempty"`
 	CurrentRunID    string     `json:"current_run_id,omitempty" yaml:"current_run_id,omitempty"`
 	LastRunID       string     `json:"last_run_id,omitempty" yaml:"last_run_id,omitempty"`
 	RunCount        int        `json:"run_count" yaml:"run_count"`
@@ -257,6 +264,8 @@ type Run struct {
 	ExitCode         *int             `json:"exit_code,omitempty" yaml:"exit_code,omitempty"`
 	Error            string           `json:"error,omitempty" yaml:"error,omitempty"`
 	OpenCodeEndpoint string           `json:"opencode_endpoint,omitempty" yaml:"opencode_endpoint,omitempty"`
+	Scope            string           `json:"scope,omitempty" yaml:"scope,omitempty"`
+	ProjectID        string           `json:"project_id,omitempty" yaml:"project_id,omitempty"`
 }
 
 type DeliveryAttempt struct {

@@ -118,7 +118,17 @@ func (m *Model) headerIdentityText() (string, string) {
 
 func (m *Model) tabs() string {
 	if m.workspaceID == "" || m.route.Page == "project" {
-		return m.palette.headingStyle().Render("Workspaces") + "  / filter  f status"
+		labels := []struct{ key, page, name string }{{"1", "project", "Workspaces"}, {"2", "issues", "Issues"}, {"3", "dispatcher", "Dispatcher"}}
+		var out []string
+		for _, label := range labels {
+			name := label.key + " " + label.name
+			if m.route.Page == label.page {
+				out = append(out, m.palette.headingStyle().Render("["+name+"]"))
+			} else {
+				out = append(out, name)
+			}
+		}
+		return strings.Join(out, "   ") + "  / filter  f status"
 	}
 	labels := []struct{ key, page, name string }{
 		{"1", "tasks", "Tasks"}, {"2", "sessions", "Sessions"}, {"3", "worktrees", "Worktrees"}, {"4", "results", "Results"}, {"5", "more", "More"},
@@ -203,7 +213,7 @@ var detailSections = map[string]string{
 	"task": "Tasks", "worktree": "Worktrees", "session": "Sessions", "run": "Runs",
 	"agent": "Agents", "service": "Services", "artifact": "Artifacts", "handoff": "Handoffs",
 	"check": "Checks", "decision": "Decisions", "change_request": "Change requests",
-	"preview": "Preview", "orchestrator": "Orchestrator", "runtime": "Runtime",
+	"preview": "Preview", "orchestrator": "Orchestrator", "runtime": "Runtime", "issue": "Issues", "dispatcher": "Dispatcher",
 }
 
 func detailSection(page string) string {
@@ -258,6 +268,10 @@ func (m *Model) routeTitle() string {
 		}
 	case "preview":
 		return firstNonempty(m.preview.Name, id)
+	case "issue":
+		return firstNonempty(m.issue.Title, id)
+	case "dispatcher":
+		return "Project Dispatcher"
 	}
 	return id
 }
@@ -349,6 +363,9 @@ func (m *Model) projectView(mode layoutMode) []string {
 		for _, workspace := range m.project.Workspaces {
 			if workspace.ID == m.route.SelectedID {
 				right = append(right, "Path: "+workspace.Directory, "Input: "+workspace.InputSource, "Created: "+workspace.CreatedAt.Format("2006-01-02 15:04"), "State: "+statusBadge(workspace.Status))
+				if workspace.IssueID != "" {
+					right = append(right, "Issue: "+workspace.IssueID+" · revision "+fmt.Sprint(workspace.IssueRevision))
+				}
 				if workspace.Error != "" {
 					right = append(right, "Error: "+workspace.Error)
 				}

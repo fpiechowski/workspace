@@ -109,6 +109,8 @@ have no start, stop, or reconcile side effects.
 | Object | Responsibility |
 |---|---|
 | Project | Git repository; configuration for clients, profiles, forge, tracker, and workflow. |
+| Issue | Durable project input with a canonical content digest, local status, revision history, and external source metadata. |
+| Dispatcher | Project-scoped Agent with its own Sessions/Runs and tmux identity; may intake and route Issues but cannot perform Workspace implementation work. |
 | Workspace | Persistent context for one initiative from input to confirmed release (workflow) or confirmed completion (manual mode); completed work can be reopened only through an explicit guarded mutation. |
 | Worktree | Isolated checkout and branch for planning, implementation, integration, or testing. |
 | Task | Delegated unit of work with an attempt, dependencies, and acceptance criteria. |
@@ -234,11 +236,39 @@ not delete data.
 Role control, read-only mode, and worktree leasing are a contract among cooperating
 processes running under one system account, not an operating-system security boundary.
 
+### Project Issue and Dispatcher state
+
+Project Issues are stored outside Workspace registries under
+`.workspace/issues/issue_<id>/ISSUE.md`. YAML frontmatter carries schema identity,
+project ID, revision, status, source, timestamps, and digest; the Markdown body is the
+trusted local snapshot. Revisions preserve the prior `ISSUE.md` under a revisioned
+history directory. `.workspace/issues/.runtime/pending.json` is a write-ahead recovery
+record and `.runtime/operations/<digest>.json` stores Issue operation receipts.
+
+Workspace input stores `issue_id`, `issue_revision`, and `issue_digest` in addition to
+the frozen Markdown snapshot. Project queries derive Issue-to-Workspace links from
+those immutable fields and tolerate a corrupt Issue sibling without hiding healthy
+records. Reads do not create Issue, Dispatcher, or runtime stores on a fresh project.
+
+The Dispatcher state is independent at `.workspace/dispatcher/state.json`. Its Agent
+has `role: dispatcher` and `scope: project`; its Sessions and Runs use the same durable
+identity model as Workspace agents but are never placed in a Workspace registry.
+Project tmux metadata includes explicit scope, project, Agent, role, Session, and Run
+fields. `authorizeProjectActor` accepts only a user terminal or the active Dispatcher
+Run for project-level Issue mutations; Workspace actors are rejected.
+
 ## Process Runtime
 
 Each workspace receives a tmux session. Worktrees are windows, specific agent Runs are
 panes, and the orchestrator has a separate window started from the workspace directory.
 Supporting services are a separate record type and do not inherit agent identity.
+
+The project Dispatcher uses a separate `workspace-dispatcher-<project-id>` tmux session
+and a `dispatcher` window. Its runner is selected by `--scope project` and
+`_dispatcher-exec`, while Workspace runners continue to use `--workspace` and their
+existing execution verbs. The supervisor reconciles the Dispatcher independently and
+only resumes a verified lost pane; normal exit, explicit stop, a live metadata conflict,
+or an observation error is not a restart trigger.
 
 The runner receives, among other values, `WORKSPACE_AGENT_ID`, `WORKSPACE_SESSION_ID`,
 `WORKSPACE_RUN_ID`, `WORKSPACE_TASK_ID`, `WORKSPACE_ROLE`, and the identifiers of its
