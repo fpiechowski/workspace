@@ -95,7 +95,8 @@ func tmuxMissingSession(err error) bool {
 }
 
 // tmux accepts a shell command. Quote every argv element, including embedded quotes.
-func shellQuote(arg string) string { return "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'" }
+func shellQuote(arg string) string              { return "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'" }
+func shellAssignment(name, value string) string { return name + "=" + shellQuote(value) }
 func (t Tmux) runnerCommand(l Launch) string {
 	verb := "_session-exec"
 	if l.Service {
@@ -115,7 +116,22 @@ func (t Tmux) runnerCommand(l Launch) string {
 	for i, a := range args {
 		quoted[i] = shellQuote(a)
 	}
-	return "exec " + strings.Join(quoted, " ")
+	command := make([]string, 0, len(quoted)+9)
+	if l.Scope == "project" {
+		command = append(command,
+			shellAssignment("WORKSPACE_SCOPE", "project"),
+			shellAssignment("WORKSPACE_PROJECT_DIR", l.ProjectRoot),
+			shellAssignment("WORKSPACE_PROJECT_ID", l.ProjectID),
+			shellAssignment("WORKSPACE_AGENT_ID", l.AgentID),
+			shellAssignment("WORKSPACE_SESSION_ID", l.SessionID),
+			shellAssignment("WORKSPACE_RUN_ID", l.RunID),
+			shellAssignment("WORKSPACE_ROLE", l.Role),
+			shellAssignment("WORKSPACE_TMUX_SOCKET", t.Socket),
+		)
+	}
+	command = append(command, "exec")
+	command = append(command, quoted...)
+	return strings.Join(command, " ")
 }
 
 func paneKind(l Launch) string {

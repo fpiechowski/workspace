@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -401,6 +402,41 @@ func TestWorkerProcess(t *testing.T) {
 	}
 	_ = json.NewEncoder(os.Stdout).Encode(result)
 	os.Exit(0)
+}
+
+// Executed in a child process by the Dispatcher command adapter, never in the normal suite.
+func TestDispatcherProcess(t *testing.T) {
+	if os.Getenv("WORKSPACE_SCOPE") != "project" {
+		return
+	}
+	projectDir := os.Getenv("WORKSPACE_PROJECT_DIR")
+	if projectDir == "" {
+		t.Fatal("Dispatcher client did not receive WORKSPACE_PROJECT_DIR")
+	}
+	runID := os.Getenv("WORKSPACE_RUN_ID")
+	if runID == "" {
+		t.Fatal("Dispatcher client did not receive WORKSPACE_RUN_ID")
+	}
+	identity := map[string]string{
+		"scope":       os.Getenv("WORKSPACE_SCOPE"),
+		"project_dir": projectDir,
+		"project_id":  os.Getenv("WORKSPACE_PROJECT_ID"),
+		"agent_id":    os.Getenv("WORKSPACE_AGENT_ID"),
+		"session_id":  os.Getenv("WORKSPACE_SESSION_ID"),
+		"run_id":      os.Getenv("WORKSPACE_RUN_ID"),
+		"role":        os.Getenv("WORKSPACE_ROLE"),
+		"tmux_socket": os.Getenv("WORKSPACE_TMUX_SOCKET"),
+	}
+	b, err := json.Marshal(identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicWrite(filepath.Join(projectDir, ".workspace", "dispatcher", "client-identity-"+runID+".json"), b); err != nil {
+		t.Fatal(err)
+	}
+	// Keep the Run alive long enough for StartDispatcher to persist its pane ID
+	// before the client exits and the runner records the successful result.
+	time.Sleep(500 * time.Millisecond)
 }
 func TestRecoveryAndExternalEditDetection(t *testing.T) {
 	s, id := fixture(t)

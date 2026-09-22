@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"gopkg.in/yaml.v3"
 )
 
 // Opt-in: launches a real agent helper through the compiled CLI in an isolated tmux server.
@@ -452,6 +453,185 @@ func TestTmuxEndToEnd(t *testing.T) {
 				t.Fatalf("resized TUI row %d exceeds pane width %d with %d columns: %q", lineNo, paneWidth, width, line)
 			}
 		}
+	}
+}
+
+// Opt-in: verifies that a real project Dispatcher runner owns its Run before
+// invoking the configured client, including when the client exits normally.
+func TestDispatcherTmuxEndToEnd(t *testing.T) {
+	if os.Getenv("WORKSPACE_TMUX_TEST") != "1" {
+		t.Skip("set WORKSPACE_TMUX_TEST=1 to run real tmux integration")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("tmux integration runs in Linux/WSL or macOS")
+	}
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Fatal(err)
+	}
+
+	s, _ := fixture(t)
+	ctx := context.Background()
+	socket := "workspace-dispatcher-test-" + ID("tmux")
+	rt := Tmux{Socket: socket}
+	s.Runtime = rt
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", socket, "kill-server").Run() })
+
+	bin := filepath.Join(t.TempDir(), "bin with 'quotes'", "workspace")
+	if err := os.MkdirAll(filepath.Dir(bin), 0700); err != nil {
+		t.Fatal(err)
+	}
+	build := exec.Command("go", "build", "-o", bin, "./cmd/workspace")
+	build.Dir = filepath.Join("..", "..")
+	if b, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, b)
+	}
+	s.Executable = bin
+
+	testExecutable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := s.Config()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Defaults.DispatcherProfile = "frontier"
+	cfg.Clients["test"] = Client{Adapter: "command", LaunchArgv: []string{testExecutable, "-test.run=TestDispatcherProcess", "--", "{prompt_file}"}}
+	b, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicWrite(filepath.Join(s.Root, ".workspace", "config.yaml"), b); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.EnsureSupervisor(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.StopSupervisor(context.Background()) })
+	started, err := s.StartDispatcher(ctx, "", "dispatcher-tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started.Run.State != "starting" || started.Run.PaneID == "" {
+		t.Fatalf("unexpected Dispatcher launch result: %+v", started.Run)
+	}
+
+	waitDispatcherRuns := func(expected int) DispatcherStatus {
+		t.Helper()
+		deadline := time.Now().Add(15 * time.Second)
+		var status DispatcherStatus
+		for time.Now().Before(deadline) {
+			status, err = s.DispatcherStatus(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(status.Runs) > expected {
+				return status
+			}
+			if len(status.Runs) == expected {
+				terminal := true
+				for _, run := range status.Runs {
+					if run.State == "starting" || run.State == "running" {
+						terminal = false
+						break
+					}
+				}
+				if terminal {
+					return status
+				}
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		t.Fatalf("Dispatcher did not reach %d terminal Run(s): %+v", expected, status.Runs)
+		return status
+	}
+	status := waitDispatcherRuns(1)
+	if len(status.Runs) != 1 {
+		t.Fatalf("Dispatcher recovery created duplicate Runs: %+v", status.Runs)
+	}
+	run := status.Runs[0]
+	if run.State != "exited" || run.ExitCode == nil || *run.ExitCode != 0 {
+		t.Fatalf("Dispatcher Run did not exit successfully: %+v", run)
+	}
+
+	assertPane := func(status DispatcherStatus, run Run) {
+		t.Helper()
+		pane, err := rt.InspectProject(ctx, run.PaneID, status.ProjectID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pane.Scope != "project" || pane.ProjectID != status.ProjectID || pane.AgentID != status.Agent.ID || pane.Role != "dispatcher" || pane.SessionID != run.SessionID || pane.RunID != run.ID || pane.Kind != "dispatcher" {
+			t.Fatalf("Dispatcher pane metadata does not match the Run: pane=%+v status=%+v", pane, status)
+		}
+		if !pane.Dead {
+			t.Fatalf("successful test client should have exited, pane=%+v", pane)
+		}
+	}
+	readClientIdentity := func(run Run) map[string]string {
+		t.Helper()
+		identityBytes, err := os.ReadFile(filepath.Join(s.Root, ".workspace", "dispatcher", "client-identity-"+run.ID+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var identity map[string]string
+		if err := json.Unmarshal(identityBytes, &identity); err != nil {
+			t.Fatal(err)
+		}
+		return identity
+	}
+	assertIdentity := func(status DispatcherStatus, run Run) {
+		t.Helper()
+		identity := readClientIdentity(run)
+		wantIdentity := map[string]string{
+			"scope":       "project",
+			"project_dir": s.Root,
+			"project_id":  status.ProjectID,
+			"agent_id":    status.Agent.ID,
+			"session_id":  run.SessionID,
+			"run_id":      run.ID,
+			"role":        "dispatcher",
+			"tmux_socket": socket,
+		}
+		for key, want := range wantIdentity {
+			if identity[key] != want {
+				t.Errorf("Dispatcher client %s=%q, want %q; identity=%v", key, identity[key], want, identity)
+			}
+		}
+	}
+	assertPane(status, run)
+	assertIdentity(status, run)
+
+	resumed, err := s.StartDispatcher(ctx, "", "dispatcher-tmux-existing-window")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumed.Run.ID == run.ID || resumed.Run.PaneID == run.PaneID {
+		t.Fatalf("existing Dispatcher session did not receive a new Run/pane: first=%+v resumed=%+v", run, resumed.Run)
+	}
+	status = waitDispatcherRuns(2)
+	if len(status.Runs) != 2 {
+		t.Fatalf("Dispatcher resume created an unexpected Run count: %+v", status.Runs)
+	}
+	secondRun := status.Runs[1]
+	if secondRun.State != "exited" || secondRun.ExitCode == nil || *secondRun.ExitCode != 0 {
+		t.Fatalf("Dispatcher Run in existing tmux session did not exit successfully: %+v", secondRun)
+	}
+	assertPane(status, secondRun)
+	assertIdentity(status, secondRun)
+
+	topology, err := rt.ObserveProjectTopology(ctx, status.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownedPanes := 0
+	for _, candidate := range topology.Panes {
+		if candidate.Scope == "project" && candidate.ProjectID == status.ProjectID && candidate.Kind == "dispatcher" {
+			ownedPanes++
+		}
+	}
+	if ownedPanes != 2 {
+		t.Fatalf("Dispatcher launches left %d project panes, want one per successful Run: %+v", ownedPanes, topology.Panes)
 	}
 }
 
