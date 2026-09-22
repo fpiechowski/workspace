@@ -56,6 +56,9 @@ func TestCodexNativeWakeupAndResume(t *testing.T) {
 		t.Fatal("native client did not reach expected state")
 	}
 	waitFor(func(v Status) bool { return v.Sessions[0].ClientState == "idle" && v.Sessions[0].ClientThreadID != "" })
+	if session := findSessionInStatusValue(t, s, ctx, ws, p.ID); session.State != "idle" || session.RunState != "running" || session.LifecycleState != "active" || !session.Active() {
+		t.Fatalf("Codex idle observation was not projected separately from the live Run: %+v", session)
+	}
 	startParams := readCodexThreadParams(t, filepath.Join(p.CWD, "work-products", "thread-thread-start.json"))
 	if startParams["effort"] != "configured-effort" || startParams["approvalPolicy"] != "never" {
 		t.Fatalf("thread/start did not receive the profile effort or other params: %#v", startParams)
@@ -157,6 +160,74 @@ func TestCodexNativeWakeupAndResume(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("resumed client did not exit")
 	}
+}
+
+func TestCodexClientActivityProjectionAcrossTurn(t *testing.T) {
+	s, ws := fixture(t)
+	agent, worktree := worker(t, s, ws, "codex-state")
+	session, err := s.StartSession(context.Background(), ws, SessionOptions{Agent: agent.ID, Worktree: worktree.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		clientState string
+		wantState   string
+	}{
+		{clientState: "busy", wantState: "running"},
+		{clientState: "needs_input", wantState: "running"},
+		{clientState: "idle", wantState: "idle"},
+	} {
+		if err := s.With(context.Background(), ws, func(d *Document) error {
+			p, err := findSession(d, session.ID)
+			if err != nil {
+				return err
+			}
+			r, err := currentRun(d, p)
+			if err != nil {
+				return err
+			}
+			r.State, r.ClientState = "running", test.clientState
+			d.syncSession(p)
+			return saveDocument(d)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		status, err := s.Status(context.Background(), ws)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := findRunSession(status, session.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.State != test.wantState || got.RunState != "running" || !got.Active() {
+			t.Fatalf("Codex client state %q projected as %+v", test.clientState, got)
+		}
+	}
+}
+
+func findSessionInStatusValue(t *testing.T, s *Service, ctx context.Context, workspace, id string) Session {
+	t.Helper()
+	status, err := s.Status(ctx, workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, session := range status.Sessions {
+		if session.ID == id {
+			return session
+		}
+	}
+	t.Fatalf("session %s not found", id)
+	return Session{}
+}
+
+func findRunSession(status Status, id string) (Session, error) {
+	for _, session := range status.Sessions {
+		if session.ID == id {
+			return session, nil
+		}
+	}
+	return Session{}, fail("session_not_found", "unknown session %s", id)
 }
 
 // A protocol fixture: no model calls, credentials or external account are used.

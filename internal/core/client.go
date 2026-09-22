@@ -174,20 +174,64 @@ func (s *Service) clientState(ctx context.Context, selector, id, thread, state s
 		if p.CurrentRunID != r.ID || !r.Active() {
 			return fail("stale_run", "run no longer owns the session runtime")
 		}
+		changed := false
 		if thread != "" {
-			for i := range d.Registry.Sessions {
-				other := &d.Registry.Sessions[i]
-				if other.ID != p.ID && other.Active() && other.ClientSnapshot.Adapter == p.ClientSnapshot.Adapter && other.ClientThreadID == thread {
-					return fail("thread_conflict", "client thread is already bound to active session %s", other.ID)
-				}
+			var bindChanged bool
+			bindChanged, err = bindClientThreadInDocument(d, p, r, thread)
+			if err != nil {
+				return err
 			}
-			p.ClientThreadID = thread
-			r.ClientThreadID = thread
+			changed = changed || bindChanged
 		}
-		if r.ClientState == state && thread == "" {
+		if r.ClientState != state {
+			r.ClientState = state
+			changed = true
+		}
+		if !changed {
 			return nil
 		}
-		r.ClientState = state
+		d.syncSession(p)
+		return saveDocument(d)
+	})
+}
+
+// bindClientThreadInDocument binds the native conversation without making an
+// activity claim. OpenCode discovery uses this path because finding a thread
+// does not prove whether that client is currently working.
+func bindClientThreadInDocument(d *Document, p *Session, r *Run, thread string) (bool, error) {
+	if thread == "" {
+		return false, fail("thread_required", "provide the client's conversation ID")
+	}
+	for i := range d.Registry.Sessions {
+		other := &d.Registry.Sessions[i]
+		if other.ID != p.ID && other.Active() && other.ClientSnapshot.Adapter == p.ClientSnapshot.Adapter && other.ClientThreadID == thread {
+			return false, fail("thread_conflict", "client thread is already bound to active session %s", other.ID)
+		}
+	}
+	changed := p.ClientThreadID != thread || r.ClientThreadID != thread
+	p.ClientThreadID = thread
+	r.ClientThreadID = thread
+	return changed, nil
+}
+
+func (s *Service) bindClientThread(ctx context.Context, selector, id, thread string) error {
+	return s.With(ctx, selector, func(d *Document) error {
+		r, err := findRun(d, id)
+		if err != nil {
+			return err
+		}
+		p, err := findSession(d, r.SessionID)
+		if err != nil {
+			return err
+		}
+		if p.CurrentRunID != r.ID || !r.Active() {
+			return fail("stale_run", "run no longer owns the session runtime")
+		}
+		changed, err := bindClientThreadInDocument(d, p, r, thread)
+		if err != nil || !changed {
+			return err
+		}
+		d.syncSession(p)
 		return saveDocument(d)
 	})
 }

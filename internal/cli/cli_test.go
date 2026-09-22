@@ -337,12 +337,12 @@ func TestWorkspacePickerShowsManualModeLabel(t *testing.T) {
 }
 
 func TestSessionCompactOutputIncludesLogicalAndRunSummary(t *testing.T) {
-	value := shortOutput([]core.Session{{ID: "sess_1", AgentID: "agent_1", TaskID: "task_1", LifecycleState: "idle", LastRunID: "run_3", RunCount: 3, RunState: "interrupted", ClientThreadID: "thread_1"}})
+	value := shortOutput([]core.Session{{ID: "sess_1", AgentID: "agent_1", TaskID: "task_1", LifecycleState: "active", State: "idle", LastRunID: "run_3", RunCount: 3, RunState: "running", ClientState: "idle", ClientThreadID: "thread_1"}})
 	b, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{`"id":"sess_1"`, `"lifecycle_state":"idle"`, `"last_run_id":"run_3"`, `"run_count":3`, `"run_state":"interrupted"`, `"client_thread_id":"thread_1"`} {
+	for _, field := range []string{`"id":"sess_1"`, `"lifecycle_state":"active"`, `"state":"idle"`, `"last_run_id":"run_3"`, `"run_count":3`, `"run_state":"running"`, `"client_state":"idle"`, `"client_thread_id":"thread_1"`} {
 		if !bytes.Contains(b, []byte(field)) {
 			t.Fatalf("compact session output omitted %s: %s", field, b)
 		}

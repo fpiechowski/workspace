@@ -16,7 +16,7 @@ List of planned improvements. Items are ordered by priority.
   dispatch, and idempotent start/stop operations.
 - [ ] **Concurrency monitoring statistics** — add monitoring for the number of agents and sessions running in parallel.
 - [x] **Refresh indicator in the TUI** — replace the current refresh notification with an icon indicating that a refresh is in progress.
-- [ ] **`idle` session status** — extend session statuses with `idle` and detect it when the agent is not doing work.
+- [x] **`idle` session status** — extend session statuses with `idle` and detect it when the agent is not doing work.
 
 - [x] **User TUI** — add a terminal interface based on Bubble Tea and Bubbles.
   - **Goal:** make it easier for a person to inspect state and operate the project. The existing CLI exposes YAML/JSON, which works well for agents and scripts but is less convenient for everyday human use.

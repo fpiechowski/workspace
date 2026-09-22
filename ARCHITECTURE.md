@@ -145,6 +145,15 @@ the parent Agent ID remains an ownership and compatibility projection. Results i
 the task, attempt, Session, exact Run, and Git revision. Identifiers are immutable; names
 are used only for presentation and resource selection.
 
+Session status has three deliberate projections. `LifecycleState` is the logical
+conversation lifecycle (`active`, resumable `idle`, or `closed`); `RunState` is the
+concrete state of the current Run; and `State` is the operational display/decision
+projection. When the current Run is `starting` or `running`, a positive adapter
+observation of client `idle` projects `State` to `idle` without changing lifecycle,
+ownership, delivery eligibility, or `RunState`. Observation is never inferred from pane
+focus, output silence, elapsed time, or failures. If `RunState` is absent in a legacy
+record, helpers may use the legacy `State` value as a compatibility fallback.
+
 Deleting a Task or Session from the TUI is logical: the record receives `deleted_at` and
 remains in persisted state as a tombstone for receipts and historical references, but
 disappears from normal TUI collections and progress counters. Core rejects tombstoning
@@ -333,6 +342,12 @@ uncertain phases are durable so a retry never blindly appends the same prompt. A
 transport failure remains undelivered and produces one Run-scoped tmux inbox
 notification as a fallback. Generic `deliver_argv` remains available to command/Claude
 adapters.
+The supervisor performs positive activity observation outside the project lock and
+persists it only after rechecking the exact Session, current Run, native thread, and
+endpoint. An unchanged observation does not advance the revision. Bounded observation
+failures preserve the last known client state and do not affect other Sessions. Native
+OpenCode reads its Run-scoped `/session/status` map and accepts only the exact
+`idle`/`busy`/`retry` status types; discovery or thread binding alone never means idle.
 Process arguments are argv arrays without shell interpolation. Built-in adapters support
 Codex, Claude, and OpenCode; the `command` adapter allows custom wrappers. A native
 conversation ID is an optional Session binding, never its identity or inbox address.

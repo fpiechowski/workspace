@@ -516,7 +516,12 @@ conversation and execution.
 preferring the bound native thread. Changing the agent, task/attempt/input lineage,
 worktree, or native thread starts a new Session. `session list` shows one record per
 conversation; `session history sess_ID` and `run list` show all executions.
-`session close sess_ID --reason ...` closes the idle context and blocks further resume.
+Session output separates `state` (operational projection), `lifecycle_state`,
+`run_state`, and `client_state`. A live Codex or native OpenCode Run can therefore show
+`state: idle` after a positive client observation while remaining active, owning its
+agent/worktree, and eligible for delivery. The compact machine-readable view includes
+`client_state`; an observation failure keeps the last known value rather than guessing.
+`session close sess_ID --reason ...` closes a resumable idle context and blocks further resume.
 `pause` suspends delegation, `pause --interrupt` stops active runs, and `resume` unblocks
 the work; `workspace resume` applies only to paused workspaces and never reactivates a
 completed workspace. `reconcile` reconciles lost panes and interrupted operations.

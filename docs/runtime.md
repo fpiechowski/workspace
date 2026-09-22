@@ -88,11 +88,19 @@ attempt, worktree, input digest, and base lineage still match. The prompt explic
 instructs that Run not to claim work or submit a result. New worker Sessions and all
 ordinary resource/task/result mutations require `workspace reopen`.
 
-| Logical Session state | Meaning |
+| Session projection | Meaning |
 |---|---|
-| `active` | `current_run_id` points to the single starting/running Run |
-| `idle` | no active process; the Session can be resumed when lineage is unchanged |
-| `closed` | explicitly closed logical context; no further Runs are allowed |
+| `lifecycle_state=active` | `current_run_id` points to the single starting/running Run; the Session owns its runtime even when the operational state is `idle` |
+| `lifecycle_state=idle` | no active current Run; the Session can be resumed when lineage is unchanged |
+| `lifecycle_state=closed` | explicitly closed logical context; no further Runs are allowed |
+| `state=idle` | the current starting/running Run has a positive client observation of `idle`; this does not make the Session resumable or release ownership |
+
+`state` is the operational display and decision projection. It normally follows
+`run_state`; the supervisor changes it to `idle` only for a current starting/running Run
+when the adapter positively reports client `idle`. It never infers idle from tmux focus,
+output silence, elapsed time, or an observation failure. `run_state` remains the source of
+runtime ownership and recovery decisions, and `Session.Active()` remains true for a
+current `starting` or `running` Run.
 
 | Run state | Meaning |
 |---|---|
@@ -101,6 +109,15 @@ ordinary resource/task/result mutations require `workspace reopen`.
 | `exited` / `failed` | client exited normally / with an error |
 | `stopped` | explicitly stopped; supervisor does not restart it |
 | `interrupted` | pane was verified lost or superseded; Session stays resumable |
+
+`client_state` records the latest adapter observation. Codex and native OpenCode may
+report `busy`, `idle`, or `retry` (Codex may also expose other explicit bridge states such
+as `needs_input`); unknown or empty values do not project a live Run to idle. OpenCode
+observation polls the current Run's loopback `GET /session/status` endpoint, matches the
+exact `client_thread_id`, and accepts only the documented `idle`, `busy`, and `retry`
+status types. The bounded request runs outside the project lock; failures preserve the
+last known value and do not change unrelated Sessions. Thread discovery and binding are
+not activity observations.
 
 The `conversation_only` Run marker is persisted independently of the process state. It
 does not change accepted task or handoff provenance, and it prevents the Codex bridge
@@ -133,7 +150,7 @@ first: it never appends again from `appended`, `submitted`, or an uncertain subm
 and it refuses to repeat an append whose outcome is unknown. A marker already present
 converges directly to confirmed/delivered without a TUI mutation.
 OpenCode session discovery accepts both endpoint and executable-list metadata shapes.
-If an old idle logical Session has empty native-thread fields, resume repairs the
+If an old resumable (`lifecycle_state=idle`) logical Session has empty native-thread fields, resume repairs the
 binding from a uniquely correlated historical Run before building the next Run's
 `resume_argv`; an ambiguous or unavailable repair stops with the manual
 `workspace session bind-thread` recovery path instead of silently starting another

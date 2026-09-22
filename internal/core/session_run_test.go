@@ -257,6 +257,127 @@ func TestProjectionKeepsActiveCurrentRunWhenHistoryIsNewer(t *testing.T) {
 	}
 }
 
+func TestLiveIdleSessionProjectionRetainsRunOwnership(t *testing.T) {
+	now := nowUTC()
+	d := &Document{Registry: Registry{
+		Sessions: []Session{{ID: "sess", CurrentRunID: "run"}},
+		Runs:     []Run{{ID: "run", SessionID: "sess", State: "running", ClientState: "idle", CreatedAt: now}},
+	}}
+	d.syncSessions()
+	p := d.Registry.Sessions[0]
+	if p.State != "idle" || p.RunState != "running" || p.LifecycleState != "active" || !p.Active() {
+		t.Fatalf("live idle projection lost ownership: %+v", p)
+	}
+	if metrics := workspaceMetrics(d); metrics.ActiveRuns != 1 {
+		t.Fatalf("live idle Run was omitted from active metrics: %+v", metrics)
+	}
+}
+
+func TestClientActivityOnlyIdleProjectsIdle(t *testing.T) {
+	for _, clientState := range []string{"busy", "retry", "needs_input", "unknown", ""} {
+		d := &Document{Registry: Registry{
+			Sessions: []Session{{ID: "sess", CurrentRunID: "run"}},
+			Runs:     []Run{{ID: "run", SessionID: "sess", State: "running", ClientState: clientState, CreatedAt: nowUTC()}},
+		}}
+		d.syncSessions()
+		p := d.Registry.Sessions[0]
+		if p.State != "running" || p.RunState != "running" || !p.Active() {
+			t.Fatalf("client state %q changed operational running state: %+v", clientState, p)
+		}
+	}
+	for _, runState := range []string{"starting", "running"} {
+		d := &Document{Registry: Registry{
+			Sessions: []Session{{ID: "sess", CurrentRunID: "run"}},
+			Runs:     []Run{{ID: "run", SessionID: "sess", State: runState, ClientState: "idle", CreatedAt: nowUTC()}},
+		}}
+		d.syncSessions()
+		if got := d.Registry.Sessions[0].State; got != "idle" {
+			t.Fatalf("Run state %q with idle observation projected as %q", runState, got)
+		}
+	}
+}
+
+func TestIdleAndClosedSessionsKeepLifecycleSemantics(t *testing.T) {
+	finished := nowUTC()
+	closedAt := nowUTC()
+	d := &Document{Registry: Registry{
+		Sessions: []Session{
+			{ID: "resumable", CurrentRunID: "resumable-run"},
+			{ID: "closed", CurrentRunID: "closed-run", ClosedAt: &closedAt},
+		},
+		Runs: []Run{
+			{ID: "resumable-run", SessionID: "resumable", State: "stopped", FinishedAt: &finished, CreatedAt: finished},
+			{ID: "closed-run", SessionID: "closed", State: "exited", FinishedAt: &finished, CreatedAt: finished},
+		},
+	}}
+	d.syncSessions()
+	resumable, closed := d.Registry.Sessions[0], d.Registry.Sessions[1]
+	if resumable.LifecycleState != "idle" || resumable.Active() || resumable.State != "stopped" {
+		t.Fatalf("resumable Session changed semantics: %+v", resumable)
+	}
+	if closed.LifecycleState != "closed" || closed.Active() || closed.State != "exited" {
+		t.Fatalf("closed Session changed semantics: %+v", closed)
+	}
+}
+
+func TestLiveIdleSessionStillBlocksOwnershipAndCompletion(t *testing.T) {
+	s, ws := fixture(t)
+	ctx := context.Background()
+	agent, worktree := worker(t, s, ws, "idle-owner")
+	session, err := s.StartSession(ctx, ws, SessionOptions{Agent: agent.ID, Worktree: worktree.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.With(ctx, ws, func(d *Document) error {
+		p, err := findSession(d, session.ID)
+		if err != nil {
+			return err
+		}
+		r, err := currentRun(d, p)
+		if err != nil {
+			return err
+		}
+		r.State, r.ClientState = "running", "idle"
+		d.syncSession(p)
+		return saveDocument(d)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	status, err := s.Status(ctx, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Sessions[0].Active() || status.Sessions[0].State != "idle" {
+		t.Fatalf("fixture did not retain live idle ownership: %+v", status.Sessions[0])
+	}
+	if _, err := s.StartSession(ctx, ws, SessionOptions{Agent: agent.ID, Worktree: worktree.ID}); err == nil {
+		t.Fatal("live idle Session did not block a second Session for the same agent")
+	} else {
+		expectCode(t, err, "agent_busy")
+	}
+	other, err := s.CreateAgent(ctx, ws, AgentOptions{Name: "idle-owner-other", Role: "planner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartSession(ctx, ws, SessionOptions{Agent: other.ID, Worktree: worktree.ID}); err == nil {
+		t.Fatal("live idle Session did not retain worktree ownership")
+	} else {
+		expectCode(t, err, "worktree_busy")
+	}
+	if err := s.With(ctx, ws, func(d *Document) error {
+		d.State.Workflow = nil
+		d.State.Status = "active"
+		return saveDocument(d)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CompleteWorkspace(ctx, ws, CompleteOptions{}); err == nil {
+		t.Fatal("manual completion ignored live idle Session")
+	} else {
+		expectCode(t, err, "session_active")
+	}
+}
+
 func TestRunOnlyActorCanStopOwnedSession(t *testing.T) {
 	s, ws := fixture(t)
 	a, w := worker(t, s, ws, "run-only-owner")

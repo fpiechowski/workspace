@@ -32,6 +32,7 @@ const (
 	openCodeHistoryLimit                 = 100
 	openCodePersistenceTimeout           = 1 * time.Second
 	openCodeResponseLimit                = 4 << 20
+	openCodeObservationTimeout           = 1 * time.Second
 	openCodeDeliveryPhaseChecking        = "checking"
 	openCodeDeliveryPhaseRetry           = "retry"
 	openCodeDeliveryPhaseAppended        = "appended"
@@ -104,6 +105,46 @@ func (s *Service) openCodeHistory(ctx context.Context, endpoint, thread string) 
 		return nil, fail("opencode_rejected", "OpenCode history returned HTTP %d", status)
 	}
 	return data, nil
+}
+
+// decodeOpenCodeSessionStatus accepts the V1 status map only for the exact
+// bound session. Other entries are irrelevant to this Run and are ignored;
+// malformed or unknown data for the bound entry is not an observation.
+func decodeOpenCodeSessionStatus(data []byte, thread string) (string, error) {
+	var entries map[string]json.RawMessage
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return "", fmt.Errorf("invalid OpenCode session status: %w", err)
+	}
+	payload, ok := entries[thread]
+	if !ok {
+		return "", fmt.Errorf("OpenCode session status has no entry for %s", thread)
+	}
+	var status struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(payload, &status); err != nil {
+		return "", fmt.Errorf("invalid OpenCode status for %s: %w", thread, err)
+	}
+	switch status.Type {
+	case "idle", "busy", "retry":
+		return status.Type, nil
+	default:
+		return "", fmt.Errorf("unknown OpenCode status %q for %s", status.Type, thread)
+	}
+}
+
+func (s *Service) openCodeSessionStatus(ctx context.Context, endpoint, thread string) (string, error) {
+	if strings.TrimSpace(thread) == "" {
+		return "", fmt.Errorf("OpenCode session thread is empty")
+	}
+	data, status, err := s.openCodeHTTP(ctx, endpoint, http.MethodGet, "/session/status", nil)
+	if err != nil {
+		return "", err
+	}
+	if status < 200 || status >= 300 {
+		return "", fmt.Errorf("OpenCode session status returned HTTP %d", status)
+	}
+	return decodeOpenCodeSessionStatus(data, thread)
 }
 
 type openCodeMutationError struct {
@@ -607,7 +648,7 @@ func (s *Service) runOpenCode(ctx context.Context, selector string, session Sess
 			}
 			return
 		}
-		if err := s.clientState(discoveryCtx, selector, session.CurrentRunID, thread, "idle"); err != nil {
+		if err := s.bindClientThread(discoveryCtx, selector, session.CurrentRunID, thread); err != nil {
 			if !isContextError(err) {
 				fmt.Fprintf(errOut, "workspace: cannot bind OpenCode session %s: %v\n", thread, err)
 			}
@@ -866,6 +907,36 @@ func chooseOpenCodeThread(items []openCodeSession, cwd string, known map[string]
 		}
 	}
 	return best.ID
+}
+
+// persistOpenCodeObservation records only an observation that still belongs
+// to the exact Session/Run/thread queried outside the project lock. A stale
+// result is deliberately a no-op rather than an error or a state transition.
+func (s *Service) persistOpenCodeObservation(ctx context.Context, selector string, expected Session, state string) error {
+	return s.With(ctx, selector, func(d *Document) error {
+		p, err := findSession(d, expected.ID)
+		if err != nil {
+			return nil
+		}
+		if p.CurrentRunID != expected.CurrentRunID || expected.CurrentRunID == "" {
+			return nil
+		}
+		r, err := findRun(d, expected.CurrentRunID)
+		if err != nil || r.SessionID != p.ID || !r.Active() {
+			return nil
+		}
+		if p.ClientSnapshot.Adapter != "opencode" || !usesNativeOpenCodeDelivery(p.ClientSnapshot) ||
+			r.ClientThreadID != expected.ClientThreadID || p.ClientThreadID != expected.ClientThreadID ||
+			r.OpenCodeEndpoint != expected.OpenCodeEndpoint {
+			return nil
+		}
+		if r.ClientState == state {
+			return nil
+		}
+		r.ClientState = state
+		d.syncSession(p)
+		return saveDocument(d)
+	})
 }
 
 func sameOpenCodePath(left, right string) bool {

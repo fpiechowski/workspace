@@ -181,6 +181,15 @@ func TestOpenCodeLaunchAutomaticallyBindsNativeThread(t *testing.T) {
 		done <- s.ExecuteSession(ctx, workspace, started.ID, strings.NewReader(""), io.Discard, io.Discard)
 	}()
 	waitForOpenCodeThread(t, s, workspace, started.ID, nativeID)
+	status, err := s.Status(context.Background(), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, candidate := range status.Sessions {
+		if candidate.ID == started.ID && candidate.ClientState == "idle" {
+			t.Fatal("OpenCode thread discovery asserted idle without an activity observation")
+		}
+	}
 	cancel()
 	<-done
 	mu.Lock()

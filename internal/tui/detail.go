@@ -133,9 +133,13 @@ func (m *Model) detailContent() string {
 		if !ok {
 			return m.missingEntity("session", id)
 		}
-		doc.title("Session", session.AgentSnapshot.Name, session.LifecycleState)
+		doc.title("Session", session.AgentSnapshot.Name, session.State)
 		doc.action("Enter opens Run history · g jumps to the current Run")
 		doc.section("Facts")
+		doc.field("Operational state", statusBadge(session.State))
+		doc.field("Lifecycle", statusBadge(session.LifecycleState))
+		doc.field("Run state", statusBadge(session.RunState))
+		doc.field("Client state", firstNonempty(session.ClientState, "unknown"))
 		doc.field("Role", session.AgentSnapshot.Role)
 		doc.field("Profile", session.Profile)
 		doc.field("Client", session.ClientSnapshot.Adapter+" · "+session.Route.Model)
@@ -478,6 +482,12 @@ func (m *Model) runtimePaneRow(window core.TmuxWindow, pane core.Pane) runtimeRo
 	if pane.RunID != "" {
 		if run, ok := m.run(pane.RunID); ok && run.State != "" {
 			state = run.State
+			for _, session := range m.snapshot.Status.Sessions {
+				if session.ID == run.SessionID && session.CurrentRunID == run.ID {
+					state = session.State
+					break
+				}
+			}
 		}
 	}
 	return runtimeRow{
@@ -600,8 +610,12 @@ func (m *Model) orchestratorContent() string {
 		doc.body("No orchestrator session is recorded.")
 		return doc.render()
 	}
-	doc.title("Orchestrator", session.AgentSnapshot.Name, session.LifecycleState)
+	doc.title("Orchestrator", session.AgentSnapshot.Name, session.State)
 	doc.section("Facts")
+	doc.field("Operational state", statusBadge(session.State))
+	doc.field("Lifecycle", statusBadge(session.LifecycleState))
+	doc.field("Run state", statusBadge(session.RunState))
+	doc.field("Client state", firstNonempty(session.ClientState, "unknown"))
 	doc.field("Workspace", m.workspaceID)
 	doc.field("Directory", m.snapshot.Status.Directory)
 	doc.field("Session", session.ID)
@@ -610,6 +624,7 @@ func (m *Model) orchestratorContent() string {
 	if run != nil {
 		doc.section("Run")
 		doc.field("State", statusBadge(run.State))
+		doc.field("Client state", firstNonempty(run.ClientState, "unknown"))
 		doc.field("Model", run.Route.Model)
 		doc.field("Provider", run.Route.Provider)
 		doc.field("Pane / window", run.PaneID+" / "+run.WindowID)
