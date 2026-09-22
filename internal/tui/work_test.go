@@ -335,7 +335,8 @@ func (h *terminalHarness) ResolveNavigationTarget(_ context.Context, _ string, r
 
 type unusedNavigator struct{}
 
-func (unusedNavigator) Select(context.Context, core.NavigationTarget) error { return nil }
+func (unusedNavigator) Select(context.Context, core.NavigationTarget) error        { return nil }
+func (unusedNavigator) OpenDedicated(context.Context, core.NavigationTarget) error { return nil }
 func (unusedNavigator) PrepareAttach(context.Context, core.NavigationTarget) (*exec.Cmd, error) {
 	return nil, nil
 }

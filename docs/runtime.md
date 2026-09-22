@@ -11,6 +11,14 @@ workspace service list
 workspace service stop service_ID
 ```
 
+The TUI `t` action may create a runtime-only tmux session-group viewer for this
+canonical session. It shares the workspace windows and panes while retaining a separate
+client, allowing a dedicated terminal to be reused without switching the TUI client.
+Viewer groups are not durable Workspace records and do not represent Agents, Sessions,
+Runs, services, or ownership. Closing or detaching the viewer leaves the canonical
+workspace processes running. The `g` TUI action and `workspace attach` continue to use
+the current client and caller-terminal attach paths respectively.
+
 The orchestrator/user can manage services; workers can manage only services in their
 assigned worktree. Active services block archive/cleanup and revision migration.
 `pause --interrupt` stops them too. A lost service pane is marked interrupted rather

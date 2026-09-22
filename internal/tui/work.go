@@ -162,7 +162,7 @@ func (m *Model) openTerminal() tea.Cmd {
 			return nil
 		}
 		if run, active := m.currentRun(session); active {
-			return m.jump(core.EntityRef{Kind: "run", ID: run.ID})
+			return m.openDedicated(core.EntityRef{Kind: "run", ID: run.ID})
 		}
 		if session.ClosedAt != nil {
 			m.notice = "This session is closed. Open the orchestrator to plan a new assignment."
@@ -171,7 +171,7 @@ func (m *Model) openTerminal() tea.Cmd {
 		return m.terminalAction("resume_session", id)
 	}
 	if kind == "run" || kind == "worktree" || kind == "service" || kind == "workspace" {
-		return m.jump(core.EntityRef{Kind: kind, ID: id})
+		return m.openDedicated(core.EntityRef{Kind: kind, ID: id})
 	}
 	m.notice = "Select an agent, session, or task to open its terminal."
 	return nil

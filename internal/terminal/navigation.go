@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"workspace/internal/core"
 )
@@ -16,6 +18,7 @@ import (
 type Navigator interface {
 	Select(context.Context, core.NavigationTarget) error
 	Attach(context.Context, core.NavigationTarget) error
+	OpenDedicated(context.Context, core.NavigationTarget) error
 }
 
 type CommandRunner interface {
@@ -41,18 +44,22 @@ func (OSCommandRunner) Run(ctx context.Context, stdin io.Reader, stdout, stderr 
 }
 
 type TmuxNavigator struct {
-	Socket string
-	Runner CommandRunner
-	Env    func(string) string
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	Socket            string
+	Runner            CommandRunner
+	Launcher          Launcher
+	Env               func(string) string
+	Stdin             io.Reader
+	Stdout            io.Writer
+	Stderr            io.Writer
+	dedicatedMu       sync.Mutex
+	dedicatedLaunches map[string]time.Time
 }
 
 func NewTmuxNavigator(socket string) *TmuxNavigator {
 	return &TmuxNavigator{
-		Socket: socket, Runner: OSCommandRunner{}, Env: os.Getenv,
+		Socket: socket, Runner: OSCommandRunner{}, Launcher: NewDefaultLauncher(), Env: os.Getenv,
 		Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr,
+		dedicatedLaunches: make(map[string]time.Time),
 	}
 }
 
@@ -87,6 +94,9 @@ func (n *TmuxNavigator) targetSocket(target core.NavigationTarget) string {
 func (n *TmuxNavigator) verify(ctx context.Context, target core.NavigationTarget) error {
 	if target.WorkspaceID == "" || target.SessionName == "" {
 		return &core.Error{Code: "invalid_navigation_target", Message: "workspace and tmux session are required"}
+	}
+	if target.SessionName != core.TmuxName(target.WorkspaceID) {
+		return &core.Error{Code: "invalid_navigation_target", Message: "tmux session is not the canonical workspace session"}
 	}
 	socket := n.targetSocket(target)
 	if _, err := n.runner().Output(ctx, socket, "has-session", "-t", "="+target.SessionName); err != nil {

@@ -180,9 +180,9 @@ without secondary tabs, with a current/history filter and entry into the session
 details and its terminal, and More provides Needs attention and Recent recorded
 activity among other pages. Opening a task shows its related sessions, worktrees, and
 results, distinguishes process execution from result acceptance, and allows the
-terminal to be opened or explicitly resumed. If a pane is missing during navigation,
-the TUI proposes a reconcile that requires user confirmation and then retries opening
-the same target.
+dedicated terminal to be opened or explicitly resumed. If a pane is missing during
+navigation, the TUI proposes a reconcile that requires user confirmation and then
+retries opening the same target.
 
 At project scope, the TUI exposes Issues and Dispatcher alongside Workspaces. An Issue
 detail shows its source, retrieved revision, status reason, linked Workspaces, and the
@@ -194,9 +194,17 @@ The TUI can run manually as a browser or, after an explicit user action, as a ma
 pane next to the orchestrator. The supervisor does not start, restore, or stop the TUI;
 `workspace tui show` and `workspace tui hide` own that lifecycle, while `q` in the pane
 records hide before exiting. During pause and completed, the pane may remain available
-for review until the user closes it. Without tmux, runtime navigation is limited, but
-the persisted workspace state remains available. The screen and shortcut contract is
-described in
+for review until the user closes it. `t` opens or reuses the exact verified current Run
+in a separate dedicated terminal window and leaves the TUI client in place; `g` remains
+the explicit current-client jump, with a temporary caller-terminal attach only outside
+tmux. On Windows the supported runtime is WSL: the dedicated launcher opens a new
+Windows Terminal window in the current distribution and attaches it to a runtime-only
+tmux viewer session-group. Closing or detaching that viewer does not stop workspace
+processes. Linux desktop terminals and macOS Terminal are supported when discoverable;
+missing launchers, stale viewers, socket mismatches, and ambiguous clients are reported
+as actionable errors without falling back to the TUI's stdio. Without tmux, runtime
+navigation is limited, but the persisted workspace state remains available. The screen
+and shortcut contract is described in
 [docs/tui.md](docs/tui.md).
 
 ### Distribution and upgrades

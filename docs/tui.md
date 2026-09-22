@@ -64,7 +64,8 @@ to the ID even after sorting. Run completion does not mean task acceptance; task
 session, and process states are distinguished. The primary navigation order is
 `1 Tasks`, `2 Sessions`, `3 Worktrees`, `4 Results`, and `5 More`. Sessions is a plain
 collection without secondary tabs: `f` switches the current/history view, `Enter` opens
-the session details, and `t` opens or resumes its terminal.
+the session details, and `t` opens or resumes its terminal in the dedicated terminal
+window.
 `b` switches the Tasks tab between **List** and **Board**. Board shows one column per
 task state in the fixed order pending, running, blocked, needs_changes, awaiting_review,
 accepted; unknown states are appended at the end and rendered as neutral text. Cards use
@@ -159,7 +160,7 @@ to go to Tasks, Sessions, Worktrees, Results, and More respectively.
 | `f` | Switch status or history on supported lists |
 | `Tab` / `Shift+Tab` | Change the result type on Results (Artifacts, Handoffs, Checks) |
 | `s` | Sort by priority, name, or last execution |
-| `t` | Open the agent terminal or confirm start/resume |
+| `t` | Open/reuse the dedicated agent terminal or confirm start/resume |
 | `a` | Open available actions for the selection or workspace |
 | `g` | Jump to a verified tmux target |
 | `w` / `o` | Workspace picker / orchestrator page |
@@ -179,11 +180,12 @@ Tasks, the footer shows `b board` in List view and `b list` in Board view, and
 View, Runtime, Actions, and Exit; the status row shows the scroll position, while `?`
 or `Esc` returns to the previous view.
 
-`t` on an active session opens its exact current Run after ownership verification. On an
-inactive session, it asks for resume confirmation, creates a new Run through core, and
-opens its terminal on success. This resumes that specific Session; it is not a Task
-retry. When the Session's Task is awaiting review, an unchanged resume still creates a
-Run but preserves the `awaiting_review` state and the provenance of the pending handoff.
+`t` on an active session opens its exact current Run after ownership verification in a
+dedicated terminal window. On an inactive session, it asks for resume confirmation,
+creates a new Run through core, and opens or reuses that dedicated terminal on success.
+This resumes that specific Session; it is not a Task retry. When the Session's Task is
+awaiting review, an unchanged resume still creates a Run but preserves the
+`awaiting_review` state and the provenance of the pending handoff.
 In a completed workspace, an existing accepted worker Session can be resumed only for
 consultation; the Run is marked `conversation_only` and cannot submit a new result.
 The orchestrator's completed-workspace Run carries the same restriction while keeping
@@ -237,12 +239,31 @@ instead of a cramped layout. The available themes are `auto`, `dark`, and `light
 when a specific Worktree detail is opened.
 
 `g` resolves the target from its ID and checks ownership before `switch-client`, window
-selection, or attach. A historical Run does not jump to a newer execution. Outside tmux,
-the TUI may release the terminal during attach and refresh data after returning. A
-runtime error or absence is shown to the user without inventing an alternative target.
-Inside tmux, navigation selects the client by its TTY and current pane; no client,
-multiple clients viewing the pane, or another socket produces an explicit error instead
-of switching a random terminal.
+selection, or attach. It keeps the current-client behavior: inside tmux it selects the
+client displaying the TUI pane; outside tmux it temporarily releases the TUI terminal,
+attaches the caller's terminal, and resumes the TUI afterward. A historical Run does
+not jump to a newer execution. A runtime error or absence is shown to the user without
+inventing an alternative target. No client, multiple clients viewing the pane, or
+another socket produces an explicit error instead of switching a random terminal.
+
+`t` has a separate effect. After the same fresh core and pane-ownership verification,
+the terminal boundary creates or recovers a deterministic tmux session-group viewer
+for the canonical workspace session. The viewer shares the verified workspace windows
+and panes but has its own tmux client. If exactly one client is attached to it, `t`
+selects that client and moves it to the verified window and pane; if none is attached,
+the viewer is prepared and a new terminal is launched. Multiple viewer clients are
+ambiguous and fail explicitly. The TUI client is never selected or replaced by `t`.
+
+On Windows, the supported runtime is WSL. When Windows Terminal and WSL interop are
+available, the launcher starts `wt.exe` with `-w _new`, the current `WSL_DISTRO_NAME`,
+the explicit tmux socket, and the verified viewer session as separate arguments. The
+launcher returns after starting Windows Terminal, so the TUI remains usable in its
+original window. Linux desktop terminals (`x-terminal-emulator`, GNOME Terminal,
+Konsole, or Alacritty) and macOS Terminal are supported when discoverable. Other
+platforms, missing launchers, launch failures, stale viewer groups, socket mismatches,
+and ambiguous clients show actionable errors; `t` never falls back to attaching through
+the TUI's stdin/stdout. Closing or detaching the dedicated terminal only removes its
+client and does not stop workspace processes.
 
 The managed pane is user-operated. `workspace tui show` explicitly records desired state
 and reconciles at most one pane in the existing orchestrator window with an inactive

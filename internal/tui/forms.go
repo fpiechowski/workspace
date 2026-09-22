@@ -504,14 +504,18 @@ func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
 		m.pop()
 	}
 	if message.call.NavigationRef != nil {
-		return tea.Batch(m.beginRefresh(), m.jumpAttempt(*message.call.NavigationRef, true))
+		mode := message.call.NavigationMode
+		if mode == "" {
+			mode = NavigationModeJump
+		}
+		return tea.Batch(m.beginRefresh(), m.navigationAttempt(*message.call.NavigationRef, true, mode))
 	}
 	if message.call.OpenTerminal {
 		ref := core.EntityRef{Kind: "session", ID: message.call.TargetID}
 		if message.call.Action == "start_orchestrator" {
 			ref = core.EntityRef{Kind: "orchestrator"}
 		}
-		return tea.Batch(m.beginRefresh(), m.jump(ref))
+		return tea.Batch(m.beginRefresh(), m.openDedicated(ref))
 	}
 	return m.beginRefresh()
 }

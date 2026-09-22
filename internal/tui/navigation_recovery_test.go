@@ -14,7 +14,8 @@ import (
 
 type externalNavigator struct{}
 
-func (externalNavigator) Select(context.Context, core.NavigationTarget) error { return nil }
+func (externalNavigator) Select(context.Context, core.NavigationTarget) error        { return nil }
+func (externalNavigator) OpenDedicated(context.Context, core.NavigationTarget) error { return nil }
 func (externalNavigator) PrepareAttach(context.Context, core.NavigationTarget) (*exec.Cmd, error) {
 	return exec.Command("echo", "attached"), nil
 }

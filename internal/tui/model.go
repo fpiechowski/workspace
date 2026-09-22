@@ -130,6 +130,7 @@ type Model struct {
 type ExternalProcessRequest struct {
 	Cmd            *exec.Cmd
 	Ref            core.EntityRef
+	Mode           NavigationMode
 	AfterReconcile bool
 	Generation     uint64
 }
@@ -185,6 +186,7 @@ type refreshTimerMsg struct{}
 type animationMsg struct{}
 type navigationTargetMsg struct {
 	ref            core.EntityRef
+	mode           NavigationMode
 	afterReconcile bool
 	generation     uint64
 	target         core.NavigationTarget
@@ -192,6 +194,7 @@ type navigationTargetMsg struct {
 }
 type navigationResultMsg struct {
 	ref            core.EntityRef
+	mode           NavigationMode
 	afterReconcile bool
 	generation     uint64
 	err            error
@@ -274,6 +277,7 @@ func (m *Model) ResumeExternalProcess(request *ExternalProcessRequest, err error
 		generation:     m.generation,
 		err:            err,
 		ref:            request.Ref,
+		mode:           request.Mode,
 		afterReconcile: request.AfterReconcile,
 	})
 }

@@ -366,6 +366,14 @@ workspace tui status --workspace ws_ID
 workspace tui hide --workspace ws_ID
 ```
 
+`t` always keeps this TUI open and opens or reuses a separate terminal window for the
+exact verified current Run. On Windows/WSL, the supported launcher uses Windows
+Terminal, the current WSL distribution, and the explicit tmux socket to attach a
+runtime-only viewer session-group. Closing or detaching that dedicated window does not
+stop workspace processes. Linux desktop terminal launchers and macOS Terminal are used
+when discoverable; unavailable launchers, stale viewers, socket mismatches, and
+ambiguous clients are reported instead of falling back to the TUI's stdin/stdout.
+
 Without a workspace, the project tabs are `1 Workspaces`, `2 Issues`, and `3 Dispatcher`.
 The Issues tab shows durable revisions and linked Workspaces; opening an Issue shows its
 frozen description and `a` can create a linked Workspace. The Dispatcher tab shows its
@@ -374,19 +382,22 @@ lands on Tasks. `1`–`5` open Tasks, Sessions,
 Worktrees, Results, and More; below 60 columns the tabs shorten to `1 Tasks`,
 `2 Sess`, `3 Trees`, `4 Out`, and `5 More`. Sessions is a plain collection without
 secondary tabs: `f` switches between the current and history views, `Enter` opens the
-session details, and `t` opens or resumes its terminal. `Tab`/`Shift+Tab` switches the
+session details, and `t` opens or resumes its terminal in a dedicated terminal window.
+`Tab`/`Shift+Tab` switches the
 result type on Results only (the active type is named in the helper line).
 `Up`/`Down` or `j`/`k` changes the selection, `Enter` opens an item, `Esc` goes back,
 `/` filters a collection, and `f` switches between the status and history views. `s`
-sorts the list. `t` opens the selected agent's terminal or a resume confirmation;
+sorts the list. `t` opens or reuses the selected agent's dedicated terminal or a resume confirmation;
 `o`, then `t`, quickly opens or starts the orchestrator. More groups Agents, Services,
 Decisions, Change requests, Runtime, Needs attention, Recent recorded activity, and
 Documents, so attention and recorded activity are reachable from `5`. `a` opens only
 the operations available for the selection, including creating and fully deleting
 workspaces in the project picker, starting completed-workspace conversation, reopening
 or archiving a completed workspace, and deleting unrelated tasks and inactive sessions
-while ordinary task mutations remain unavailable after completion. `g` jumps to a
-verified tmux window/pane. `r`
+while ordinary task mutations remain unavailable after completion. `g` jumps the current
+verified tmux client/window/pane (or temporarily attaches the caller's terminal outside
+tmux). `t` keeps the TUI in place and opens or reuses a separate dedicated terminal
+window for the exact verified current Run. `r`
 refreshes the read without reconcile, and `?` shows scrollable help grouped into
 Navigation, View, Runtime, Actions, and Exit (already reachable at 40×12). `--theme`
 accepts `auto`, `dark`, or `light`; `--no-color` forces textual badges.

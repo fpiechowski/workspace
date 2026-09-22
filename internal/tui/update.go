@@ -201,32 +201,42 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.navigationPending = false
 		if msg.err != nil {
-			return m, m.navigationFailure(msg.err, msg.ref, msg.afterReconcile)
+			return m, m.navigationFailure(msg.err, msg.ref, msg.afterReconcile, msg.mode)
 		}
 		if m.navigator == nil {
 			m.loadError = "terminal navigation is unavailable"
 			m.rebuildViewport()
 			return m, nil
 		}
-		if os.Getenv("TMUX") != "" {
+		if msg.mode == NavigationModeDedicated {
 			navigator, target, gen := m.navigator, msg.target, m.generation
+			m.navigationPending = true
 			return m, func() tea.Msg {
 				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				defer cancel()
-				return navigationResultMsg{generation: gen, ref: msg.ref, afterReconcile: msg.afterReconcile, err: navigator.Select(ctx, target)}
+				return navigationResultMsg{generation: gen, ref: msg.ref, mode: msg.mode, afterReconcile: msg.afterReconcile, err: navigator.OpenDedicated(ctx, target)}
+			}
+		}
+		if os.Getenv("TMUX") != "" {
+			navigator, target, gen := m.navigator, msg.target, m.generation
+			m.navigationPending = true
+			return m, func() tea.Msg {
+				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				defer cancel()
+				return navigationResultMsg{generation: gen, ref: msg.ref, mode: msg.mode, afterReconcile: msg.afterReconcile, err: navigator.Select(ctx, target)}
 			}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		cmd, err := m.navigator.PrepareAttach(ctx, msg.target)
 		cancel()
 		if err != nil {
-			return m, m.navigationFailure(err, msg.ref, msg.afterReconcile)
+			return m, m.navigationFailure(err, msg.ref, msg.afterReconcile, msg.mode)
 		}
 		// Do not use tea.ExecProcess here. Bubble Tea v1.3.10 can restart its
 		// renderer before the old renderer goroutine stops, leaving animation
 		// updates in the model but no longer flushing frames (upstream #1778).
 		m.externalProcess = &ExternalProcessRequest{
-			Cmd: cmd, Ref: msg.ref, AfterReconcile: msg.afterReconcile, Generation: m.generation,
+			Cmd: cmd, Ref: msg.ref, Mode: msg.mode, AfterReconcile: msg.afterReconcile, Generation: m.generation,
 		}
 		m.quit = true
 		return m, tea.Quit
@@ -234,10 +244,14 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.generation != m.generation {
 			return m, nil
 		}
+		m.navigationPending = false
 		if msg.err != nil {
-			return m, m.navigationFailure(msg.err, msg.ref, msg.afterReconcile)
+			return m, m.navigationFailure(msg.err, msg.ref, msg.afterReconcile, msg.mode)
 		}
 		m.loadError = ""
+		if msg.mode == NavigationModeDedicated {
+			m.notice = "Dedicated terminal opened or reused."
+		}
 		return m, m.beginRefresh()
 	case actionResultMsg:
 		return m, m.finishAction(msg)
@@ -753,6 +767,14 @@ func (m *Model) jump(ref core.EntityRef) tea.Cmd {
 }
 
 func (m *Model) jumpAttempt(ref core.EntityRef, afterReconcile bool) tea.Cmd {
+	return m.navigationAttempt(ref, afterReconcile, NavigationModeJump)
+}
+
+func (m *Model) openDedicated(ref core.EntityRef) tea.Cmd {
+	return m.navigationAttempt(ref, false, NavigationModeDedicated)
+}
+
+func (m *Model) navigationAttempt(ref core.EntityRef, afterReconcile bool, mode NavigationMode) tea.Cmd {
 	if m.backend == nil || m.navigator == nil || m.navigationPending {
 		return nil
 	}
@@ -766,6 +788,6 @@ func (m *Model) jumpAttempt(ref core.EntityRef, afterReconcile bool) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		target, err := backend.ResolveNavigationTarget(ctx, workspace, ref)
-		return navigationTargetMsg{generation: gen, ref: ref, afterReconcile: afterReconcile, target: target, err: err}
+		return navigationTargetMsg{generation: gen, ref: ref, mode: mode, afterReconcile: afterReconcile, target: target, err: err}
 	}
 }

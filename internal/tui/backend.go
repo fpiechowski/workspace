@@ -27,10 +27,22 @@ type IssueBackend interface {
 type Navigator interface {
 	Select(context.Context, core.NavigationTarget) error
 	PrepareAttach(context.Context, core.NavigationTarget) (*exec.Cmd, error)
+	OpenDedicated(context.Context, core.NavigationTarget) error
 }
+
+// NavigationMode is carried through target resolution, tmux effects, and
+// reconcile retries so an asynchronous result cannot lose whether the user
+// requested a current-client jump or a separate terminal window.
+type NavigationMode string
+
+const (
+	NavigationModeJump      NavigationMode = "jump"
+	NavigationModeDedicated NavigationMode = "dedicated"
+)
 
 type ActionCall struct {
 	NavigationRef         *core.EntityRef
+	NavigationMode        NavigationMode
 	OpenTerminal          bool
 	Action                string
 	TargetID              string
