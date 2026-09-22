@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"workspace/internal/core"
 )
 
@@ -35,5 +36,48 @@ func TestProjectScopeIssuesAndDispatcherRoutes(t *testing.T) {
 	m.route = route{Page: "dispatcher"}
 	if content := m.detailContent(); !strings.Contains(content, "Project Dispatcher") || !strings.Contains(content, "running") {
 		t.Fatalf("Dispatcher detail omitted project state: %q", content)
+	}
+}
+
+func TestProjectScopeUnavailablePrimaryKeysDoNotEnterWorkspaceRoutes(t *testing.T) {
+	for _, key := range []rune{'4', '5'} {
+		m := New(Config{ProjectFound: true, ProjectID: "proj_test"})
+		before := m.route
+
+		_, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
+
+		if m.workspaceID != "" || m.route != before {
+			t.Fatalf("project key %q changed scope or route: workspace=%q route=%+v, want %q and %+v", key, m.workspaceID, m.route, "", before)
+		}
+	}
+}
+
+func TestProjectScopePrimaryKeysRecoverFromWorkspaceRoute(t *testing.T) {
+	for _, tc := range []struct {
+		key  rune
+		page string
+	}{
+		{key: '1', page: "project"},
+		{key: '2', page: "issues"},
+		{key: '3', page: "dispatcher"},
+	} {
+		m := New(Config{ProjectFound: true, ProjectID: "proj_test"})
+		m.route = route{Page: "results", Tab: "artifacts"}
+
+		_, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{tc.key}})
+
+		if m.workspaceID != "" || m.route.Page != tc.page {
+			t.Fatalf("project key %q left invalid workspace route as %+v, want page %q at project scope", tc.key, m.route, tc.page)
+		}
+	}
+}
+
+func TestWorkspaceResultsPrimaryKeyRemainsAvailable(t *testing.T) {
+	m := New(Config{ProjectFound: true, ProjectID: "proj_test", WorkspaceID: "ws_test"})
+
+	_, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'4'}})
+
+	if m.route.Page != "results" || m.route.Tab != "artifacts" {
+		t.Fatalf("workspace key 4 opened %+v, want Results on artifacts", m.route)
 	}
 }

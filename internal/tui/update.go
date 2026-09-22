@@ -477,7 +477,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
-	if m.route.Page == "task" && (key == "1" || key == "2" || key == "3") {
+	if m.workspaceID != "" && m.route.Page == "task" && (key == "1" || key == "2" || key == "3") {
 		switch key {
 		case "1":
 			m.push(route{Page: "sessions", ParentID: m.route.EntityID})
@@ -488,16 +488,21 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.workspaceID == "" && (m.route.Page == "project" || m.route.Page == "issues" || m.route.Page == "issue" || m.route.Page == "dispatcher") && (key == "1" || key == "2" || key == "3") {
+	if m.workspaceID == "" {
 		switch key {
 		case "1":
 			m.navigate(route{Page: "project"})
+			return m, m.beginRefresh()
 		case "2":
 			m.navigate(route{Page: "issues"})
+			return m, m.beginRefresh()
 		case "3":
 			m.navigate(route{Page: "dispatcher"})
+			return m, m.beginRefresh()
+		case "4", "5":
+			// These primary bindings belong to workspace scope only.
+			return m, nil
 		}
-		return m, m.beginRefresh()
 	}
 	switch {
 	case keybind.Matches(msg, m.keys.Primary[0]):
