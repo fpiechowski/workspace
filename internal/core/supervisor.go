@@ -383,6 +383,10 @@ func (s *Service) tickWorkspaceAgents(ctx context.Context, status Status) error 
 	if err := s.autoBindOpenCodeThreads(ctx, status.Workspace.ID, sessions); err != nil {
 		return err
 	}
+	// OpenCode activity is queried after the workspace lock has been released.
+	// Each request is independently bounded and a failed/stale observation is
+	// intentionally ignored so reconciliation and delivery can continue.
+	s.observeOpenCodeActivity(ctx, status.Workspace.ID, sessions)
 	// A verified lost pane can be replaced; silence or a transient tmux
 	// error never triggers another execution. Stopped/failed clients require
 	// an explicit retry, preventing unbounded restart loops.
@@ -574,7 +578,11 @@ func (s *Service) autoBindOpenCodeThreads(ctx context.Context, selector string, 
 		}
 	}
 	for _, session := range sessions {
-		if session.State != "running" || session.ClientSnapshot.Adapter != "opencode" || session.ClientThreadID != "" {
+		runState := session.RunState
+		if runState == "" {
+			runState = session.State
+		}
+		if runState != "running" || session.ClientSnapshot.Adapter != "opencode" || session.ClientThreadID != "" {
 			continue
 		}
 		if len(session.Argv) == 0 || session.Argv[0] == "" {
@@ -598,7 +606,7 @@ func (s *Service) autoBindOpenCodeThreads(ctx context.Context, selector string, 
 		if thread == "" {
 			continue
 		}
-		if err := s.clientState(ctx, selector, session.CurrentRunID, thread, "idle"); err != nil {
+		if err := s.bindClientThread(ctx, selector, session.CurrentRunID, thread); err != nil {
 			return err
 		}
 		claimed[thread] = struct{}{}
@@ -606,4 +614,24 @@ func (s *Service) autoBindOpenCodeThreads(ctx context.Context, selector string, 
 		sessions[session.ID] = session
 	}
 	return nil
+}
+
+func (s *Service) observeOpenCodeActivity(ctx context.Context, selector string, sessions map[string]Session) {
+	for _, session := range sessions {
+		if !session.Active() || session.ClientSnapshot.Adapter != "opencode" ||
+			!usesNativeOpenCodeDelivery(session.ClientSnapshot) || session.CurrentRunID == "" ||
+			session.ClientThreadID == "" || !validOpenCodeEndpoint(session.OpenCodeEndpoint) {
+			continue
+		}
+		requestCtx, cancel := context.WithTimeout(ctx, openCodeObservationTimeout)
+		observed, err := s.openCodeSessionStatus(requestCtx, session.OpenCodeEndpoint, session.ClientThreadID)
+		cancel()
+		if err != nil {
+			continue
+		}
+		// Persistence re-checks the exact current Run, thread and endpoint under
+		// the project lock. A replacement Run therefore cannot inherit a stale
+		// network observation.
+		_ = s.persistOpenCodeObservation(ctx, selector, session, observed)
+	}
 }

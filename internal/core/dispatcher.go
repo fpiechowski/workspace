@@ -245,7 +245,10 @@ func syncDispatcherSession(state *dispatcherState, session *Session) {
 	}
 	session.Profile, session.ReasoningEffort, session.Route, session.RoutingDecision = selected.Profile, selected.ReasoningEffort, selected.Route, selected.RoutingDecision
 	session.Argv, session.CWD, session.PromptFile = append([]string(nil), selected.Argv...), selected.CWD, selected.PromptFile
-	session.State, session.RunState, session.PaneID, session.WindowID = selected.State, selected.State, selected.PaneID, selected.WindowID
+	currentActive := current != nil && current.Active()
+	session.RunState = selected.State
+	session.State = projectSessionState(selected.State, selected.ClientState, currentActive)
+	session.PaneID, session.WindowID = selected.PaneID, selected.WindowID
 	session.FinishedAt, session.ExitCode, session.Error, session.ClientState = selected.FinishedAt, selected.ExitCode, selected.Error, selected.ClientState
 	session.ClientThreadID = selected.ClientThreadID
 	session.LastActiveAt = selected.CreatedAt

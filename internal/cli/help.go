@@ -286,7 +286,7 @@ var commandHelpSpecs = map[string]commandHelp{
 		requiredArgument("session", "Workspace session ID to update."),
 	),
 	"workspace session list": h(
-		"List logical Sessions with lifecycle state, current/last Run, pane, native thread and lineage summaries.",
+		"List logical Sessions with operational state (including live idle), lifecycle/run/client state, current/last Run, pane, native thread and lineage summaries.",
 		"workspace session list",
 	),
 	"workspace session history": h(

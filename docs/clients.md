@@ -64,6 +64,16 @@ active-TUI sequence is deliberately distinct from OpenCode's external
 `/session/{id}/prompt_async` request, which can be accepted without appearing in the
 visible TUI. No terminal keystrokes or `/tui/clear-prompt` are used.
 
+The supervisor separately observes native OpenCode activity with the current Run-scoped
+`GET /session/status` endpoint. It selects the exact `client_thread_id` from the returned
+map and accepts only `idle`, `busy`, or `retry`; a discovered or newly bound thread is not
+itself evidence of idleness. A positive `idle` observation makes the operational Session
+state `idle` while `lifecycle_state=active`, `run_state=running`, runtime ownership, and
+delivery remain active. The bounded request runs outside the project lock, and a timeout,
+malformed response, missing thread, or non-2xx response preserves the last known state.
+Codex exposes the equivalent positive bridge observation. Claude and custom command
+adapters remain conservative unless they provide an explicit observation capability.
+
 HTTP success or process startup alone is not delivery. A busy or unready TUI leaves the
 message in the inbox for retry. Delivery, inbox ACK and handoff acceptance are separate
 operations. OpenCode with no `deliver_argv` is native by default. A genuinely custom,

@@ -161,6 +161,47 @@ func TestDetailDocumentHasConsistentHierarchy(t *testing.T) {
 	}
 }
 
+func TestLiveIdleSessionPresentationKeepsLifecycleRunAndClientFacts(t *testing.T) {
+	m := detailFixture()
+	for i := range m.snapshot.Status.Sessions {
+		if m.snapshot.Status.Sessions[i].ID == "sess_worker" {
+			m.snapshot.Status.Sessions[i].State = "idle"
+			m.snapshot.Status.Sessions[i].RunState = "running"
+			m.snapshot.Status.Sessions[i].ClientState = "idle"
+		}
+	}
+	m.snapshot.Status.Runs[1].ClientState = "idle"
+	m.width, m.height = 120, 40
+	m.route = route{Page: "session", EntityID: "sess_worker"}
+	m.rebuildViewport()
+	sessionDetail := m.detailContent()
+	for _, want := range []string{"○ idle", "Lifecycle: ● active", "Run state: ● running", "Client state: idle"} {
+		if !strings.Contains(sessionDetail, want) {
+			t.Fatalf("Session detail missing %q:\n%s", want, sessionDetail)
+		}
+	}
+	rows := m.runtimeRows()
+	foundIdlePane := false
+	for _, row := range rows {
+		if row.Run == "run_worker" {
+			foundIdlePane = row.State == "idle"
+		}
+	}
+	if !foundIdlePane {
+		t.Fatalf("runtime pane did not show projected live idle state: %+v", rows)
+	}
+	m.snapshot.Status.Sessions[0].State = "idle"
+	m.snapshot.Status.Sessions[0].RunState = "running"
+	m.snapshot.Status.Sessions[0].ClientState = "idle"
+	m.snapshot.Status.Runs[0].ClientState = "idle"
+	orchestratorDetail := m.orchestratorContent()
+	for _, want := range []string{"Operational state: ○ idle", "Lifecycle: ● active", "Run state: ● running", "Client state: idle"} {
+		if !strings.Contains(orchestratorDetail, want) {
+			t.Fatalf("Orchestrator detail missing %q:\n%s", want, orchestratorDetail)
+		}
+	}
+}
+
 // TestDetailDocReusableBlocks covers the shared renderers directly: sections,
 // fields, bullets, warnings, links and provenance.
 func TestDetailDocReusableBlocks(t *testing.T) {

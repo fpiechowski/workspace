@@ -98,6 +98,16 @@ Process launch, native conversation resume, message delivery, observation, and
 interruption are separate adapter capabilities. A generic launcher remains useful, but
 full autonomous communication requires a client that supports delivery.
 
+Session status keeps lifecycle, execution, and client activity separate. `lifecycle_state`
+describes whether a logical Session is active, resumable, or closed; `run_state` describes
+the concrete current Run; and the operational `state` projects a positive client
+observation onto that Run. A current starting/running Run observed as client `idle` is
+therefore operationally idle while the Session remains active, owns its agent/worktree,
+and continues to receive delivery. The supervisor never infers idleness from tmux focus,
+output silence, elapsed time, or a failed observation. Codex and native OpenCode provide
+the positive observations; clients without an observation contract preserve the concrete
+Run state.
+
 ## Product Scope
 
 The current scope includes:
@@ -145,10 +155,12 @@ server selects the current session, appends the marker-bearing workspace prompt,
 submits it through the active TUI control API. Delivery is confirmed against the
 current Run only after the marker appears in session history; it remains distinct from
 inbox ACK and handoff acceptance.
+The TUI and CLI show an observed live idle state without treating that Session as
+resumable or releasing its runtime ownership.
 
 Messages and handoffs use exact logical Session addresses. `ToAgent` remains an audit
 and legacy projection, while `--to` is accepted only when it resolves to one eligible
-Session; idle Sessions remain pending and closed or deleted Sessions are never silently
+Session; resumable idle Sessions remain pending and closed or deleted Sessions are never silently
 rerouted. Agents inspect, acknowledge, and review only their current Session, while the
 user selects a Session explicitly or requests an agent-wide historical view explicitly.
 

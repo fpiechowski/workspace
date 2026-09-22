@@ -172,7 +172,10 @@ func (d *Document) syncSession(p *Session) {
 	}
 	p.Profile, p.ReasoningEffort, p.Route, p.RoutingDecision = selected.Profile, selected.ReasoningEffort, selected.Route, selected.RoutingDecision
 	p.Argv, p.CWD, p.PromptFile = append([]string(nil), selected.Argv...), selected.CWD, selected.PromptFile
-	p.RunState, p.State, p.PaneID, p.WindowID = selected.State, selected.State, selected.PaneID, selected.WindowID
+	currentActive := current != nil && current.Active()
+	p.RunState = selected.State
+	p.State = projectSessionState(selected.State, selected.ClientState, currentActive)
+	p.PaneID, p.WindowID = selected.PaneID, selected.WindowID
 	p.FinishedAt, p.ExitCode, p.Error, p.ClientState = selected.FinishedAt, selected.ExitCode, selected.Error, selected.ClientState
 	p.OpenCodeEndpoint = selected.OpenCodeEndpoint
 	if selected.ClientThreadID != "" {
@@ -184,7 +187,7 @@ func (d *Document) syncSession(p *Session) {
 	}
 	if p.ClosedAt != nil {
 		p.LifecycleState = "closed"
-	} else if current != nil && current.Active() {
+	} else if currentActive {
 		p.LifecycleState = "active"
 	} else {
 		p.CurrentRunID = ""

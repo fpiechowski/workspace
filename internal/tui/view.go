@@ -513,6 +513,12 @@ func (m *Model) itemSummary(items []collectionItem, width int) []string {
 		lines := []string{item.Title, statusBadge(item.State), m.previewActions(item.Kind), "", item.Subtitle, "", "ID: " + item.ID}
 		if item.Kind == "session" {
 			if session, ok := findSession(m.snapshot.Status.Sessions, item.ID); ok {
+				lines = append(lines,
+					"Operational: "+statusBadge(session.State),
+					"Lifecycle: "+statusBadge(session.LifecycleState),
+					"Run state: "+statusBadge(session.RunState),
+					"Client state: "+firstNonempty(session.ClientState, "unknown"),
+				)
 				if run, live := m.currentRun(session); live {
 					lines = append(lines, "Run: "+run.ID, "Model: "+run.Route.Model, "Pane: "+firstNonempty(run.PaneID, "launching"))
 				} else {
