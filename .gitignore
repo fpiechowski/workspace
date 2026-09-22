@@ -2,3 +2,5 @@
 /coverage.out
 /release/
 /workspace
+.idea/
+.workspace/
