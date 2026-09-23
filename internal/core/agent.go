@@ -174,7 +174,7 @@ func (d *Document) syncSession(p *Session) {
 	p.Argv, p.CWD, p.PromptFile = append([]string(nil), selected.Argv...), selected.CWD, selected.PromptFile
 	currentActive := current != nil && current.Active()
 	p.RunState = selected.State
-	p.State = projectSessionState(selected.State, selected.ClientState, currentActive)
+	p.State = projectSessionState(selected.State)
 	p.PaneID, p.WindowID = selected.PaneID, selected.WindowID
 	p.FinishedAt, p.ExitCode, p.Error, p.ClientState = selected.FinishedAt, selected.ExitCode, selected.Error, selected.ClientState
 	p.OpenCodeEndpoint = selected.OpenCodeEndpoint

@@ -100,13 +100,13 @@ full autonomous communication requires a client that supports delivery.
 
 Session status keeps lifecycle, execution, and client activity separate. `lifecycle_state`
 describes whether a logical Session is active, resumable, or closed; `run_state` describes
-the concrete current Run; and the operational `state` projects a positive client
-observation onto that Run. A current starting/running Run observed as client `idle` is
-therefore operationally idle while the Session remains active, owns its agent/worktree,
-and continues to receive delivery. The supervisor never infers idleness from tmux focus,
-output silence, elapsed time, or a failed observation. Codex and native OpenCode provide
-the positive observations; clients without an observation contract preserve the concrete
-Run state.
+the concrete current Run; and the operational `state` follows that Run. `client_state` is
+the latest independent adapter observation. A current starting/running Run therefore
+remains operationally starting/running even when the client reports `idle`; the Session
+still owns its agent/worktree and continues to receive delivery. The supervisor never
+infers idleness from tmux focus, output silence, elapsed time, or a failed observation.
+Codex and native OpenCode provide the positive observations, which are shown separately
+from the concrete operational state.
 
 ## Product Scope
 
@@ -155,8 +155,9 @@ server selects the current session, appends the marker-bearing workspace prompt,
 submits it through the active TUI control API. Delivery is confirmed against the
 current Run only after the marker appears in session history; it remains distinct from
 inbox ACK and handoff acceptance.
-The TUI and CLI show an observed live idle state without treating that Session as
-resumable or releasing its runtime ownership.
+The TUI and CLI show the concrete live Run state together with the latest client
+observation, without treating a client `idle` observation as resumability or releasing
+runtime ownership.
 
 Messages and handoffs use exact logical Session addresses. `ToAgent` remains an audit
 and legacy projection, while `--to` is accepted only when it resolves to one eligible

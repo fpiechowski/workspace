@@ -235,10 +235,8 @@ type Session struct {
 }
 
 func (s Session) Active() bool {
-	// State is an operational presentation and may be "idle" while the
-	// current Run is live but the client is between turns. Runtime ownership
-	// therefore follows the concrete RunState whenever it is available. The
-	// State fallback is retained only for pre-RunState records.
+	// Runtime ownership follows the concrete RunState whenever it is available.
+	// The State fallback is retained only for pre-RunState records.
 	state := s.RunState
 	if state == "" {
 		state = s.State
@@ -246,13 +244,10 @@ func (s Session) Active() bool {
 	return s.CurrentRunID != "" && (state == "starting" || state == "running")
 }
 
-// projectSessionState keeps the concrete Run lifecycle separate from the
-// operational Session presentation. A client observation can prove that a
-// live Run is between turns, but it cannot make the Run inactive.
-func projectSessionState(runState, clientState string, current bool) string {
-	if current && (runState == "starting" || runState == "running") && clientState == "idle" {
-		return "idle"
-	}
+// projectSessionState keeps the operational Session presentation aligned with
+// the concrete Run lifecycle. ClientState is an independent adapter
+// observation and must not make a live Run appear idle.
+func projectSessionState(runState string) string {
 	return runState
 }
 

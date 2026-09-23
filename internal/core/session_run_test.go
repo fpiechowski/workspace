@@ -257,7 +257,7 @@ func TestProjectionKeepsActiveCurrentRunWhenHistoryIsNewer(t *testing.T) {
 	}
 }
 
-func TestLiveIdleSessionProjectionRetainsRunOwnership(t *testing.T) {
+func TestLiveRunProjectionRetainsRunOwnershipWithIdleClientObservation(t *testing.T) {
 	now := nowUTC()
 	d := &Document{Registry: Registry{
 		Sessions: []Session{{ID: "sess", CurrentRunID: "run"}},
@@ -265,33 +265,37 @@ func TestLiveIdleSessionProjectionRetainsRunOwnership(t *testing.T) {
 	}}
 	d.syncSessions()
 	p := d.Registry.Sessions[0]
-	if p.State != "idle" || p.RunState != "running" || p.LifecycleState != "active" || !p.Active() {
-		t.Fatalf("live idle projection lost ownership: %+v", p)
+	if p.State != "running" || p.RunState != "running" || p.ClientState != "idle" || p.LifecycleState != "active" || !p.Active() {
+		t.Fatalf("live Run projection lost operational state or ownership: %+v", p)
 	}
 	if metrics := workspaceMetrics(d); metrics.ActiveRuns != 1 {
-		t.Fatalf("live idle Run was omitted from active metrics: %+v", metrics)
+		t.Fatalf("live Run was omitted from active metrics: %+v", metrics)
 	}
 }
 
-func TestClientActivityOnlyIdleProjectsIdle(t *testing.T) {
-	for _, clientState := range []string{"busy", "retry", "needs_input", "unknown", ""} {
-		d := &Document{Registry: Registry{
-			Sessions: []Session{{ID: "sess", CurrentRunID: "run"}},
-			Runs:     []Run{{ID: "run", SessionID: "sess", State: "running", ClientState: clientState, CreatedAt: nowUTC()}},
-		}}
-		d.syncSessions()
-		p := d.Registry.Sessions[0]
-		if p.State != "running" || p.RunState != "running" || !p.Active() {
-			t.Fatalf("client state %q changed operational running state: %+v", clientState, p)
+func TestClientObservationDoesNotOverrideOperationalRunState(t *testing.T) {
+	for _, runState := range []string{"starting", "running"} {
+		for _, clientState := range []string{"idle", "busy", "retry", "needs_input", "unknown", ""} {
+			t.Run(runState+"/"+clientState, func(t *testing.T) {
+				d := &Document{Registry: Registry{
+					Sessions: []Session{{ID: "sess", CurrentRunID: "run"}},
+					Runs:     []Run{{ID: "run", SessionID: "sess", State: runState, ClientState: clientState, CreatedAt: nowUTC()}},
+				}}
+				d.syncSessions()
+				p := d.Registry.Sessions[0]
+				if p.State != runState || p.RunState != runState || p.ClientState != clientState || p.LifecycleState != "active" || !p.Active() {
+					t.Fatalf("client state %q changed operational %s state: %+v", clientState, runState, p)
+				}
+			})
 		}
 	}
-	for _, runState := range []string{"starting", "running"} {
+	for _, runState := range []string{"exited", "failed", "stopped", "interrupted"} {
 		d := &Document{Registry: Registry{
 			Sessions: []Session{{ID: "sess", CurrentRunID: "run"}},
 			Runs:     []Run{{ID: "run", SessionID: "sess", State: runState, ClientState: "idle", CreatedAt: nowUTC()}},
 		}}
 		d.syncSessions()
-		if got := d.Registry.Sessions[0].State; got != "idle" {
+		if got := d.Registry.Sessions[0].State; got != runState {
 			t.Fatalf("Run state %q with idle observation projected as %q", runState, got)
 		}
 	}
@@ -320,7 +324,7 @@ func TestIdleAndClosedSessionsKeepLifecycleSemantics(t *testing.T) {
 	}
 }
 
-func TestLiveIdleSessionStillBlocksOwnershipAndCompletion(t *testing.T) {
+func TestLiveRunStillBlocksOwnershipAndCompletionWithIdleClientObservation(t *testing.T) {
 	s, ws := fixture(t)
 	ctx := context.Background()
 	agent, worktree := worker(t, s, ws, "idle-owner")
@@ -347,11 +351,11 @@ func TestLiveIdleSessionStillBlocksOwnershipAndCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !status.Sessions[0].Active() || status.Sessions[0].State != "idle" {
-		t.Fatalf("fixture did not retain live idle ownership: %+v", status.Sessions[0])
+	if !status.Sessions[0].Active() || status.Sessions[0].State != "running" || status.Sessions[0].ClientState != "idle" {
+		t.Fatalf("fixture did not retain live Run ownership: %+v", status.Sessions[0])
 	}
 	if _, err := s.StartSession(ctx, ws, SessionOptions{Agent: agent.ID, Worktree: worktree.ID}); err == nil {
-		t.Fatal("live idle Session did not block a second Session for the same agent")
+		t.Fatal("live Session did not block a second Session for the same agent")
 	} else {
 		expectCode(t, err, "agent_busy")
 	}
@@ -360,7 +364,7 @@ func TestLiveIdleSessionStillBlocksOwnershipAndCompletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.StartSession(ctx, ws, SessionOptions{Agent: other.ID, Worktree: worktree.ID}); err == nil {
-		t.Fatal("live idle Session did not retain worktree ownership")
+		t.Fatal("live Session did not retain worktree ownership")
 	} else {
 		expectCode(t, err, "worktree_busy")
 	}
@@ -372,7 +376,7 @@ func TestLiveIdleSessionStillBlocksOwnershipAndCompletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.CompleteWorkspace(ctx, ws, CompleteOptions{}); err == nil {
-		t.Fatal("manual completion ignored live idle Session")
+		t.Fatal("manual completion ignored live Session")
 	} else {
 		expectCode(t, err, "session_active")
 	}

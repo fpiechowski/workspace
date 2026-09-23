@@ -90,17 +90,19 @@ ordinary resource/task/result mutations require `workspace reopen`.
 
 | Session projection | Meaning |
 |---|---|
-| `lifecycle_state=active` | `current_run_id` points to the single starting/running Run; the Session owns its runtime even when the operational state is `idle` |
+| `lifecycle_state=active` | `current_run_id` points to the single starting/running Run; the Session owns its runtime and operational `state` follows that Run |
 | `lifecycle_state=idle` | no active current Run; the Session can be resumed when lineage is unchanged |
 | `lifecycle_state=closed` | explicitly closed logical context; no further Runs are allowed |
-| `state=idle` | the current starting/running Run has a positive client observation of `idle`; this does not make the Session resumable or release ownership |
+| `state=starting` / `state=running` | the current Run is starting/running; this remains the operational state regardless of the client observation |
+| `client_state=idle` | the adapter's latest explicit observation; it does not release ownership or make a live Session idle |
 
 `state` is the operational display and decision projection. It normally follows
-`run_state`; the supervisor changes it to `idle` only for a current starting/running Run
-when the adapter positively reports client `idle`. It never infers idle from tmux focus,
-output silence, elapsed time, or an observation failure. `run_state` remains the source of
-runtime ownership and recovery decisions, and `Session.Active()` remains true for a
-current `starting` or `running` Run.
+`run_state`, including for a current starting/running Run whose adapter reports `idle`.
+`client_state` remains a separate observation and never changes the concrete operational
+Run state. The supervisor never infers idle from tmux focus, output silence, elapsed time,
+or an observation failure. `run_state` remains the source of runtime ownership and
+recovery decisions, and `Session.Active()` remains true for a current `starting` or
+`running` Run.
 
 | Run state | Meaning |
 |---|---|
@@ -112,12 +114,12 @@ current `starting` or `running` Run.
 
 `client_state` records the latest adapter observation. Codex and native OpenCode may
 report `busy`, `idle`, or `retry` (Codex may also expose other explicit bridge states such
-as `needs_input`); unknown or empty values do not project a live Run to idle. OpenCode
-observation polls the current Run's loopback `GET /session/status` endpoint, matches the
-exact `client_thread_id`, and accepts only the documented `idle`, `busy`, and `retry`
-status types. The bounded request runs outside the project lock; failures preserve the
-last known value and do not change unrelated Sessions. Thread discovery and binding are
-not activity observations.
+as `needs_input`); unknown or empty values do not change the concrete operational Run
+state. OpenCode observation polls the current Run's loopback `GET /session/status`
+endpoint, matches the exact `client_thread_id`, and accepts only the documented `idle`,
+`busy`, and `retry` status types. The bounded request runs outside the project lock;
+failures preserve the last known value and do not change unrelated Sessions. Thread
+discovery and binding are not activity observations.
 
 The `conversation_only` Run marker is persisted independently of the process state. It
 does not change accepted task or handoff provenance, and it prevents the Codex bridge

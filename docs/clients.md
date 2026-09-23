@@ -67,10 +67,12 @@ visible TUI. No terminal keystrokes or `/tui/clear-prompt` are used.
 The supervisor separately observes native OpenCode activity with the current Run-scoped
 `GET /session/status` endpoint. It selects the exact `client_thread_id` from the returned
 map and accepts only `idle`, `busy`, or `retry`; a discovered or newly bound thread is not
-itself evidence of idleness. A positive `idle` observation makes the operational Session
-state `idle` while `lifecycle_state=active`, `run_state=running`, runtime ownership, and
+itself evidence of idleness. A positive `idle` observation is stored as `client_state` but
+does not change the operational Session state: while `lifecycle_state=active` and
+`run_state=running`, the operational `state` remains `running`; runtime ownership and
 delivery remain active. The bounded request runs outside the project lock, and a timeout,
-malformed response, missing thread, or non-2xx response preserves the last known state.
+malformed response, missing thread, or non-2xx response preserves the last known
+observation and operational Run state.
 Codex exposes the equivalent positive bridge observation. Claude and custom command
 adapters remain conservative unless they provide an explicit observation capability.
 

@@ -111,11 +111,7 @@ func TestOpenCodeSupervisorPersistsActivityObservation(t *testing.T) {
 			if got.ClientState != state || got.RunState != "running" || !got.Active() {
 				t.Fatalf("OpenCode observation %q was not projected conservatively: %+v", state, got)
 			}
-			wantState := "running"
-			if state == "idle" {
-				wantState = "idle"
-			}
-			if got.State != wantState || got.LifecycleState != "active" {
+			if got.State != "running" || got.LifecycleState != "active" {
 				t.Fatalf("OpenCode observation %q changed Session projection incorrectly: %+v", state, got)
 			}
 		})

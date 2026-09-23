@@ -56,8 +56,8 @@ func TestCodexNativeWakeupAndResume(t *testing.T) {
 		t.Fatal("native client did not reach expected state")
 	}
 	waitFor(func(v Status) bool { return v.Sessions[0].ClientState == "idle" && v.Sessions[0].ClientThreadID != "" })
-	if session := findSessionInStatusValue(t, s, ctx, ws, p.ID); session.State != "idle" || session.RunState != "running" || session.LifecycleState != "active" || !session.Active() {
-		t.Fatalf("Codex idle observation was not projected separately from the live Run: %+v", session)
+	if session := findSessionInStatusValue(t, s, ctx, ws, p.ID); session.State != "running" || session.RunState != "running" || session.ClientState != "idle" || session.LifecycleState != "active" || !session.Active() {
+		t.Fatalf("Codex idle observation did not preserve the active operational Run projection: %+v", session)
 	}
 	startParams := readCodexThreadParams(t, filepath.Join(p.CWD, "work-products", "thread-thread-start.json"))
 	if startParams["effort"] != "configured-effort" || startParams["approvalPolicy"] != "never" {
@@ -171,11 +171,10 @@ func TestCodexClientActivityProjectionAcrossTurn(t *testing.T) {
 	}
 	for _, test := range []struct {
 		clientState string
-		wantState   string
 	}{
-		{clientState: "busy", wantState: "running"},
-		{clientState: "needs_input", wantState: "running"},
-		{clientState: "idle", wantState: "idle"},
+		{clientState: "busy"},
+		{clientState: "needs_input"},
+		{clientState: "idle"},
 	} {
 		if err := s.With(context.Background(), ws, func(d *Document) error {
 			p, err := findSession(d, session.ID)
@@ -200,7 +199,7 @@ func TestCodexClientActivityProjectionAcrossTurn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.State != test.wantState || got.RunState != "running" || !got.Active() {
+		if got.State != "running" || got.RunState != "running" || got.ClientState != test.clientState || !got.Active() {
 			t.Fatalf("Codex client state %q projected as %+v", test.clientState, got)
 		}
 	}
