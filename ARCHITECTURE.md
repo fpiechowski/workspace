@@ -369,8 +369,9 @@ results, and recovery paths. The CLI enforces transitions, roles, dependencies, 
 acceptance; `WORKFLOW.md` instructs the orchestrator how to compose these operations
 idempotently.
 
-The basic `plan-first` workflow leads from planning to implementation. The extended
-`issue-resolution` workflow, retained for compatibility and the complete process,
+The basic capability-declared `plan-first` workflow leads from planning to
+implementation. The extended `issue-resolution` workflow, retained for compatibility
+and the complete process,
 includes:
 
 ```text
@@ -387,6 +388,21 @@ and input lineage is allowed even during `awaiting_review`: it creates a new Run
 not reopen the Task or replace the `RunID` that points to the pending handoff. Task retry
 remains a separate operation. Only rejecting the handoff may rebind `RunID` to a newer,
 compatible active Run of that Session so that Run can submit a replacement result.
+
+`WorkflowConfig.Capabilities` is snapshotted into `Workflow.Capabilities` when a
+workspace selects a workflow. Capability names cover task roles and the integration,
+live-test, change-request, and release resources. Operations check the snapshot and
+return `workflow_capability` with the workflow ID when a requested role or resource is
+undeclared. Legacy snapshots derive deterministic capabilities from their workflow ID:
+`plan-first` has planner/implementer roles and no integration gates, while
+`issue-resolution` has the complete role and resource set.
+
+Handoff acceptance re-reads the producing worktree's HEAD and status. The submitted
+`Dirty` field remains historical evidence, while current cleanliness is authoritative
+for the acceptance decision. Checks carry expected outcomes, so `require_checks` means
+that declared exits match their expected exit or explicit outcome rather than that every
+command exits zero. Tasks can be durably cancelled, abandoned, or superseded with a
+reason; these terminal states are excluded from phase gates without erasing history.
 
 ### Manual Mode
 

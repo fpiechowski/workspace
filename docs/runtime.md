@@ -96,6 +96,14 @@ ordinary resource/task/result mutations require `workspace reopen`.
 | `state=starting` / `state=running` | the current Run is starting/running; this remains the operational state regardless of the client observation |
 | `client_state=idle` | the adapter's latest explicit observation; it does not release ownership or make a live Session idle |
 
+Before enforcing worker ownership and the configured parallel limit, `session start`
+reconciles a worker Run whose recorded pane is dead or missing. It records the Run as
+`exited`, clears `current_run_id`, and releases the worker slot; a task-bound Run that
+ended without a handoff is marked blocked for inspection. `session close` applies the
+same evidence check, so a completed worker Session can be closed without a redundant
+`session stop`. An unavailable runtime remains inconclusive and preserves the active
+reservation.
+
 `state` is the operational display and decision projection. It normally follows
 `run_state`, including for a current starting/running Run whose adapter reports `idle`.
 `client_state` remains a separate observation and never changes the concrete operational

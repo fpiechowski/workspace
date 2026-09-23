@@ -233,6 +233,11 @@ func (s *Service) Config() (Config, error) {
 		if w.ChangeRequests != "" && w.ChangeRequests != "integrated" && w.ChangeRequests != "per-task" {
 			return cfg, fail("invalid_config", "change_requests must be integrated or per-task")
 		}
+		for _, capability := range w.Capabilities {
+			if !knownWorkflowCapability(capability) {
+				return cfg, fail("invalid_config", "workflow %s declares unknown capability %q", name, capability)
+			}
+		}
 		for role, profile := range w.Profiles {
 			if role != "orchestrator" && role != "planning" && role != "implementation" && role != "integration" && role != "live-testing" {
 				return cfg, fail("invalid_config", "unknown workflow profile role %q", role)
@@ -373,12 +378,15 @@ func workflowAvailable(root string, cfg Config, name string) bool {
 }
 
 func WorkflowNames(root string, cfg Config) []string {
-	names := make([]string, 0, len(cfg.Workflows)+1)
+	names := make([]string, 0, len(cfg.Workflows)+2)
 	for name := range cfg.Workflows {
 		names = append(names, name)
 	}
 	if !slices.Contains(names, exampleWorkflow) && workflowTemplateExists(root, exampleWorkflow) {
 		names = append(names, exampleWorkflow)
+	}
+	if !slices.Contains(names, "issue-resolution") && workflowTemplateExists(root, "issue-resolution") {
+		names = append(names, "issue-resolution")
 	}
 	slices.Sort(names)
 	return names
@@ -624,7 +632,7 @@ func (s *Service) snapshotTemplates(d *Document, workflow string, manual bool) e
 		if err != nil {
 			return err
 		}
-		d.State.Workflow = &Workflow{workflow, 1, digest(w), "planning"}
+		d.State.Workflow = &Workflow{ID: workflow, Version: 1, TemplateDigest: digest(w), Phase: "planning", Capabilities: workflowConfigCapabilities(workflow, cfg)}
 		d.State.Status = "active"
 	default:
 		promptDir = filepath.Join(s.Root, ".workspace", "templates", "workflows", exampleWorkflow)

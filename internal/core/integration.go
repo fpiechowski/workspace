@@ -14,7 +14,7 @@ type IntegrationOptions struct {
 func integrationInputs(d *Document, ids []string) ([]string, []string, error) {
 	if len(ids) == 0 {
 		for _, t := range d.State.Tasks {
-			if t.Role == "implementer" {
+			if t.Role == "implementer" && !retiredTask(t) {
 				ids = append(ids, t.ID)
 			}
 		}
@@ -81,6 +81,9 @@ func (s *Service) PrepareIntegration(ctx context.Context, selector string, opt I
 			return err
 		}
 		if err := requireWorkflowOperation(d.State, "integration"); err != nil {
+			return err
+		}
+		if err := requireWorkflowCapability(d, capIntegration); err != nil {
 			return err
 		}
 		if _, err := d.previous(opt.OperationKey, opt); err != nil {

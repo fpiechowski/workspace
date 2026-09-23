@@ -60,6 +60,36 @@ func taskCommands(o *options) *cobra.Command {
 	retry.Args = cobra.ExactArgs(1)
 	retry.Flags().StringVar(&reason, "reason", "Retry requested", "Reason for new attempt")
 	group.AddCommand(retry)
+	for _, retirement := range []struct{ command, state string }{
+		{command: "cancel", state: "cancelled"},
+		{command: "abandon", state: "abandoned"},
+		{command: "supersede", state: "superseded"},
+	} {
+		commandName, state := retirement.command, retirement.state
+		var retirementReason string
+		retire := command(commandName+" <task>", "Retire a task without creating a new attempt", func(c *cobra.Command, args []string) error {
+			s, id, err := o.scope()
+			if err != nil {
+				return err
+			}
+			v, err := s.RetireTask(c.Context(), id, args[0], state, retirementReason, o.key, core.MutationGuard{})
+			if err != nil {
+				return err
+			}
+			return o.emit(v)
+		})
+		retire.Args = cobra.ExactArgs(1)
+		retire.Flags().StringVar(&retirementReason, "reason", "", "Reason for retiring the task")
+		switch commandName {
+		case "cancel":
+			retire.Aliases = []string{"cancelled"}
+		case "abandon":
+			retire.Aliases = []string{"abandoned"}
+		case "supersede":
+			retire.Aliases = []string{"superseded"}
+		}
+		group.AddCommand(retire)
+	}
 	return group
 }
 func messageCommands(o *options) *cobra.Command {
@@ -193,7 +223,7 @@ func handoffCommands(o *options) *cobra.Command {
 	f.StringVar(&opt.Outcome, "outcome", "succeeded", "succeeded, blocked, failed")
 	f.StringVar(&summary, "summary-file", "", "Summary text file")
 	f.StringSliceVar(&opt.Artifacts, "artifact", nil, "Explicit artifact path; repeat or comma-separate")
-	f.StringVar(&checks, "checks-file", "", "YAML/JSON array of command, exit_code, evidence filename")
+	f.StringVar(&checks, "checks-file", "", "YAML/JSON array of command, exit_code, expected_exit or outcome, evidence filename")
 	f.StringSliceVar(&opt.CheckIDs, "check", nil, "Captured check receipt ID; repeat for multiple checks")
 	f.StringSliceVar(&opt.Risks, "risk", nil, "Known risks")
 	group.AddCommand(submit)

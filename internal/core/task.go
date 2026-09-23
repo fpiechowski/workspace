@@ -90,9 +90,6 @@ func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec
 	if len(spec.RequiredArtifacts) == 0 {
 		spec.RequiredArtifacts = []string{def[1]}
 	}
-	if spec.Role == "implementer" || spec.Role == "integrator" || spec.Role == "tester" {
-		spec.RequireChecks = true
-	}
 	for _, name := range spec.RequiredArtifacts {
 		if name == "" || filepath.Base(name) != name || name == "." || name == ".." {
 			return out, fail("invalid_task", "required artifacts must be filenames")
@@ -101,6 +98,11 @@ func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec
 	err := s.With(ctx, selector, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
+		}
+		if d.State.WorkflowSelected() {
+			if err := requireWorkflowRole(d, spec.Role); err != nil {
+				return err
+			}
 		}
 		id, err := d.previous(key, spec)
 		if err != nil {
@@ -150,6 +152,21 @@ func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec
 			seen[dep.ID] = true
 			normalized.DependsOn[i] = dep.ID
 		}
+		if spec.Role == "implementer" && d.State.WorkflowSelected() && workflowHasCapability(d, capPlannerDepends) {
+			linked := false
+			for _, candidate := range d.State.Tasks {
+				if candidate.Role == "planner" && !retiredTask(candidate) {
+					for _, depID := range normalized.DependsOn {
+						if depID == candidate.ID {
+							linked = true
+						}
+					}
+				}
+			}
+			if !linked {
+				return fail("workflow_gate", "implementation task must depend on a planner task; the planner must be accepted before implementation starts")
+			}
+		}
 		if spec.BaseCommit != "" {
 			base, err := git(ctx, s.Root, "rev-parse", "--verify", "--end-of-options", spec.BaseCommit+"^{commit}")
 			if err != nil {
@@ -193,6 +210,70 @@ func taskReady(d *Document, t *Task) error {
 	}
 	return taskDependenciesReady(d, t)
 }
+
+// RetireTask records a terminal decision for work that will not be run. It is
+// intentionally separate from RetryTask: retry creates a new attempt, while
+// retirement preserves the current attempt and its explanation in history.
+func (s *Service) RetireTask(ctx context.Context, selector, id, state, reason, key string, guard MutationGuard) (Task, error) {
+	var out Task
+	if state != "cancelled" && state != "abandoned" && state != "superseded" {
+		return out, fail("invalid_task_state", "retirement state must be cancelled, abandoned or superseded")
+	}
+	if strings.TrimSpace(reason) == "" {
+		return out, fail("reason_required", "give a reason for retiring the task")
+	}
+	request := struct {
+		Task, State, Reason string
+		Guard               MutationGuard
+	}{id, state, reason, guard}
+	err := mutate(s, ctx, selector, []string{key}, request, &out, s.requireOrchestrator, func(d *Document) error {
+		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		if err := rejectNewWorkspaceWork(d, "retiring tasks"); err != nil {
+			return err
+		}
+		if guard.ExpectedRevision != 0 && d.State.Revision != guard.ExpectedRevision {
+			return fail("revision_conflict", "workspace changed while retiring the task")
+		}
+		t, err := findTask(d, id)
+		if err != nil {
+			return err
+		}
+		if retiredTask(*t) {
+			if t.State != state || t.Reason != reason {
+				return fail("task_retired", "task %s is already %s", t.ID, t.State)
+			}
+			out = *t
+			return nil
+		}
+		for _, session := range d.Registry.Sessions {
+			if session.TaskID == t.ID && session.Active() {
+				return fail("task_busy", "stop session %s before retiring task %s", session.ID, t.ID)
+			}
+		}
+		// Keep AcceptedHandoff and the original RunID intact when a result is
+		// retired. The task leaves active workflow gates, while its accepted
+		// evidence remains addressable as history.
+		t.State, t.Reason = state, reason
+		out = *t
+		return saveDocument(d)
+	})
+	return out, err
+}
+
+func (s *Service) CancelTask(ctx context.Context, selector, id, reason, key string) (Task, error) {
+	return s.RetireTask(ctx, selector, id, "cancelled", reason, key, MutationGuard{})
+}
+
+func (s *Service) AbandonTask(ctx context.Context, selector, id, reason, key string) (Task, error) {
+	return s.RetireTask(ctx, selector, id, "abandoned", reason, key, MutationGuard{})
+}
+
+func (s *Service) SupersedeTask(ctx context.Context, selector, id, reason, key string) (Task, error) {
+	return s.RetireTask(ctx, selector, id, "superseded", reason, key, MutationGuard{})
+}
+
 func (s *Service) RetryTask(ctx context.Context, selector, id, reason, key string) (Task, error) {
 	return s.retryTask(ctx, selector, id, reason, key, MutationGuard{})
 }
@@ -240,6 +321,9 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, key strin
 		}
 		if t.DeletedAt != nil {
 			return fail("task_deleted", "task %s was deleted", t.ID)
+		}
+		if retiredTask(*t) {
+			return fail("task_retired", "task %s is %s; create a replacement task instead of retrying it", t.ID, t.State)
 		}
 		if guard.ExpectedAttempt != 0 && t.Attempt != guard.ExpectedAttempt {
 			return fail("target_changed", "task %s moved from attempt %d to %d", id, guard.ExpectedAttempt, t.Attempt)

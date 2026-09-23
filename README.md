@@ -229,6 +229,17 @@ workflows:
       planning: thinker
       implementation: worker
     max_parallel_tasks: 3
+    capabilities: [tasks, phases, tasks.role.planner, tasks.role.implementer, planner_dependency]
+  issue-resolution:
+    profiles:
+      orchestrator: orchestrator
+      planning: thinker
+      implementation: worker
+      integration: worker
+      live-testing: worker
+    max_parallel_tasks: 3
+    change_requests: integrated
+    capabilities: [tasks, phases, tasks.role.planner, tasks.role.implementer, tasks.role.integrator, tasks.role.tester, planner_dependency, integration, live_test, change_request, release]
 forge:
   adapter: github
   remote: origin
@@ -471,16 +482,20 @@ workspace inbox list --session sess_PARENT
 workspace inbox read msg_ID --session sess_PARENT
 workspace inbox ack msg_ID --session sess_PARENT
 workspace inbox list --agent agent_PARENT --all   # explicit agent-wide history
-workspace check run --operation-key tests-attempt-1 -- npm test
+workspace check run --operation-key tests-attempt-1 --expected-exit 0 -- npm test
 workspace handoff submit --task task_ID --to-session sess_PARENT \
   --summary-file work-products/SUMMARY.md \
   --artifact work-products/IMPLEMENTATION.md --check check_ID
 workspace handoff accept handoff_ID
 workspace workflow advance
+workspace task supersede task_ID --reason "Replaced by task_ID_v2"
 ```
 
-`check run` returns a receipt; read its `exit_code`. Recording a receipt does not mean
-the test succeeded. Acceptance checks workflow criteria, required artifacts, and results.
+`check run` returns a receipt; read its `exit_code` and `expected_exit`. Recording a
+receipt does not mean the test succeeded. Acceptance checks workflow criteria, required
+artifacts, and declared check outcomes. Use `task retry` for a new attempt of the same
+contract; use `task cancel`, `task abandon`, or `task supersede` with a reason to retire
+work that will not run. Retired tasks remain in history and do not block phase gates.
 `workspace workflow advance` applies only to a workspace with a selected workflow;
 manual mode uses the same tasks, handoffs, and checks without advance.
 [Test evidence](docs/checks.md).

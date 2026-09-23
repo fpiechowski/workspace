@@ -344,6 +344,21 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace task retry task_01 --reason \"Previous check used stale fixtures\"",
 		requiredArgument("task", "Task ID or task name to retry."),
 	),
+	"workspace task cancel": h(
+		"Retire a task as cancelled with a durable reason. This preserves its history and does not create a new attempt.",
+		"workspace task cancel task_01 --reason \"No longer required\"",
+		requiredArgument("task", "Task ID or task name to cancel."),
+	),
+	"workspace task abandon": h(
+		"Retire a task as abandoned with a durable reason. This preserves its history and does not create a new attempt.",
+		"workspace task abandon task_01 --reason \"Work was superseded\"",
+		requiredArgument("task", "Task ID or task name to abandon."),
+	),
+	"workspace task supersede": h(
+		"Retire a task as superseded with a durable reason. This preserves its history and does not create a new attempt.",
+		"workspace task supersede task_01 --reason \"Replacement task created\"",
+		requiredArgument("task", "Task ID or task name to supersede."),
+	),
 	"workspace message": h(
 		"Send durable notes, questions, answers or status messages to exact logical Sessions.",
 		"workspace message send --to-session sess_parent --kind question --body-file question.md",
@@ -651,6 +666,9 @@ var flagHelpSpecs = map[string]map[string]string{
 	"workspace session bind-thread": {"thread-id": "Native client conversation or session ID."},
 	"workspace task create":         {"spec-file": "YAML or Markdown frontmatter task specification file (required)."},
 	"workspace task retry":          {"reason": "Reason recorded for starting the new attempt."},
+	"workspace task cancel":         {"reason": "Reason recorded for cancelling the task (required)."},
+	"workspace task abandon":        {"reason": "Reason recorded for abandoning the task (required)."},
+	"workspace task supersede":      {"reason": "Reason recorded for superseding the task (required)."},
 	"workspace message send": {
 		"body-file":  "File containing the message body (required).",
 		"to":         "Compatibility recipient Agent ID or persona name; accepted only when exactly one eligible Session exists.",

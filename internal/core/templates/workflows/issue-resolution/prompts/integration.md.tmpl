@@ -8,7 +8,7 @@ Write work-products/INTEGRATION.md listing input heads, integrated SHA, conflict
 resolutions, checks and risks, plus work-products/SUMMARY.md. Submit through workspace
 handoff submit --to-session {{.ParentSessionID}} --task "$WORKSPACE_TASK_ID" with --summary-file,
 --artifact for the report and each evidence file, and --checks-file (YAML array of
-command, exit_code, evidence filename). Use a stable operation key per result.
+command, exit_code, expected_exit or outcome, evidence filename). Use a stable operation key per result.
 Report blockers through message send and outcome blocked; do not reset partial work.
 
 Prefer workspace check run --operation-key <task-attempt-check> -- <command> [args]

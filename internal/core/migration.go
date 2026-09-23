@@ -19,6 +19,9 @@ type RevisionOptions struct {
 func invalidateRevision(d *Document, reason string) {
 	for i := range d.State.Tasks {
 		t := &d.State.Tasks[i]
+		if retiredTask(*t) {
+			continue
+		}
 		t.Attempt++
 		t.State = "pending"
 		t.AcceptedHandoff = ""
@@ -122,19 +125,27 @@ func (s *Service) MigrateWorkflow(ctx context.Context, selector string, opt Revi
 		}
 		// Render in memory, then commit all changed snapshots and state through
 		// the same write-ahead record. Existing Session prompts remain immutable.
-		paths := map[string]string{"AGENTS.md": "orchestrator.AGENTS.md.tmpl", "prompts/worker.AGENTS.md": "worker.AGENTS.md.tmpl", "WORKFLOW.md": "workflows/issue-resolution/WORKFLOW.md.tmpl"}
+		workflowID := d.State.Workflow.ID
+		paths := map[string]string{"AGENTS.md": "orchestrator.AGENTS.md.tmpl", "prompts/worker.AGENTS.md": "worker.AGENTS.md.tmpl", "WORKFLOW.md": "workflows/" + workflowID + "/WORKFLOW.md.tmpl"}
 		for _, name := range []string{"orchestrator", "planning", "implementation", "integration", "live-testing"} {
-			paths["prompts/"+name+".md.tmpl"] = "workflows/issue-resolution/prompts/" + name + ".md.tmpl"
+			paths["prompts/"+name+".md.tmpl"] = "workflows/" + workflowID + "/prompts/" + name + ".md.tmpl"
 		}
 		id := ID("revision")
 		prefix := filepath.Join("history", id)
 		files := map[string][]byte{}
 		changes := map[string]map[string]string{}
 		for target, source := range paths {
+			sourcePath := filepath.Join(s.Root, ".workspace", "templates", filepath.FromSlash(source))
+			if _, statErr := os.Stat(sourcePath); statErr != nil {
+				if os.IsNotExist(statErr) {
+					continue
+				}
+				return statErr
+			}
 			var next []byte
 			var err error
 			if strings.HasSuffix(target, ".tmpl") {
-				next, err = os.ReadFile(filepath.Join(s.Root, ".workspace", "templates", filepath.FromSlash(source)))
+				next, err = os.ReadFile(sourcePath)
 			} else {
 				next, err = s.render(source, d.State)
 			}
@@ -165,6 +176,11 @@ func (s *Service) MigrateWorkflow(ctx context.Context, selector string, opt Revi
 		files[filepath.Join(prefix, "migration.json")] = manifest
 		d.PendingFiles = files
 		d.State.Workflow.Version++
+		if cfg, cfgErr := s.Config(); cfgErr == nil {
+			d.State.Workflow.Capabilities = workflowConfigCapabilities(workflowID, cfg)
+		} else {
+			return cfgErr
+		}
 		if w, ok := files["WORKFLOW.md"]; ok {
 			d.State.Workflow.TemplateDigest = digest(w)
 		}

@@ -13,25 +13,27 @@ import (
 )
 
 type CheckReceipt struct {
-	ID         string     `json:"id" yaml:"id"`
-	SessionID  string     `json:"session_id" yaml:"session_id"`
-	RunID      string     `json:"run_id" yaml:"run_id"`
-	TaskID     string     `json:"task_id" yaml:"task_id"`
-	Attempt    int        `json:"attempt" yaml:"attempt"`
-	Argv       []string   `json:"argv" yaml:"argv"`
-	Head       string     `json:"head" yaml:"head"`
-	EndHead    string     `json:"end_head" yaml:"end_head"`
-	Clean      bool       `json:"clean" yaml:"clean"`
-	State      string     `json:"state" yaml:"state"`
-	ExitCode   int        `json:"exit_code" yaml:"exit_code"`
-	Output     string     `json:"output" yaml:"output"`
-	Digest     string     `json:"digest" yaml:"digest"`
-	StartedAt  time.Time  `json:"started_at" yaml:"started_at"`
-	FinishedAt *time.Time `json:"finished_at,omitempty" yaml:"finished_at,omitempty"`
+	ID           string     `json:"id" yaml:"id"`
+	SessionID    string     `json:"session_id" yaml:"session_id"`
+	RunID        string     `json:"run_id" yaml:"run_id"`
+	TaskID       string     `json:"task_id" yaml:"task_id"`
+	Attempt      int        `json:"attempt" yaml:"attempt"`
+	Argv         []string   `json:"argv" yaml:"argv"`
+	Head         string     `json:"head" yaml:"head"`
+	EndHead      string     `json:"end_head" yaml:"end_head"`
+	Clean        bool       `json:"clean" yaml:"clean"`
+	State        string     `json:"state" yaml:"state"`
+	ExitCode     int        `json:"exit_code" yaml:"exit_code"`
+	ExpectedExit *int       `json:"expected_exit,omitempty" yaml:"expected_exit,omitempty"`
+	Output       string     `json:"output" yaml:"output"`
+	Digest       string     `json:"digest" yaml:"digest"`
+	StartedAt    time.Time  `json:"started_at" yaml:"started_at"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty" yaml:"finished_at,omitempty"`
 }
 type CheckOptions struct {
 	Session, OperationKey string
 	Argv                  []string
+	ExpectedExit          *int
 }
 
 func findCheck(d *Document, id string) (*CheckReceipt, error) {
@@ -133,7 +135,7 @@ func (s *Service) RunCheck(ctx context.Context, selector string, opt CheckOption
 		if err != nil {
 			return err
 		}
-		out = CheckReceipt{ID: ID("check"), SessionID: p.ID, RunID: run.ID, TaskID: p.TaskID, Attempt: p.TaskAttempt, Argv: append([]string(nil), opt.Argv...), Head: head, Clean: dirty == "", State: "running", ExitCode: -1, StartedAt: nowUTC()}
+		out = CheckReceipt{ID: ID("check"), SessionID: p.ID, RunID: run.ID, TaskID: p.TaskID, Attempt: p.TaskAttempt, Argv: append([]string(nil), opt.Argv...), ExpectedExit: opt.ExpectedExit, Head: head, Clean: dirty == "", State: "running", ExitCode: -1, StartedAt: nowUTC()}
 		out.Output = filepath.ToSlash(filepath.Join("work-products", "checks", out.ID+".log"))
 		cwd = w.Path
 		workspaceDir = d.Dir

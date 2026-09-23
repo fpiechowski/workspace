@@ -129,7 +129,8 @@ The current scope includes:
 - controlled resumption, failure reconciliation, archiving, and cleanup;
 - completed-workspace conversation and an auditable, idempotent reopen path for
   explicitly authorized follow-up work;
-- the `plan-first` workflow and the extended, backward-compatible `issue-resolution` workflow;
+- the capability-declared `plan-first` workflow and the extended, selectable
+  `issue-resolution` workflow;
 - manual mode without a workflow: task and worktree delegation, handoffs, checks, and
   acceptance with a fixed limit of 3 parallel workers, without phases, advance, release,
   or conversion to a workflow;
@@ -137,6 +138,16 @@ The current scope includes:
   explicitly permitted core operations.
 - installation from the published GitHub Release archives and an explicit
   `workspace upgrade` path that verifies and atomically installs a newer stable release.
+
+Workflow snapshots declare their task roles and resource gates. `plan-first` supports
+planning and implementation only and completes without integration, live testing,
+change requests, or release confirmation. `issue-resolution` declares the extended
+integration, change-request, live-test, and release gates. The CLI rejects a task role
+or mutation that the selected workflow does not declare.
+
+Task retirement is durable: an orchestrator can mark work `cancelled`,
+`abandoned`, or `superseded` with a reason. Retired tasks remain in history and do not
+block workflow advancement; retry remains the operation for starting a new attempt.
 
 Outside the current scope are remote workers, multi-computer coordination,
 cryptographic confirmation of human identity, account-wide token or cost accounting,

@@ -34,8 +34,13 @@ func advancePlanFirst(d *Document) error {
 			return err
 		}
 		count := 0
+		retired := 0
 		for _, t := range d.State.Tasks {
 			if t.Role != "implementer" {
+				continue
+			}
+			if retiredTask(t) {
+				retired++
 				continue
 			}
 			count++
@@ -51,11 +56,23 @@ func advancePlanFirst(d *Document) error {
 				return fail("workflow_gate", "implementation task %s must reference an accepted plan", t.ID)
 			}
 		}
-		if count == 0 {
+		if count == 0 && retired == 0 {
 			return fail("workflow_gate", "create implementation tasks before advancing")
 		}
 		d.State.Workflow.Phase = "implementing"
 	case "implementing":
+		live := false
+		for _, t := range d.State.Tasks {
+			if t.Role == "implementer" && !retiredTask(t) {
+				live = true
+				break
+			}
+		}
+		if !live {
+			d.State.Workflow.Phase = "completed"
+			d.State.Status = "completed"
+			return nil
+		}
 		if _, err := acceptedRole(d, "implementer"); err != nil {
 			return err
 		}
@@ -75,6 +92,9 @@ func acceptedRole(d *Document, role string) ([]Task, error) {
 		if t.Role != role {
 			continue
 		}
+		if retiredTask(t) {
+			continue
+		}
 		if t.State != "accepted" {
 			return nil, fail("workflow_gate", "%s task %s is %s", role, t.ID, t.State)
 		}
@@ -91,6 +111,10 @@ func acceptedRole(d *Document, role string) ([]Task, error) {
 		return nil, fail("workflow_gate", "at least one accepted %s task is required", role)
 	}
 	return result, nil
+}
+
+func retiredTask(t Task) bool {
+	return t.State == "cancelled" || t.State == "abandoned" || t.State == "superseded" || t.State == "deleted" || t.DeletedAt != nil
 }
 func decisionBasis(d *Document) string {
 	return payloadDigest(struct {
@@ -113,6 +137,9 @@ func requestDecision(d *Document, kind, question string, options []string) (Deci
 	return decision, nil
 }
 func validateIntegration(ctx context.Context, d *Document) error {
+	if err := requireWorkflowCapability(d, capIntegration); err != nil {
+		return err
+	}
 	i := d.State.Integration
 	if i == nil || i.HeadCommit == "" {
 		return fail("workflow_gate", "accepted integrated revision is missing")
@@ -166,6 +193,9 @@ func advance(ctx context.Context, d *Document, target string) error {
 	if err := requireWorkflowOperation(d.State, "workflow advance"); err != nil {
 		return err
 	}
+	if err := requireWorkflowCapability(d, capPhases); err != nil {
+		return err
+	}
 	if d.State.Status == "completed" {
 		return fail("workspace_completed", "workflow is completed; reopen the workspace before advancing")
 	}
@@ -175,7 +205,10 @@ func advance(ctx context.Context, d *Document, target string) error {
 	if d.State.Status != "active" {
 		return fail("workflow_gate", "workspace is %s", d.State.Status)
 	}
-	if d.State.Workflow.ID == "plan-first" {
+	// Workflows without the integration capability use the compact
+	// plan/review/implementation/completed state machine. The capability
+	// declaration, rather than a workflow ID, selects these gates.
+	if !workflowHasCapability(d, capIntegration) {
 		next := map[string]string{"planning": "plan_review", "plan_review": "implementing", "implementing": "completed"}[d.State.Workflow.Phase]
 		if target != "" && target != next {
 			return fail("workflow_gate", "next phase is %s; cannot skip to %s", next, target)
@@ -200,7 +233,7 @@ func advance(ctx context.Context, d *Document, target string) error {
 		}
 		count := 0
 		for _, t := range d.State.Tasks {
-			if t.Role != "implementer" {
+			if t.Role != "implementer" || retiredTask(t) {
 				continue
 			}
 			count++
@@ -226,6 +259,9 @@ func advance(ctx context.Context, d *Document, target string) error {
 		}
 		next = "integrating"
 	case "integrating":
+		if err := requireWorkflowCapability(d, capIntegration); err != nil {
+			return err
+		}
 		if _, err := acceptedRole(d, "integrator"); err != nil {
 			return err
 		}
@@ -234,6 +270,9 @@ func advance(ctx context.Context, d *Document, target string) error {
 		}
 		next = "change_requests"
 	case "change_requests":
+		if err := requireWorkflowCapability(d, capChangeRequest); err != nil {
+			return err
+		}
 		if err := validateIntegration(ctx, d); err != nil {
 			return err
 		}
@@ -254,8 +293,14 @@ func advance(ctx context.Context, d *Document, target string) error {
 		}
 		next = "live_test_offer"
 	case "live_test_offer":
+		if err := requireWorkflowCapability(d, capLiveTest); err != nil {
+			return err
+		}
 		return decisionRequired("answer the live-testing decision", "run", "skip")
 	case "live_testing":
+		if err := requireWorkflowCapability(d, capLiveTest); err != nil {
+			return err
+		}
 		if err := validateIntegration(ctx, d); err != nil {
 			return err
 		}
@@ -281,6 +326,9 @@ func advance(ctx context.Context, d *Document, target string) error {
 		}
 		next = "awaiting_release"
 	case "awaiting_release":
+		if err := requireWorkflowCapability(d, capRelease); err != nil {
+			return err
+		}
 		return fail("user_decision_required", "use release confirm after the user confirms deployment or release")
 	case "completed":
 		return fail("workspace_completed", "workflow is completed")
@@ -365,6 +413,9 @@ func (s *Service) AnswerDecision(ctx context.Context, selector string, opt Decis
 		}
 		switch p.Kind {
 		case "live-testing":
+			if err := requireWorkflowCapability(d, capLiveTest); err != nil {
+				return err
+			}
 			if err := validateIntegration(ctx, d); err != nil {
 				return err
 			}
@@ -424,6 +475,9 @@ func (s *Service) ConfirmRelease(ctx context.Context, selector, reference string
 			return fail("workspace_archived", "archived workspace cannot confirm release")
 		}
 		if err := requireWorkflowOperation(d.State, "release confirmation"); err != nil {
+			return err
+		}
+		if err := requireWorkflowCapability(d, capRelease); err != nil {
 			return err
 		}
 		if d.State.Workflow == nil || d.State.Workflow.Phase != "awaiting_release" || d.State.Status != "active" {

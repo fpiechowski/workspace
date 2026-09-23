@@ -78,6 +78,15 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			out = *session
 			return nil
 		}
+		// A worker process can finish without the supervisor getting a chance
+		// to persist the final Run transition. Reconcile dead or missing worker
+		// panes before ownership and parallel-limit checks so completed workers
+		// release their slots automatically.
+		if changed := s.reconcileCompletedWorkerRuns(ctx, d); changed {
+			if err := saveDocument(d); err != nil {
+				return err
+			}
+		}
 		var resumePrior *Session
 		if opt.ResumeSession != "" {
 			resumePrior, err = findSession(d, opt.ResumeSession)
@@ -95,6 +104,11 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			// Agent definitions are snapshotted into a logical Session. A later
 			// edit to the live persona must not rewrite its resumed prompt.
 			a = resumePrior.AgentSnapshot
+		}
+		if a.Role != "orchestrator" && d.State.WorkflowSelected() {
+			if err := requireWorkflowRole(d, a.Role); err != nil {
+				return err
+			}
 		}
 		if resumePrior != nil {
 			if opt.Worktree == "" {
@@ -817,6 +831,30 @@ func (s *Service) CloseSession(ctx context.Context, selector, id, reason string,
 		if p.DeletedAt != nil {
 			return fail("session_deleted", "session %s was deleted", p.ID)
 		}
+		if p.CurrentRunID != "" {
+			// Closing a logical Session after its worker process has already
+			// exited should not require a redundant explicit stop. A dead pane is
+			// durable evidence that the current Run no longer owns a live process.
+			if r, runErr := currentRun(d, p); runErr == nil {
+				if !r.Active() {
+					p.CurrentRunID = ""
+					d.syncSession(p)
+				} else if r.PaneID != "" && s.Runtime != nil {
+					pane, inspectErr := s.Runtime.Inspect(ctx, r.PaneID)
+					missing := false
+					if inspectErr != nil {
+						var runtimeErr *Error
+						missing = errors.As(inspectErr, &runtimeErr) && runtimeErr.Code == "pane_missing"
+						if !missing {
+							return inspectErr
+						}
+					}
+					if missing || pane.Dead {
+						releaseCompletedRun(d, p, r)
+					}
+				}
+			}
+		}
 		if p.Active() {
 			return fail("session_active", "stop the current run before closing the logical session")
 		}
@@ -829,6 +867,60 @@ func (s *Service) CloseSession(ctx context.Context, selector, id, reason string,
 		return saveDocument(d)
 	})
 	return out, err
+}
+
+// reconcileCompletedWorkerRuns releases worker Sessions whose tmux process
+// has already exited but whose ExecuteSession finalizer was not persisted.
+// Runtime inspection errors other than a missing pane are left untouched:
+// an unavailable runtime is not proof that a worker stopped.
+func (s *Service) reconcileCompletedWorkerRuns(ctx context.Context, d *Document) bool {
+	if s.Runtime == nil {
+		return false
+	}
+	changed := false
+	for i := range d.Registry.Sessions {
+		p := &d.Registry.Sessions[i]
+		if p.AgentSnapshot.Role == "orchestrator" || p.CurrentRunID == "" {
+			continue
+		}
+		r, err := findRun(d, p.CurrentRunID)
+		if err != nil {
+			continue
+		}
+		if !r.Active() {
+			p.CurrentRunID = ""
+			d.syncSession(p)
+			changed = true
+			continue
+		}
+		if r.PaneID == "" {
+			continue
+		}
+		pane, inspectErr := s.Runtime.Inspect(ctx, r.PaneID)
+		missing := false
+		if inspectErr != nil {
+			var runtimeErr *Error
+			missing = errors.As(inspectErr, &runtimeErr) && runtimeErr.Code == "pane_missing"
+			if !missing {
+				continue
+			}
+		}
+		if missing || pane.Dead {
+			releaseCompletedRun(d, p, r)
+			changed = true
+		}
+	}
+	return changed
+}
+
+func releaseCompletedRun(d *Document, p *Session, r *Run) {
+	now := nowUTC()
+	r.State = "exited"
+	r.FinishedAt = &now
+	r.Error = "worker process completed without a handoff"
+	p.CurrentRunID = ""
+	blockInterruptedTask(d, p, r)
+	d.syncSession(p)
 }
 
 func (s *Service) ResumeAgent(ctx context.Context, selector, agent, key string) (Session, error) {

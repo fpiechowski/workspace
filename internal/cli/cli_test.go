@@ -82,7 +82,7 @@ func TestStructuredErrorsAndWorkflowDiscovery(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if !response.OK || len(response.Data) != 1 || response.Data[0].ID != "plan-first" {
+	if !response.OK || len(response.Data) != 2 || response.Data[0].ID != "issue-resolution" || response.Data[1].ID != "plan-first" {
 		t.Fatal("invalid workflow list")
 	}
 	out.Reset()

@@ -31,3 +31,14 @@ workflows:
       planning: thinker
       implementation: worker
     max_parallel_tasks: 3
+    capabilities: [tasks, phases, tasks.role.planner, tasks.role.implementer, planner_dependency]
+  issue-resolution:
+    profiles:
+      orchestrator: orchestrator
+      planning: thinker
+      implementation: worker
+      integration: worker
+      live-testing: worker
+    max_parallel_tasks: 3
+    change_requests: integrated
+    capabilities: [tasks, phases, tasks.role.planner, tasks.role.implementer, tasks.role.integrator, tasks.role.tester, planner_dependency, integration, live_test, change_request, release]

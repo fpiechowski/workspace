@@ -7,7 +7,7 @@ with commit, changes, acceptance criteria, check results and risks. Write SUMMAR
 Submit results with workspace handoff submit --to-session {{.ParentSessionID}} --task "$WORKSPACE_TASK_ID"
 --summary-file work-products/SUMMARY.md --artifact work-products/IMPLEMENTATION.md
 plus each evidence file as --artifact and a --checks-file containing the YAML array
-of command, exit_code and evidence (the included evidence filename).
+of command, exit_code, expected_exit or outcome and evidence (the included evidence filename).
 Use a stable --operation-key for this result and repeat it on a transport retry.
 The returned artifact paths are preserved in the workspace; source files stay here.
 For a blocker, send a question and submit --outcome blocked, preserving partial work.

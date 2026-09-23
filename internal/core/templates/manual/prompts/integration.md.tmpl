@@ -7,6 +7,6 @@ Write work-products/INTEGRATION.md listing input revisions, the integrated commi
 conflict resolutions, checks and risks, plus work-products/SUMMARY.md. Submit via
 workspace handoff submit --to-session {{.ParentSessionID}} --task "$WORKSPACE_TASK_ID"
 --summary-file work-products/SUMMARY.md --artifact work-products/INTEGRATION.md plus
-evidence files and --checks-file (YAML array of command, exit_code, evidence filename).
+evidence files and --checks-file (YAML array of command, exit_code, expected_exit or outcome, evidence filename).
 Use a stable operation key per result. Report blockers through message send and
 outcome blocked; do not reset partial work.

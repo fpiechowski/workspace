@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -242,7 +243,7 @@ func (s *Service) SubmitHandoff(ctx context.Context, selector string, opt Handof
 			artifacts = append(artifacts, artifact)
 			bytes = append(bytes, b)
 			out.ArtifactIDs = append(out.ArtifactIDs, id)
-			out.Checks = append(out.Checks, Check{Command: checkCommand(r.Argv), ExitCode: r.ExitCode, Evidence: id})
+			out.Checks = append(out.Checks, Check{Command: checkCommand(r.Argv), ExitCode: r.ExitCode, ExpectedExit: r.ExpectedExit, Evidence: id})
 		}
 		// All validation precedes any copy. Only registered immutable files are exposed.
 		for i, a := range artifacts {
@@ -312,15 +313,12 @@ func validateHandoff(d *Document, h *Handoff, t *Task) error {
 			return fail("artifact_required", "required artifact %s is missing", name)
 		}
 	}
-	if t.Role != "planner" && h.Dirty {
-		return fail("dirty_worktree", "implementation/integration/test result has uncommitted changes")
-	}
 	if t.RequireChecks && len(h.Checks) == 0 {
 		return fail("checks_required", "verification evidence is required")
 	}
 	for _, check := range h.Checks {
-		if check.ExitCode != 0 {
-			return fail("checks_failed", "check %s failed", check.Command)
+		if !checkOutcomeMatches(check) {
+			return fail("checks_failed", "check %s exited %d, expected %s", check.Command, check.ExitCode, expectedCheckDescription(check))
 		}
 		a, err := findArtifact(d, check.Evidence)
 		if err != nil {
@@ -329,6 +327,63 @@ func validateHandoff(d *Document, h *Handoff, t *Task) error {
 		if err := verifyArtifact(d, a); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func checkOutcomeMatches(check Check) bool {
+	if check.ExpectedExit != nil {
+		return check.ExitCode == *check.ExpectedExit
+	}
+	switch check.Outcome {
+	case "passed":
+		return check.ExitCode == 0
+	case "blocked", "failed":
+		return check.ExitCode != 0
+	default:
+		// Legacy checks had no expected outcome and were successful only at 0.
+		return check.ExitCode == 0
+	}
+}
+
+func expectedCheckDescription(check Check) string {
+	if check.ExpectedExit != nil {
+		return fmt.Sprintf("exit %d", *check.ExpectedExit)
+	}
+	if check.Outcome != "" {
+		return check.Outcome
+	}
+	return "exit 0"
+}
+
+// validateCurrentHandoff is deliberately separate from validateHandoff. A
+// handoff is an immutable submission record, but acceptance is a new decision
+// and must observe the worktree again. This prevents a stale dirty=true bit
+// from surviving after the worker has cleaned its checkout.
+func validateCurrentHandoff(ctx context.Context, s *Service, d *Document, h *Handoff, t *Task) error {
+	if t.Role == "planner" {
+		return nil
+	}
+	w, err := findWorktree(d, t.WorktreeID)
+	if err != nil {
+		return err
+	}
+	if err := verifyWorktree(ctx, w); err != nil {
+		return err
+	}
+	head, err := git(ctx, w.Path, "rev-parse", "HEAD")
+	if err != nil {
+		return err
+	}
+	if head != h.HeadCommit {
+		return fail("revision_mismatch", "worktree HEAD changed since handoff submission")
+	}
+	dirty, err := git(ctx, w.Path, "status", "--porcelain")
+	if err != nil {
+		return err
+	}
+	if dirty != "" {
+		return fail("dirty_worktree", "implementation/integration/test result has uncommitted changes")
 	}
 	return nil
 }
@@ -398,6 +453,9 @@ func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept
 			out = *h
 			return nil
 		}
+		if retiredTask(*t) {
+			return fail("task_retired", "task %s is %s and cannot be reviewed", t.ID, t.State)
+		}
 		if h.State != "submitted" {
 			return fail("handoff_reviewed", "result is already %s", h.State)
 		}
@@ -408,10 +466,19 @@ func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept
 			if t.State == "accepted" {
 				return fail("task_accepted", "another handoff is already accepted")
 			}
+			if d.State.WorkflowSelected() {
+				if err := requireWorkflowRole(d, t.Role); err != nil {
+					return err
+				}
+			}
+			if err := validateCurrentHandoff(ctx, s, d, h, t); err != nil {
+				return err
+			}
 			if err := validateHandoff(d, h, t); err != nil {
 				return err
 			}
-			if t.Role == "tester" && (d.State.Integration == nil || h.HeadCommit != d.State.Integration.HeadCommit || d.State.LiveTest.Choice != "run") {
+			if t.Role == "tester" && workflowHasCapability(d, capLiveTest) &&
+				(d.State.Integration == nil || h.HeadCommit != d.State.Integration.HeadCommit || d.State.LiveTest.Choice != "run") {
 				return fail("test_revision_mismatch", "live test is not for the selected integrated revision")
 			}
 			if t.Role == "integrator" {

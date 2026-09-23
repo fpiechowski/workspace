@@ -32,6 +32,11 @@ func (s *Service) CreateAgent(ctx context.Context, selector string, opt AgentOpt
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if d.State.WorkflowSelected() {
+			if err := requireWorkflowRole(d, opt.Role); err != nil {
+				return err
+			}
+		}
 		id, err := d.previous(opt.OperationKey, opt)
 		if err != nil {
 			return err

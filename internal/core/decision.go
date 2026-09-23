@@ -14,6 +14,9 @@ func (s *Service) RefreshDecision(ctx context.Context, selector string, keys ...
 		if err := requireWorkflowOperation(d.State, "decision refresh"); err != nil {
 			return err
 		}
+		if err := requireWorkflowCapability(d, capLiveTest); err != nil {
+			return err
+		}
 		if d.State.Workflow == nil || d.State.Workflow.Phase != "live_test_offer" || d.State.Status != "active" {
 			return fail("workflow_gate", "refresh is available for an active live-test offer")
 		}

@@ -46,9 +46,11 @@ type Artifact struct {
 	CreatedAt     time.Time `yaml:"created_at" json:"created_at"`
 }
 type Check struct {
-	Command  string `yaml:"command" json:"command"`
-	ExitCode int    `yaml:"exit_code" json:"exit_code"`
-	Evidence string `yaml:"evidence" json:"evidence"` // Artifact name at submission, immutable ID thereafter.
+	Command      string `yaml:"command" json:"command"`
+	ExitCode     int    `yaml:"exit_code" json:"exit_code"`
+	ExpectedExit *int   `yaml:"expected_exit,omitempty" json:"expected_exit,omitempty"`
+	Outcome      string `yaml:"outcome,omitempty" json:"outcome,omitempty"`
+	Evidence     string `yaml:"evidence" json:"evidence"` // Artifact name at submission, immutable ID thereafter.
 }
 type Handoff struct {
 	ID          string    `yaml:"id" json:"id"`

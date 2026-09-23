@@ -430,7 +430,7 @@ func newRoot(o *options) *cobra.Command {
 		}
 		workflows := make([]map[string]any, 0)
 		for _, name := range core.WorkflowNames(s.Root, cfg) {
-			workflows = append(workflows, map[string]any{"id": name, "version": 1, "input": "issue URL with snapshot, or issue description"})
+			workflows = append(workflows, map[string]any{"id": name, "version": 1, "input": "issue URL with snapshot, or issue description", "capabilities": core.WorkflowCapabilitiesForList(name, cfg)})
 		}
 		return o.emit(workflows)
 	}))

@@ -27,6 +27,9 @@ func (s *Service) PrepareChangeRequest(ctx context.Context, selector string, opt
 		if err := requireWorkflowOperation(d.State, "change-request preparation"); err != nil {
 			return err
 		}
+		if err := requireWorkflowCapability(d, capChangeRequest); err != nil {
+			return err
+		}
 		previous, err := d.previous(opt.OperationKey, opt)
 		if err != nil {
 			return err
@@ -198,6 +201,9 @@ func (s *Service) PublishChangeRequest(ctx context.Context, selector, id string,
 		if err := requireWorkflowOperation(d.State, "change-request publication"); err != nil {
 			return err
 		}
+		if err := requireWorkflowCapability(d, capChangeRequest); err != nil {
+			return err
+		}
 		if err := validateIntegration(ctx, d); err != nil {
 			return err
 		}
@@ -287,7 +293,10 @@ func (s *Service) SyncChangeRequests(ctx context.Context, selector string, keys 
 		if err := rejectNewWorkspaceWork(d, "syncing change requests"); err != nil {
 			return err
 		}
-		return requireWorkflowOperation(d.State, "change-request sync")
+		if err := requireWorkflowOperation(d.State, "change-request sync"); err != nil {
+			return err
+		}
+		return requireWorkflowCapability(d, capChangeRequest)
 	}); err != nil {
 		return nil, err
 	}
@@ -350,6 +359,9 @@ func (s *Service) ResolveChangeRequest(ctx context.Context, selector, id, action
 			return err
 		}
 		if err := requireWorkflowOperation(d.State, "change-request resolution"); err != nil {
+			return err
+		}
+		if err := requireWorkflowCapability(d, capChangeRequest); err != nil {
 			return err
 		}
 		if (s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "") && !userConfirmed {

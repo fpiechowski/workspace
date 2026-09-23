@@ -51,6 +51,7 @@ type WorkflowConfig struct {
 	Profiles         map[string]string `yaml:"profiles" json:"profiles"`
 	MaxParallelTasks int               `yaml:"max_parallel_tasks" json:"max_parallel_tasks"`
 	ChangeRequests   string            `yaml:"change_requests" json:"change_requests"`
+	Capabilities     []string          `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
 }
 type Client struct {
 	Adapter        string         `yaml:"adapter" json:"adapter"`
@@ -152,10 +153,11 @@ func (w Workspace) PhaseLabel() string {
 }
 
 type Workflow struct {
-	ID             string `yaml:"id" json:"id"`
-	Version        int    `yaml:"version" json:"version"`
-	TemplateDigest string `yaml:"template_digest" json:"template_digest"`
-	Phase          string `yaml:"phase" json:"phase"`
+	ID             string   `yaml:"id" json:"id"`
+	Version        int      `yaml:"version" json:"version"`
+	TemplateDigest string   `yaml:"template_digest" json:"template_digest"`
+	Phase          string   `yaml:"phase" json:"phase"`
+	Capabilities   []string `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
 }
 type Input struct {
 	Source        string `yaml:"source,omitempty" json:"source,omitempty"`
