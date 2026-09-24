@@ -67,6 +67,80 @@ func TestTasksAndSessionsCollectionsShowLiveWork(t *testing.T) {
 	}
 }
 
+func TestWorktreeLineageShowsRevisionBasedTaskOrder(t *testing.T) {
+	m := workFixture()
+	m.snapshot.Status.Workspace.Base.Commit = "root-commit"
+	m.snapshot.Status.Worktrees = []core.Worktree{
+		{ID: "wt_plan", Name: "plan", BaseCommit: "root-commit", State: "ready"},
+		{ID: "wt_impl", Name: "implementation", BaseCommit: "plan-head", ParentWorktreeID: "wt_plan", State: "ready"},
+		{ID: "wt_test", Name: "tests", BaseCommit: "impl-head", ParentWorktreeID: "wt_impl", State: "ready"},
+	}
+	m.snapshot.Status.Sessions = append(m.snapshot.Status.Sessions,
+		core.Session{ID: "sess_plan", WorktreeID: "wt_plan"},
+		core.Session{ID: "sess_impl", WorktreeID: "wt_impl"},
+	)
+	m.snapshot.Handoffs = []core.Handoff{
+		{FromSession: "sess_plan", HeadCommit: "plan-head"},
+		{FromSession: "sess_impl", HeadCommit: "impl-head"},
+	}
+	m.width, m.height = 120, 32
+	m.navigate(route{Page: "worktrees"})
+	graph := m.View()
+	for _, want := range []string{"Revision graph", "plan", "implementation", "tests"} {
+		if !strings.Contains(graph, want) {
+			t.Fatalf("lineage graph missing %q:\n%s", want, graph)
+		}
+	}
+	ordered := m.filteredItems()
+	if ordered[1].TreePrefix != "   └─ " || ordered[2].TreePrefix != "      └─ " {
+		t.Fatalf("lost graph depth: %+v", ordered)
+	}
+	if got := m.worktreeLineage("wt_test"); !strings.Contains(got, "implementation") {
+		t.Fatalf("child worktree lineage did not identify its parent: %s", got)
+	}
+	m.route.Query = "tests"
+	items := m.filteredItems()
+	if len(items) != 1 || items[0].TreePrefix != "└─ " {
+		t.Fatalf("filtered parent fabricated: %+v", items)
+	}
+	m.route.Query = ""
+	m.snapshot.Status.Worktrees[0].ParentWorktreeID = "wt_test"
+	if len(m.filteredItems()) != 3 {
+		t.Fatal("cycle hid worktrees")
+	}
+}
+
+func TestWorktreeGraphCompactSelectionAndUnknownSources(t *testing.T) {
+	m := workFixture()
+	m.snapshot.Status.Worktrees = []core.Worktree{
+		{ID: "wt_a", Name: "ancestor", BaseCommit: "a"},
+		{ID: "wt_b", Name: "child", BaseCommit: "b", ParentWorktreeID: "wt_a"},
+		{ID: "wt_c", Name: "grandchild", BaseCommit: "c", ParentWorktreeID: "wt_b"},
+		{ID: "wt_d", Name: "orphan", BaseCommit: "d", ParentWorktreeID: "missing"},
+	}
+	m.snapshot.Status.Workspace.Tasks[0].WorktreeID = "wt_c"
+	m.width, m.height = 40, 12
+	m.navigate(route{Page: "worktrees", SelectedID: "wt_c"})
+	if view := m.View(); !strings.Contains(view, "grandchild") || !strings.Contains(view, "└─") {
+		t.Fatal(view)
+	}
+	if text := m.worktreeLineage("wt_a"); !strings.Contains(text, "source unknown") {
+		t.Fatal(text)
+	}
+	if text := m.worktreeLineage("wt_d"); !strings.Contains(text, "missing") {
+		t.Fatal(text)
+	}
+	if text := m.worktreeTasks("wt_c"); !strings.Contains(text, "Persist payment receipts") {
+		t.Fatal(text)
+	}
+	m.route.Query = "grandchild"
+	_, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
+	_ = cmd
+	if m.route.Page != "worktree" || m.route.EntityID != "wt_c" {
+		t.Fatal(m.route)
+	}
+}
+
 func TestFilterEscapeRestoresSelectionAndOwnsRetryKey(t *testing.T) {
 	for _, managed := range []bool{false, true} {
 		m := workFixture()

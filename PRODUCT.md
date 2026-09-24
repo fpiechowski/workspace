@@ -214,6 +214,13 @@ guarded action to create a Workspace from that exact snapshot. Dispatcher start,
 stop, and attach actions are project-scoped; Dispatcher text is treated as untrusted
 input and cannot expand project mutation authority.
 
+Worktrees appear as a revision tree, with source revisions and related task names.
+Creation records the parent when the selected local branch identifies a registered
+worktree, or an explicit revision matches exactly one worktree tip outside the frozen
+workspace base. Later branch changes do not rewrite this relationship. Older records
+and ambiguous sources show their base revision without inventing task dependencies;
+revision ancestry is separate from a task's declared `depends_on` ordering.
+
 The TUI can run manually as a browser or, after an explicit user action, as a managed
 pane next to the orchestrator. The supervisor does not start, restore, or stop the TUI;
 `workspace tui show` and `workspace tui hide` own that lifecycle, while `q` in the pane

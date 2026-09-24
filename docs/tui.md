@@ -89,6 +89,16 @@ line, and the selection covers the title and description on a shared background;
 color, the selection marker and separator remain. The shortcut bar always reserves the
 last row.
 
+Worktrees use a selectable revision tree. Indentation connects recorded parent and
+child worktrees; the second row names the source, base commit, and related tasks
+(including historical session associations). Sorting orders siblings, and filtering
+keeps matching rows with their source labels even when the parent is hidden. Arrow
+navigation scrolls the tree in both wide and compact layouts; `Enter` opens full base
+revision and source details. Removed worktrees remain visible as provenance. Unknown
+sources and missing parent records are labeled explicitly. The tree describes creation
+lineage, not task `depends_on` edges or subsequent merges. Legacy records without a
+stored parent are not linked based on coincident handoff revisions.
+
 `a` in the project picker provides workspace creation (title, description, and explicit
 mode choice: named workflow, `Choose later`, or `No workflow (manual orchestration)`) as
 well as permanent deletion of the selected workspace. Deletion is available only after

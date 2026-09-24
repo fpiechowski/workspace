@@ -138,6 +138,15 @@ have no start, stop, or reconcile side effects.
 | Check | Receipt for an actually executed verification command. |
 | Change request | Locally prepared or published PR/MR associated with a code revision. |
 
+Worktree creation persists `base_commit`, the optional requested `base_ref`, and
+`parent_worktree_id` before invoking Git. The parent is a registered worktree selected
+by an exact local branch ref; otherwise an explicit revision may match one unique
+registered branch tip, excluding the shared frozen workspace base. Ambiguous or
+unavailable sources leave the parent empty. These additive fields require no migration:
+older records retain their base commit and unknown parent. Snapshot refresh never
+consults moving Git refs to reconstruct historical edges. The TUI uses persisted edges
+for revision lineage, independently of task dependency declarations and handoff state.
+
 A Project contains multiple workspaces. A Workspace contains tasks, worktrees, and
 agents. An Agent may have multiple logical Sessions, and each Session may have multiple
 successive Runs. A worker Session records the exact parent Session that delegated it;

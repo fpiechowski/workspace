@@ -114,6 +114,12 @@ current Run. The list excludes deleted sessions, supports the current/history fi
 (`f`), and has no secondary tabs or its own `Tab` cycle. Opening an entry shows the
 session details, and `t` opens or resumes its verified terminal.
 
+**Worktrees.** Selectable tree rows show stored revision lineage using `├─`, `└─`, and
+continuation columns before the name. Metadata includes the source revision and related
+tasks. Sibling sorting, filtering, selection, scrolling, and the wide preview reuse the
+collection controls; compact mode shows the same tree. Missing provenance is explicit,
+and filtering a parent never reparents its children to another visible worktree.
+
 **Board.** Tasks have two views: the default **List** and **Board**, toggled with `b`
 (the footer shows `b board`/`b list`). Board has one column per task state in the fixed
 order pending, running, blocked, needs_changes, awaiting_review, accepted, with unknown

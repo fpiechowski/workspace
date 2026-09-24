@@ -78,6 +78,11 @@ func (m *Model) detailContent() string {
 		doc.field("Path", worktree.Path)
 		doc.field("Branch", worktree.Branch)
 		doc.field("Purpose", worktree.Purpose)
+		doc.field("Base revision", worktree.BaseCommit)
+		if worktree.BaseRef != "" {
+			doc.field("Requested base", worktree.BaseRef)
+		}
+		doc.field("Tasks", strings.TrimPrefix(m.worktreeTasks(id), " · Tasks: "))
 		if observation, exists := m.worktreeInspection[id]; exists {
 			doc.section("Git observation")
 			doc.field("Checked", formatTime(observation.CheckedAt))
@@ -100,6 +105,9 @@ func (m *Model) detailContent() string {
 			doc.field("Task IDs", strings.Join(relation.TaskIDs, ", "))
 			doc.field("Session IDs", strings.Join(relation.SessionIDs, ", "))
 			doc.field("Service IDs", strings.Join(relation.ServiceIDs, ", "))
+		}
+		if lineage := m.worktreeLineage(id); lineage != "" {
+			doc.field("Revision lineage", lineage)
 		}
 		var writers, readers, services []string
 		for _, session := range m.snapshot.Status.Sessions {
@@ -658,7 +666,7 @@ func (m *Model) quickDetails(kind, id string) []string {
 	case "worktree":
 		worktree, ok := findWorktree(m.snapshot.Status.Worktrees, id)
 		if ok {
-			return []string{"Path: " + worktree.Path, "Branch: " + worktree.Branch}
+			return []string{"Path: " + worktree.Path, "Branch: " + worktree.Branch, "Base revision: " + worktree.BaseCommit}
 		}
 	case "session":
 		session, ok := findSession(m.snapshot.Status.Sessions, id)

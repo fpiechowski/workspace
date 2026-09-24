@@ -183,13 +183,15 @@ type Agent struct {
 	Scope          string `json:"scope,omitempty" yaml:"scope,omitempty"`
 }
 type Worktree struct {
-	ID         string `json:"id" yaml:"id"`
-	Name       string `json:"name" yaml:"name"`
-	Path       string `json:"path" yaml:"path"`
-	Branch     string `json:"branch" yaml:"branch"`
-	BaseCommit string `json:"base_commit" yaml:"base_commit"`
-	Purpose    string `json:"purpose" yaml:"purpose"`
-	State      string `json:"state" yaml:"state"`
+	ID               string `json:"id" yaml:"id"`
+	Name             string `json:"name" yaml:"name"`
+	Path             string `json:"path" yaml:"path"`
+	Branch           string `json:"branch" yaml:"branch"`
+	BaseCommit       string `json:"base_commit" yaml:"base_commit"`
+	BaseRef          string `json:"base_ref,omitempty" yaml:"base_ref,omitempty"`
+	ParentWorktreeID string `json:"parent_worktree_id,omitempty" yaml:"parent_worktree_id,omitempty"`
+	Purpose          string `json:"purpose" yaml:"purpose"`
+	State            string `json:"state" yaml:"state"`
 }
 type Session struct {
 	ID              string     `json:"id" yaml:"id"`

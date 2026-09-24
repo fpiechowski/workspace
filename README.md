@@ -417,6 +417,13 @@ The picker and workspace screens include a read-only supervisor health indicator
 workspace screen it also summarizes effective auxiliary-service health; `--no-color`
 keeps the dot markers and explicit state/count text.
 
+Worktrees shows a selectable revision tree with parent worktrees, base commits, and
+related tasks. To record an explicit parent, create the next worktree with
+`workspace worktree create next --base workspace/ws_ID/previous`. Creation also records
+a parent for an explicit revision matching one unique worktree tip outside the workspace
+base. Shared or unknown revisions remain unlinked. The relationship stays fixed after
+branches advance; older records without parent metadata show only their known base.
+
 In manually started TUI, `q` exits the program. In a managed pane, `q`, and also
 `Ctrl+C` outside a form, first records a durable hide request, restores the terminal,
 and only then exits; if the write fails, the pane remains open and the same operation

@@ -61,6 +61,16 @@ func (m *Model) taskItem(task core.Task) collectionItem {
 		Subtitle: fmt.Sprintf("%s · attempt %d", execution, task.Attempt), At: at}
 }
 
+func shortRevision(commit string) string {
+	if commit == "" {
+		return "unknown"
+	}
+	if len(commit) > 10 {
+		return commit[:10]
+	}
+	return commit
+}
+
 func workPriority(state string) int {
 	switch state {
 	case "running", "starting", "active":

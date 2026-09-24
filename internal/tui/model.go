@@ -41,6 +41,7 @@ type routeMemory struct {
 }
 
 type collectionItem struct {
+	TreePrefix                       string
 	ID, Kind, Title, Subtitle, State string
 	At                               time.Time
 }

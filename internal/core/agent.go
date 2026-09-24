@@ -263,7 +263,8 @@ func (s *Service) CreateWorktree(ctx context.Context, selector string, opt Workt
 		} else if !os.IsNotExist(err) {
 			return err
 		}
-		out = Worktree{ID("wt"), opt.Name, path, "workspace/" + d.State.ID + "/" + opt.Name, base, opt.Purpose, "creating"}
+		out = Worktree{ID: ID("wt"), Name: opt.Name, Path: path, Branch: "workspace/" + d.State.ID + "/" + opt.Name, BaseCommit: base, Purpose: opt.Purpose, State: "creating", BaseRef: opt.Base,
+			ParentWorktreeID: s.worktreeParent(ctx, d, opt.Base, base)}
 		d.Registry.Worktrees = append(d.Registry.Worktrees, out)
 		d.remember(opt.OperationKey, opt, out.ID)
 		// Reserve identity before invoking Git. A crash leaves a visible pending worktree.

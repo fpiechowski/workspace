@@ -80,7 +80,7 @@ func (m *Model) allItems() []collectionItem {
 					continue
 				}
 			}
-			items = append(items, collectionItem{ID: worktree.ID, Kind: "worktree", Title: worktree.Name, Subtitle: worktree.Branch + " · " + worktree.Purpose, State: worktree.State})
+			items = append(items, collectionItem{ID: worktree.ID, Kind: "worktree", Title: worktree.Name, Subtitle: m.worktreeLineage(worktree.ID) + m.worktreeTasks(worktree.ID) + " · " + worktree.Branch + " · " + worktree.Purpose, State: worktree.State})
 		}
 	case "results":
 		tab := m.route.Tab
@@ -240,6 +240,9 @@ func (m *Model) filteredItems() []collectionItem {
 		out = append(out, item)
 	}
 	m.sortItems(out)
+	if m.route.Page == "worktrees" {
+		out = m.orderWorktreeGraph(out)
+	}
 	return out
 }
 

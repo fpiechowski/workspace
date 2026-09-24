@@ -401,6 +401,9 @@ func (m *Model) collectionView(mode layoutMode) []string {
 		return []string{"Loading workspace data…"}
 	}
 	count := fmt.Sprintf("%s · %d / %d · sort: %s", m.collectionTitle(), len(items), len(m.allItems()), firstNonempty(m.route.Sort, "priority"))
+	if m.route.Page == "worktrees" {
+		count = "Revision graph · " + count
+	}
 	if m.route.Query != "" {
 		count += " · filter: " + sanitizeLine(m.route.Query)
 	}
@@ -485,8 +488,14 @@ func (m *Model) collectionRow(item collectionItem, width int, selected bool, row
 		badge = m.stateLabel(item.State)
 		badgeWidth = ansi.StringWidth(badge)
 	}
-	title := rowText(item.Title, max(1, width-2-badgeWidth-2))
-	head := ansi.TruncateWc(marker+badge+"  "+title, width, "…")
+	// Keep connectors aligned regardless of state badge width. Deep trees keep
+	// space for the selected name even in a compact terminal.
+	prefix := item.TreePrefix
+	if runes, limit := []rune(prefix), max(1, width/3); len(runes) > limit {
+		prefix = "…" + string(runes[len(runes)-limit+1:])
+	}
+	title := rowText(item.Title, max(1, width-2-badgeWidth-2-ansi.StringWidth(prefix)))
+	head := ansi.TruncateWc(marker+prefix+badge+"  "+title, width, "…")
 	if selected {
 		head = m.palette.selectedStyle(width).Render(head)
 	} else {
