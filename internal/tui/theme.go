@@ -25,6 +25,9 @@ type palette struct {
 	danger  lipgloss.Color
 	// Informational surface used by notices and callouts.
 	infoSurface lipgloss.Color
+	canvas      lipgloss.Color
+	panel       lipgloss.Color
+	element     lipgloss.Color
 }
 
 // detectDarkBackground reports whether the attached terminal uses a dark
@@ -36,35 +39,41 @@ var detectDarkBackground = lipgloss.HasDarkBackground
 
 func darkPalette() palette {
 	return palette{
-		primary:       lipgloss.Color("#E2E8F0"),
-		secondary:     lipgloss.Color("#B4C0D3"),
-		subtle:        lipgloss.Color("#7C8CA3"),
-		border:        lipgloss.Color("#475569"),
-		focusedBorder: lipgloss.Color("#67E8F9"),
-		accent:        lipgloss.Color("#67E8F9"),
+		primary:       lipgloss.Color("#EEEEEE"),
+		secondary:     lipgloss.Color("#C4C4C4"),
+		subtle:        lipgloss.Color("#A0A0A0"),
+		border:        lipgloss.Color("#414141"),
+		focusedBorder: lipgloss.Color("#FAB283"),
+		accent:        lipgloss.Color("#FAB283"),
 		selectionFg:   lipgloss.Color("#F8FAFC"),
-		selectionBg:   lipgloss.Color("#1E293B"),
+		selectionBg:   lipgloss.Color("#39312C"),
 		success:       lipgloss.Color("#86EFAC"),
 		warning:       lipgloss.Color("#FDE68A"),
 		danger:        lipgloss.Color("#FDA4AF"),
-		infoSurface:   lipgloss.Color("#164E63"),
+		infoSurface:   lipgloss.Color("#292929"),
+		canvas:        lipgloss.Color("#141414"),
+		panel:         lipgloss.Color("#1E1E1E"),
+		element:       lipgloss.Color("#292929"),
 	}
 }
 
 func lightPalette() palette {
 	return palette{
-		primary:       lipgloss.Color("#0F172A"),
-		secondary:     lipgloss.Color("#334155"),
-		subtle:        lipgloss.Color("#64748B"),
-		border:        lipgloss.Color("#CBD5E1"),
-		focusedBorder: lipgloss.Color("#0E7490"),
-		accent:        lipgloss.Color("#0E7490"),
-		selectionFg:   lipgloss.Color("#0F172A"),
-		selectionBg:   lipgloss.Color("#E0F2FE"),
+		primary:       lipgloss.Color("#242424"),
+		secondary:     lipgloss.Color("#4B4B4B"),
+		subtle:        lipgloss.Color("#626262"),
+		border:        lipgloss.Color("#C9C7C4"),
+		focusedBorder: lipgloss.Color("#9B461C"),
+		accent:        lipgloss.Color("#9B461C"),
+		selectionFg:   lipgloss.Color("#242424"),
+		selectionBg:   lipgloss.Color("#F4DDCB"),
 		success:       lipgloss.Color("#166534"),
 		warning:       lipgloss.Color("#92400E"),
 		danger:        lipgloss.Color("#BE123C"),
-		infoSurface:   lipgloss.Color("#E0F2FE"),
+		infoSurface:   lipgloss.Color("#EAE8E4"),
+		canvas:        lipgloss.Color("#FAF9F6"),
+		panel:         lipgloss.Color("#F0EFEB"),
+		element:       lipgloss.Color("#EAE8E4"),
 	}
 }
 
@@ -169,6 +178,7 @@ func (p palette) dialogStyle(severity dialogSeverity) lipgloss.Style {
 	if p.noColor {
 		return style
 	}
+	style = style.Foreground(p.primary).Background(p.panel)
 	switch severity {
 	case severityDanger:
 		return style.BorderForeground(p.danger)
@@ -191,12 +201,33 @@ func (p palette) selectedStyle(width int) lipgloss.Style {
 
 // panelStyle renders a bordered panel; the focused panel uses the accent border.
 func (p palette) panelStyle(focused bool) lipgloss.Style {
-	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder())
+	style := lipgloss.NewStyle().Border(lipgloss.NormalBorder())
 	if p.noColor {
 		return style
 	}
+	// Use a square, low-contrast boundary: the panel is a surface, while the
+	// active panel gets a warmer edge so focus is discoverable at a glance.
 	if focused {
-		return style.BorderForeground(p.focusedBorder)
+		return style.BorderForeground(p.focusedBorder).Foreground(p.primary).Background(p.panel)
 	}
-	return style.BorderForeground(p.border)
+	return style.BorderForeground(p.border).Foreground(p.primary).Background(p.panel)
+}
+
+func (p palette) surfaceStyle(background lipgloss.Color) lipgloss.Style {
+	style := p.valueStyle()
+	if !p.noColor {
+		style = style.Background(background)
+	}
+	return style
+}
+
+func (p palette) tabStyle(active bool) lipgloss.Style {
+	style := p.metaStyle()
+	if active {
+		style = p.headingStyle().Underline(true)
+		if !p.noColor {
+			style = style.Background(p.element)
+		}
+	}
+	return style
 }

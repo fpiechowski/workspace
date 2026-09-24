@@ -48,7 +48,8 @@ func (m *Model) View() string {
 	if len(rows) > m.height {
 		rows = rows[:m.height]
 	}
-	return fitFrame(strings.Join(rows, "\n"), m.width, m.height)
+	frame := fitFrame(strings.Join(rows, "\n"), m.width, m.height)
+	return m.palette.surfaceStyle(m.palette.canvas).Render(frame)
 }
 
 func (m *Model) header() string {
@@ -65,7 +66,9 @@ func (m *Model) header() string {
 	healthWidth := ansi.StringWidth(health)
 	identityWidth := max(1, m.width-healthWidth-1)
 	identity = ansi.TruncateWc(sanitizeLine(identity), identityWidth, "…")
-	return m.palette.titleStyle().Render(identity) + " " + health
+	gap := max(1, m.width-ansi.StringWidth(identity)-healthWidth)
+	return m.palette.surfaceStyle(m.palette.panel).Width(m.width).
+		Render(m.palette.titleStyle().Render(identity) + strings.Repeat(" ", gap) + health)
 }
 
 // headerIdentityText returns the full identity/status text and the stable name
@@ -123,12 +126,12 @@ func (m *Model) tabs() string {
 		for _, label := range labels {
 			name := label.key + " " + label.name
 			if m.route.Page == label.page {
-				out = append(out, m.palette.headingStyle().Render("["+name+"]"))
+				out = append(out, m.palette.tabStyle(true).Render(" "+name+" "))
 			} else {
-				out = append(out, name)
+				out = append(out, m.palette.tabStyle(false).Render(" "+name+" "))
 			}
 		}
-		return strings.Join(out, "   ") + "  / filter  f status"
+		return strings.Join(out, " ")
 	}
 	labels := []struct{ key, page, name string }{
 		{"1", "tasks", "Tasks"}, {"2", "sessions", "Sessions"}, {"3", "worktrees", "Worktrees"}, {"4", "results", "Results"}, {"5", "more", "More"},
@@ -143,9 +146,9 @@ func (m *Model) tabs() string {
 			name = label.key + " " + name
 		}
 		if m.route.Page == label.page {
-			out = append(out, m.palette.headingStyle().Render("["+name+"]"))
+			out = append(out, m.palette.tabStyle(true).Render(" "+name+" "))
 		} else {
-			out = append(out, name)
+			out = append(out, m.palette.tabStyle(false).Render(name))
 		}
 	}
 	if compact {
@@ -357,8 +360,12 @@ func (m *Model) projectView(mode layoutMode) []string {
 		return appendFilterLine(filterLine, []string{"No workspaces in this project", "No workspace has been created here yet.", "Press a to create a workspace."})
 	}
 	if mode == layoutWide {
-		leftWidth := max(32, m.width*2/5)
-		left := m.renderItems(items, leftWidth, m.height-5)
+		leftWidth, rightWidth := m.panelWidths(2, 34)
+		available := m.contentHeight()
+		if filterLine != "" {
+			available--
+		}
+		left := m.renderItems(items, leftWidth-2, available-3)
 		right := []string{"Full ID: " + m.route.SelectedID}
 		for _, workspace := range m.project.Workspaces {
 			if workspace.ID == m.route.SelectedID {
@@ -372,7 +379,7 @@ func (m *Model) projectView(mode layoutMode) []string {
 				break
 			}
 		}
-		return appendFilterLine(filterLine, []string{lipgloss.JoinHorizontal(lipgloss.Top, strings.Join(left, "\n"), "  ", strings.Join(truncateLines(right, m.width-leftWidth-4), "\n"))})
+		return appendFilterLine(filterLine, m.twoPanels("Workspaces", left, "Workspace details", truncateLines(right, rightWidth-2), leftWidth, rightWidth, available, true))
 	}
 	return appendFilterLine(filterLine, m.renderItems(items, m.width-2, m.height-5))
 }
@@ -418,7 +425,7 @@ func (m *Model) collectionView(mode layoutMode) []string {
 	available := max(3, m.contentHeight()-1)
 	if mode == layoutWide {
 		leftWidth, rightWidth := m.panelWidths(2, 34)
-		left := m.renderItems(items, max(1, leftWidth-2), available-2)
+		left := m.renderItems(items, max(1, leftWidth-2), available-3)
 		right := truncateLines(m.itemSummary(items, max(1, rightWidth-2)), max(1, rightWidth-2))
 		return append([]string{count}, m.twoPanels(collectionHeading(m.route.Page), left, "Preview", right, leftWidth, rightWidth, available, true)...)
 	}
@@ -482,6 +489,8 @@ func (m *Model) collectionRow(item collectionItem, width int, selected bool, row
 	head := ansi.TruncateWc(marker+badge+"  "+title, width, "…")
 	if selected {
 		head = m.palette.selectedStyle(width).Render(head)
+	} else {
+		head = m.palette.valueStyle().Render(head)
 	}
 	rows := []string{head}
 	if rowHeight > 1 {
@@ -496,7 +505,7 @@ func (m *Model) collectionRow(item collectionItem, width int, selected bool, row
 	return rows
 }
 
-// rowSeparator is a lower-emphasis divider between entries.
+// rowSeparator keeps long collections scannable while staying lower-emphasis.
 func (m *Model) rowSeparator(width int) string {
 	return m.palette.subtleStyle().Render(strings.Repeat("─", max(1, width)))
 }
@@ -581,7 +590,11 @@ func (m *Model) panelBlock(title string, lines []string, width, height int, focu
 	}
 	inside := max(1, width-2)
 	body := make([]string, 0, height-2)
-	body = append(body, m.palette.headingStyle().Render(ansi.TruncateWc(sanitizeLine(title), inside, "…")))
+	heading := m.palette.sectionStyle()
+	if focused {
+		heading = m.palette.headingStyle()
+	}
+	body = append(body, heading.Render(ansi.TruncateWc(sanitizeLine(title), inside, "…")))
 	for _, line := range lines {
 		if len(body) >= height-2 {
 			break

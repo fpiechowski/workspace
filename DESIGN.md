@@ -27,17 +27,22 @@ fills the entire selected entry, including its description.
 
 | Token | Dark | Light | Role |
 |---|---|---|---|
-| `primary` | `#E2E8F0` | `#0F172A` | Primary text |
-| `secondary` | `#B4C0D3` | `#334155` | Subtitles and labels |
-| `subtle` | `#7C8CA3` | `#64748B` | Subtle metadata and IDs |
-| `border` | `#475569` | `#CBD5E1` | Unfocused border |
-| `focusedBorder` | `#67E8F9` | `#0E7490` | Active-panel border |
-| `accent` | `#67E8F9` | `#0E7490` | Headings, focus, active work |
-| `selectionFg` / `selectionBg` | `#F8FAFC` / `#1E293B` | `#0F172A` / `#E0F2FE` | Selection text and background |
+| `primary` | `#EEEEEE` | `#242424` | Primary text |
+| `secondary` | `#C4C4C4` | `#4B4B4B` | Subtitles and labels |
+| `subtle` | `#A0A0A0` | `#626262` | Subtle metadata and IDs |
+| `border` | `#414141` | `#C9C7C4` | Unfocused boundary |
+| `focusedBorder` | `#FAB283` | `#9B461C` | Active panel and focus |
+| `accent` | `#FAB283` | `#9B461C` | Headings, focus, active work |
+| `selectionFg` / `selectionBg` | `#F8FAFC` / `#39312C` | `#242424` / `#F4DDCB` | Selection text and background |
 | `success` | `#86EFAC` | `#166534` | Accepted, completed, ready |
 | `warning` | `#FDE68A` | `#92400E` | Blocks, review, and interruption |
 | `danger` | `#FDA4AF` | `#BE123C` | Failed, error |
-| `infoSurface` | `#164E63` | `#E0F2FE` | Information-message background |
+| `infoSurface` | `#292929` | `#EAE8E4` | Information-message background |
+
+The shell also uses a near-black `canvas` (`#141414`) and a slightly lifted `panel`
+surface (`#1E1E1E`) in dark mode, with warm off-white equivalents in light mode. This
+keeps the terminal background calm while giving the active collection and preview a
+clear visual plane, in the spirit of OpenCode's surface hierarchy.
 
 `--no-color` removes colors while preserving text, symbols, bold styling, and animation.
 Status must remain recognizable without color.
@@ -91,8 +96,10 @@ terminal borders. Focus is distinguished by color and bold styling, without shad
 
 ## Shapes
 
-The panel renderer uses rounded Lip Gloss character borders. Active tabs receive `[ ]`,
-and the selected entry receives the `›` marker.
+Panels use restrained, square terminal boundaries and surface contrast instead of a
+rounded box around every element. Active tabs use a filled surface and underline; the
+selected entry receives the `›` marker and a full-width background. Collections retain a
+subtle horizontal rule between entries so dense operational lists stay scannable.
 
 ## Components
 
