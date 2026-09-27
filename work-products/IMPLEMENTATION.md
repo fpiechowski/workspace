@@ -40,4 +40,4 @@ byte-preserving core path. Cancellation and EOF leave an uninitialized project.
 The full CLI package contains two pre-existing environment-sensitive workspace
 tests that fail independently of this change. The focused wizard/core checks pass.
 
-Commit: `pending final revision commit`
+Commit: `pending documentation commit`
