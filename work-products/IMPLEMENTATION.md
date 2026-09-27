@@ -78,4 +78,5 @@ independently of this change.
 - `docs/clients.md` was intentionally not modified; if reviewers expect a note there,
   it would be a separate adapter-guidance change not caused by this task.
 
-Commit: `37c15a2` (`docs: align project init wizard documentation and help`)
+Commit: `37c15a2` (`docs: align project init wizard documentation and help`) with the
+evidence report in `60529b6` (`docs: record init documentation evidence report`).
