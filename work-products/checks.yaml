@@ -1,9 +1,15 @@
-- command: "gofmt -l internal/cli/cli.go internal/cli/project_init.go internal/cli/project_init_test.go"
+- command: "gofmt -l internal/cli/help.go"
   exit_code: 0
-  evidence: "wizard-gofmt.log"
-- command: "env -u WORKSPACE_SESSION_ID go test ./internal/cli ./internal/core -run 'TestProjectInitWizard|TestValidateConfig|TestInitFreshProject' -count=1"
+  evidence: "check_01M3JB5SF011BE1APN99XPFZN7.log"
+- command: "env -u WORKSPACE_DIR -u WORKSPACE_TASK_ID -u WORKSPACE_PARENT_AGENT_ID -u WORKSPACE_WORKTREE_ID -u WORKSPACE_ROLE -u WORKSPACE_ORCHESTRATOR_ID -u WORKSPACE_REASONING_EFFORT -u WORKSPACE_PARENT_SESSION_ID -u WORKSPACE_AGENT_ID -u WORKSPACE_SCOPE -u WORKSPACE_RUN_ID -u WORKSPACE_ID -u WORKSPACE_PROJECT_DIR -u WORKSPACE_PROJECT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_TMUX_SOCKET go test ./..."
   exit_code: 0
-  evidence: "wizard-tests.log"
-- command: "go vet ./internal/cli"
+  evidence: "check_01M3JB5ZN3D316BRDTXZG6HQR1.log"
+- command: "env -u WORKSPACE_DIR -u WORKSPACE_TASK_ID -u WORKSPACE_PARENT_AGENT_ID -u WORKSPACE_WORKTREE_ID -u WORKSPACE_ROLE -u WORKSPACE_ORCHESTRATOR_ID -u WORKSPACE_REASONING_EFFORT -u WORKSPACE_PARENT_SESSION_ID -u WORKSPACE_AGENT_ID -u WORKSPACE_SCOPE -u WORKSPACE_RUN_ID -u WORKSPACE_ID -u WORKSPACE_PROJECT_DIR -u WORKSPACE_PROJECT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_TMUX_SOCKET go vet ./..."
   exit_code: 0
-  evidence: "wizard-vet.log"
+  evidence: "check_01M3JBA4NVN8F0FBMV2H6HQXH3.log"
+- command: "env CGO_ENABLED=0 go build -trimpath -o /tmp/opencode/workspace-impl-docs2-29f65ae ./cmd/workspace"
+  exit_code: 0
+  evidence: "check_01M3JBAER618HM86GAE4E8DNNK.log"
+- command: "python3 scripts/check-install.py /tmp/opencode/workspace-impl-docs2-29f65ae"
+  exit_code: 0
+  evidence: "check_01M3JBAR2XE8Q8P9KVCZMGG3HN.log"
