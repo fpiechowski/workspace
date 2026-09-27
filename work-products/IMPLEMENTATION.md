@@ -31,13 +31,13 @@ byte-preserving core path. Cancellation and EOF leave an uninitialized project.
 
 | Command | Exit | Evidence |
 | --- | ---: | --- |
-| `gofmt -l internal/cli/cli.go internal/cli/project_init.go internal/cli/project_init_test.go` | 0 | `check_01M3J9Z4CFC70MHXACA20HDFAV` |
-| `env -u WORKSPACE_SESSION_ID go test ./internal/cli ./internal/core -run 'TestProjectInitWizard|TestValidateConfig|TestInitFreshProject' -count=1` | 0 | `check_01M3J9ZAC995X62NH22JW3K02N` |
-| `go vet ./internal/cli` | 0 | `check_01M3J9ZXF3SJKHDG96GPNWAH58` |
+| `gofmt -l internal/cli/cli.go internal/cli/project_init.go internal/cli/project_init_test.go` | 0 | Final handoff check receipt |
+| `env -u WORKSPACE_SESSION_ID go test ./internal/cli ./internal/core -run 'TestProjectInit|TestValidateConfig|TestInitFreshProject' -count=1` | 0 | Final handoff check receipt |
+| `go vet ./internal/cli` | 0 | Final handoff check receipt |
 
 ## Risks
 
 The full CLI package contains two pre-existing environment-sensitive workspace
 tests that fail independently of this change. The focused wizard/core checks pass.
 
-Commit: `pending documentation commit`
+Commit: `9a05615b184c0e18e0e3ed6f752a299468c051cc`
