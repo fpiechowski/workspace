@@ -77,8 +77,8 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace project init",
 	),
 	"workspace project init": h(
-		"Initialize workspace metadata, default configuration and workflow templates in the current Git project. Existing configuration is preserved.",
-		"workspace project init --project ./repo",
+		"Initialize workspace metadata, default configuration and workflow templates in the current Git project. On a fresh project with an interactive terminal on both stdin and stdout, a setup wizard asks to start, lists detected built-in client adapters, collects an account-specific orchestrator route and optional README role profiles, workflow mappings and forge, then writes the configuration only after the final confirmation; cancellation or EOF writes nothing. Scripted or non-terminal runs (--json, --short, --non-interactive, --operation-key, or redirected streams) never prompt and write the minimal generated configuration. Existing configuration is preserved byte-for-byte and is never overwritten. Generated launch and resume argv contain no approval-bypass flags.",
+		"workspace project init\nworkspace project init --json --non-interactive --project ./repo",
 	),
 	"workspace skill": h(
 		"Install the bundled workspace skill where the selected client can discover it.",

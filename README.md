@@ -169,7 +169,40 @@ workspace skill install --client codex
 
 The skill is installed in `.agents/skills/workspace` for Codex/OpenCode or
 `.claude/skills/workspace` for Claude. An existing modified skill is not overwritten.
-`init` preserves configuration and installs editable templates in `.workspace/templates`.
+
+### Project initialization
+
+`workspace project init` installs editable templates in `.workspace/templates` and
+writes `.workspace/config.yaml`. On a fresh project that has no configuration yet and
+an interactive terminal on both stdin and stdout, it runs a setup wizard:
+
+- It names the target Git root and asks to start. `n`, `q`, `cancel`, EOF, or `Ctrl-C`
+  cancels without writing anything.
+- It reports which built-in `codex`, `claude`, and `opencode` executables are detected
+  on `PATH`, then asks which client adapters to configure.
+- It asks for the default orchestrator client, an account-specific provider and model,
+  an optional reasoning effort (suggested `high`; `none` omits it), and a positive
+  concurrency (suggested `3`).
+- It optionally proposes the README `thinker`, `worker`, and `supervisor` profiles with
+  their `plan-first` and `issue-resolution` workflow mappings, and an optional GitHub
+  forge. When roles are declined, workflows are omitted and must be configured before a
+  workflow that references unmapped roles can start.
+- It prints a summary and asks `Write configuration? [y/N]`; only an explicit `y`
+  validates the whole candidate with the same rules as a persisted config and writes it
+  once under the project lock.
+
+Provider and model identifiers must be account-specific values; the wizard rejects the
+README `YOUR_PROVIDER`/`YOUR_*_MODEL` examples instead of persisting them. Generated
+launch and resume argv use the built-in adapter defaults and contain **no**
+approval-bypass flags.
+
+Non-interactive and scripted runs never prompt. `--json`, `--short`,
+`--non-interactive`, an `--operation-key`, or a redirected/non-terminal stream selects
+script mode, which writes the minimal generated configuration and emits the normal
+YAML/JSON envelope without blocking. Re-running `init` on a project that already has a
+valid `.workspace/config.yaml` skips the wizard and preserves that configuration
+byte-for-byte, including comments, while restoring missing templates and Git exclude
+rules. An invalid existing configuration remains an error and is never overwritten.
 Configuration and templates may be versioned; working data has local Git ignore rules.
 
 ## Configuration
@@ -194,8 +227,8 @@ clients:
     # deliver_argv: [/absolute/path/to/deliver-wrapper, "{thread_id}", "{message_file}", "{message_id}"]
   opencode:
     adapter: opencode
-    launch_argv: [opencode, --auto, --model, "{model}", --prompt, "{prompt}"]
-    resume_argv: [opencode, --auto, --session, "{thread_id}", --model, "{model}", --prompt, "{prompt}"]
+    launch_argv: [opencode, --model, "{model}", --prompt, "{prompt}"]
+    resume_argv: [opencode, --session, "{thread_id}", --model, "{model}", --prompt, "{prompt}"]
   command:
     adapter: command
     launch_argv: [/absolute/path/to/agent-wrapper, --model, "{model}", --prompt-file, "{prompt_file}"]
@@ -260,9 +293,11 @@ by the selected client and model. Supported spellings are adapter/provider-speci
 leave the field out to keep the client's existing default behavior.
 
 For built-in `codex`, `claude`, and `opencode` clients, `launch_argv` and `resume_argv`
-are optional because workspace supplies defaults when they are omitted. The OpenCode
-example above includes `--auto`, which auto-approves permissions that are not explicitly
-denied; remove it from both arrays if interactive permission approval is required.
+are optional because workspace supplies defaults when they are omitted. The example above
+uses those defaults, and neither the generated configuration nor the wizard adds
+approval-bypass flags. `--auto` for OpenCode, `--dangerously-skip-permissions`, and
+similar options are a deliberate opt-in: add them to `launch_argv` and `resume_argv`
+yourself only when you want to auto-approve permissions that are not explicitly denied.
 
 `forge.adapter` can be `github`, `gitlab`, or `command`. Without an adapter, a local CR
 package is created; the user can attach a real request or explicitly skip publication.
