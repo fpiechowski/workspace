@@ -1,9 +1,9 @@
 - command: "gofmt -l internal/cli/cli.go internal/cli/project_init.go internal/cli/project_init_test.go"
   exit_code: 0
-  evidence: "work-products/checks/check_01M3J9Z4CFC70MHXACA20HDFAV.log"
+  evidence_filename: "work-products/checks/check_01M3J9Z4CFC70MHXACA20HDFAV.log"
 - command: "env -u WORKSPACE_SESSION_ID go test ./internal/cli ./internal/core -run 'TestProjectInitWizard|TestValidateConfig|TestInitFreshProject' -count=1"
   exit_code: 0
-  evidence: "work-products/checks/check_01M3J9ZAC995X62NH22JW3K02N.log"
+  evidence_filename: "work-products/checks/check_01M3J9ZAC995X62NH22JW3K02N.log"
 - command: "go vet ./internal/cli"
   exit_code: 0
-  evidence: "work-products/checks/check_01M3J9ZXF3SJKHDG96GPNWAH58.log"
+  evidence_filename: "work-products/checks/check_01M3J9ZXF3SJKHDG96GPNWAH58.log"

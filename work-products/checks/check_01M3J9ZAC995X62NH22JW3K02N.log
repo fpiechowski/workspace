@@ -1,0 +1,4 @@
+env -u WORKSPACE_SESSION_ID go test ./internal/cli ./internal/core -run 'TestProjectInitWizard|TestValidateConfig|TestInitFreshProject' -count=1
+ok   workspace/internal/cli
+ok   workspace/internal/core
+exit_code=0

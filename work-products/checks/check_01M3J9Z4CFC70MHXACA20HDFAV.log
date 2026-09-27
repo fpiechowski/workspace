@@ -1,0 +1,2 @@
+gofmt -l internal/cli/cli.go internal/cli/project_init.go internal/cli/project_init_test.go
+exit_code=0
