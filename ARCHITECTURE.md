@@ -323,15 +323,21 @@ rechecks socket compatibility, target ownership, and the selected client's TTY a
 available process/creation identity, then switches by explicit client TTY and verified
 workspace/window/pane IDs. Cancellation has no tmux effect. A missing or changed client
 requires a new choice. TUI navigation works outside tmux by selecting an existing
-client on the target server; it never attaches the caller's terminal. The CLI's
-`workspace attach` behavior remains unchanged.
+client on the target server; it never attaches the caller's terminal. The same flow
+targets the project Dispatcher page while a live Run exists: it resolves the durable
+current Run against the verified project topology and uses the canonical
+`workspace-dispatcher-<project-id>` session, with the shortcut hidden and inert when the
+Dispatcher is not running. The CLI's `workspace attach` and `workspace dispatcher attach`
+behavior remains unchanged.
 
 The project Dispatcher uses a separate `workspace-dispatcher-<project-id>` tmux session
 and a `dispatcher` window. Its runner is selected by `--scope project` and
 `_dispatcher-exec`, while Workspace runners continue to use `--workspace` and their
 existing execution verbs. The supervisor reconciles the Dispatcher independently and
 only resumes a verified lost pane; normal exit, explicit stop, a live metadata conflict,
-or an observation error is not a restart trigger.
+or an observation error is not a restart trigger. The Dispatcher page is a navigation
+target while a verified current Run owns its pane; the durable Run identity is always
+checked against the observed project pane, never inferred from the session name alone.
 
 The runner receives, among other values, `WORKSPACE_AGENT_ID`, `WORKSPACE_SESSION_ID`,
 `WORKSPACE_RUN_ID`, `WORKSPACE_TASK_ID`, `WORKSPACE_ROLE`, and the identifiers of its

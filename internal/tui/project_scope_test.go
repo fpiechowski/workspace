@@ -39,6 +39,19 @@ func TestProjectScopeIssuesAndDispatcherRoutes(t *testing.T) {
 	}
 }
 
+func TestProjectDispatcherHintAdvertisesJumpOnlyWhenRunning(t *testing.T) {
+	m := New(Config{ProjectFound: true, ProjectID: "proj_test", NoColor: true})
+	m.route = route{Page: "dispatcher"}
+	m.project = core.ProjectOverview{ProjectID: "proj_test", Dispatcher: core.DispatcherSummary{State: "idle"}}
+	if content := m.detailContent(); strings.Contains(content, "g jump") {
+		t.Fatalf("idle Dispatcher hint advertises jump: %q", content)
+	}
+	m.project.Dispatcher.State = "running"
+	if content := m.detailContent(); !strings.Contains(content, "g jump") {
+		t.Fatalf("running Dispatcher hint omits jump: %q", content)
+	}
+}
+
 func TestProjectScopeUnavailablePrimaryKeysDoNotEnterWorkspaceRoutes(t *testing.T) {
 	for _, key := range []rune{'4', '5'} {
 		m := New(Config{ProjectFound: true, ProjectID: "proj_test"})

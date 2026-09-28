@@ -132,7 +132,7 @@ func enabled(binding key.Binding, ok bool) key.Binding {
 // decision, change request) are excluded.
 func jumpCapable(kind string) bool {
 	switch kind {
-	case "workspace", "orchestrator", "worktree", "session", "run", "service":
+	case "workspace", "orchestrator", "worktree", "session", "run", "service", "dispatcher":
 		return true
 	}
 	return false
@@ -167,7 +167,7 @@ func (m *Model) contextFlags() contextFlags {
 	collection := m.isCollectionPage()
 	options, _ := m.availableActions()
 	return contextFlags{
-		jump:         jumpCapable(kind),
+		jump:         jumpCapable(kind) && (kind != "dispatcher" || m.dispatcherJumpReady()),
 		actions:      len(options) > 0,
 		filter:       collection,
 		status:       collection && len(m.statusFilterOptions()) > 1,
@@ -178,6 +178,13 @@ func (m *Model) contextFlags() contextFlags {
 		board:        m.route.Page == "tasks",
 		boardColumns: m.isBoardPage(),
 	}
+}
+
+// dispatcherJumpReady reports durable Dispatcher liveness for the jump gate.
+// State "running" already implies a non-empty CurrentRunID (Session.Active),
+// so the footer, help and page hint stay hidden until the Dispatcher has a run.
+func (m *Model) dispatcherJumpReady() bool {
+	return m.project.Dispatcher.State == "running"
 }
 
 // boardBinding advertises the toggle direction that matches the current view.

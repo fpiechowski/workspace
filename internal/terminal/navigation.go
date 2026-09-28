@@ -130,6 +130,9 @@ func (n *TmuxNavigator) targetSocket(target core.NavigationTarget) string {
 }
 
 func (n *TmuxNavigator) verify(ctx context.Context, target core.NavigationTarget) error {
+	if target.Kind == "dispatcher" {
+		return n.verifyDispatcher(ctx, target)
+	}
 	if target.WorkspaceID == "" || target.SessionName == "" {
 		return &core.Error{Code: "invalid_navigation_target", Message: "workspace and tmux session are required"}
 	}
@@ -178,6 +181,55 @@ func (n *TmuxNavigator) verify(ctx context.Context, target core.NavigationTarget
 		return nil
 	}
 	return &core.Error{Code: "pane_mismatch", Message: "pane no longer belongs to the selected workspace entity"}
+}
+
+// verifyDispatcher validates a project-scoped Dispatcher target. The session
+// name must be the canonical project Dispatcher session and any pane must carry
+// the durable current Run's project ownership metadata.
+func (n *TmuxNavigator) verifyDispatcher(ctx context.Context, target core.NavigationTarget) error {
+	if target.ProjectID == "" || target.SessionName == "" {
+		return &core.Error{Code: "invalid_navigation_target", Message: "project and tmux session are required"}
+	}
+	if target.SessionName != core.DispatcherTmuxName(target.ProjectID) {
+		return &core.Error{Code: "invalid_navigation_target", Message: "tmux session is not the canonical project Dispatcher session"}
+	}
+	socket := n.targetSocket(target)
+	if _, err := n.runner().Output(ctx, socket, "has-session", "-t", "="+target.SessionName); err != nil {
+		return &core.Error{Code: "pane_missing", Message: err.Error()}
+	}
+	if target.WindowID != "" {
+		windows, err := n.runner().Output(ctx, socket, "list-windows", "-t", "="+target.SessionName, "-F", "#{window_id}")
+		if err != nil {
+			return err
+		}
+		if !containsLine(windows, target.WindowID) {
+			return &core.Error{Code: "pane_mismatch", Message: "window no longer belongs to the selected Dispatcher session"}
+		}
+	}
+	if target.PaneID == "" {
+		return nil
+	}
+	rows, err := n.runner().Output(ctx, socket, "list-panes", "-a", "-t", "="+target.SessionName, "-F", "#{pane_id}\t#{window_id}\t#{pane_dead}\t#{@workspace_scope}\t#{@workspace_project_id}\t#{@workspace_kind}\t#{@workspace_session_id}\t#{@workspace_run_id}")
+	if err != nil {
+		return err
+	}
+	for _, row := range strings.Split(rows, "\n") {
+		fields := strings.SplitN(row, "\t", 8)
+		if len(fields) != 8 || fields[0] != target.PaneID || fields[2] == "1" {
+			continue
+		}
+		if fields[3] != "project" || fields[4] != target.ProjectID || fields[5] != "dispatcher" {
+			break
+		}
+		if fields[6] != target.SessionID || fields[7] != target.RunID {
+			break
+		}
+		if target.WindowID != "" && fields[1] != target.WindowID {
+			break
+		}
+		return nil
+	}
+	return &core.Error{Code: "pane_mismatch", Message: "pane no longer belongs to the selected Dispatcher"}
 }
 
 // Select moves the attached client to a verified target without starting an

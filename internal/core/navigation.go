@@ -15,6 +15,7 @@ type EntityRef struct {
 // caller-supplied tmux target string.
 type NavigationTarget struct {
 	WorkspaceID string `json:"workspace_id"`
+	ProjectID   string `json:"project_id,omitempty"`
 	SessionName string `json:"session_name"`
 	Socket      string `json:"socket,omitempty"`
 	WindowID    string `json:"window_id,omitempty"`
@@ -29,6 +30,9 @@ type NavigationTarget struct {
 // ResolveNavigationTarget validates the requested entity against both the
 // durable workspace and current tmux ownership before returning a target.
 func (s *Service) ResolveNavigationTarget(ctx context.Context, selector string, ref EntityRef) (NavigationTarget, error) {
+	if strings.EqualFold(strings.TrimSpace(ref.Kind), "dispatcher") {
+		return s.resolveDispatcherNavigationTarget(ctx)
+	}
 	snapshot, err := s.WorkspaceSnapshot(ctx, selector)
 	if err != nil {
 		return NavigationTarget{}, err
@@ -181,6 +185,65 @@ func (s *Service) ResolveNavigationTarget(ctx context.Context, selector string, 
 	default:
 		return NavigationTarget{}, fail("invalid_entity", "unsupported navigation kind %q", ref.Kind)
 	}
+}
+
+// resolveDispatcherNavigationTarget builds a project-scoped Dispatcher target
+// strictly from durable Dispatcher state plus the verified project topology pane
+// that carries the current Run ownership metadata. A heuristic scan of the
+// topology is never used; missing or mismatched ownership fails closed.
+func (s *Service) resolveDispatcherNavigationTarget(ctx context.Context) (NavigationTarget, error) {
+	status, err := s.DispatcherStatus(ctx)
+	if err != nil {
+		return NavigationTarget{}, err
+	}
+	if !status.Initialized || status.State == "never_started" {
+		return NavigationTarget{}, fail("pane_missing", "Dispatcher has not been started")
+	}
+	session, run := activeDispatcherNavigationSession(status)
+	if session == nil || run == nil {
+		return NavigationTarget{}, fail("pane_missing", "Dispatcher has no live run")
+	}
+	if !status.Runtime.Verified || status.Runtime.PaneID == "" {
+		return NavigationTarget{}, fail("pane_missing", "Dispatcher pane is not verified")
+	}
+	// Mirror tickDispatcher: reject a stale or rebound pane instead of trusting
+	// the topology scan positionally.
+	if status.Runtime.SessionID != session.ID || status.Runtime.RunID != run.ID || status.Runtime.PaneID != run.PaneID {
+		return NavigationTarget{}, fail("pane_missing", "Dispatcher pane ownership does not match the current run")
+	}
+	target := NavigationTarget{
+		ProjectID:   status.ProjectID,
+		SessionName: DispatcherTmuxName(status.ProjectID),
+		Kind:        "dispatcher",
+		SessionID:   session.ID,
+		RunID:       run.ID,
+		WindowID:    status.Runtime.WindowID,
+		PaneID:      status.Runtime.PaneID,
+	}
+	if tmux, ok := s.Runtime.(Tmux); ok {
+		target.Socket = tmux.Socket
+	}
+	return target, nil
+}
+
+// activeDispatcherNavigationSession returns the durable Session and Run that
+// own the live Dispatcher pane, or nil when no Run is active.
+func activeDispatcherNavigationSession(status DispatcherStatus) (*Session, *Run) {
+	for i := range status.Sessions {
+		session := &status.Sessions[i]
+		if !session.Active() || session.CurrentRunID == "" {
+			continue
+		}
+		if status.Agent.ID != "" && session.AgentID != status.Agent.ID {
+			continue
+		}
+		for j := range status.Runs {
+			if status.Runs[j].ID == session.CurrentRunID {
+				return session, &status.Runs[j]
+			}
+		}
+	}
+	return nil, nil
 }
 
 func uniqueWindow(topology TmuxTopology, match func(TmuxWindow) bool, kind string) (*TmuxWindow, error) {

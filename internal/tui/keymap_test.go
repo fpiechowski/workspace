@@ -70,6 +70,27 @@ func TestKeyEnablementPerRepresentativeKind(t *testing.T) {
 			forbidden: []string{"t terminal", "g jump"},
 			wanted:    []string{"a actions"},
 		},
+		{
+			name: "dispatcher running",
+			setup: func(m *Model) {
+				m.workspaceID = ""
+				m.project = core.ProjectOverview{Dispatcher: core.DispatcherSummary{State: "running", CurrentRunID: "run_disp"}}
+				m.route = route{Page: "dispatcher"}
+			},
+			jump: true, actions: true,
+			wanted: []string{"g jump", "a actions"}, forbidden: []string{"t terminal"},
+		},
+		{
+			name: "dispatcher idle",
+			setup: func(m *Model) {
+				m.workspaceID = ""
+				m.project = core.ProjectOverview{Dispatcher: core.DispatcherSummary{State: "idle"}}
+				m.route = route{Page: "dispatcher"}
+			},
+			jump: false, actions: true,
+			forbidden: []string{"t terminal", "g jump"},
+			wanted:    []string{"a actions"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
