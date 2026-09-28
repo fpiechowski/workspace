@@ -43,7 +43,7 @@ func (m *Model) detailContent() string {
 			return m.missingEntity("task", id)
 		}
 		doc.title("Task", task.Title, task.State)
-		doc.action("t open / resume dedicated terminal")
+		doc.action("Use 1 Sessions to choose a session, then press g to select a tmux client.")
 		doc.section("Facts")
 		doc.field("Attempt", fmt.Sprint(task.Attempt))
 		doc.field("Profile", task.Profile)

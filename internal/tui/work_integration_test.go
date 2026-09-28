@@ -155,7 +155,7 @@ func TestNavigationFilterEscapeInTmux(t *testing.T) {
 	for _, size := range [][2]int{{40, 12}, {60, 24}, {80, 18}, {100, 24}, {120, 32}} {
 		tmux("resize-window", "-t", pane, "-x", fmt.Sprint(size[0]), "-y", fmt.Sprint(size[1]))
 		waitFor("1 Tasks")
-		capture := waitFor("t terminal")
+		capture := waitFor("a actions")
 		if dir := os.Getenv("WORKSPACE_TUI_CAPTURES"); dir != "" {
 			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("tasks-%dx%d.txt", size[0], size[1])), []byte(capture), 0600); err != nil {
 				t.Fatal(err)

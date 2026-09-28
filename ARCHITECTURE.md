@@ -15,7 +15,7 @@ user / agent
    CLI (`cmd/workspace`, `internal/cli`)
         ├── bootstrap (flag/env/CWD → scope)
         ├── TUI (`internal/tui`)
-        └── terminal (attach/switch/jump/dedicated viewer launch)
+        └── terminal (attached-client discovery, verified jump, CLI attach)
                   │
                   ▼
    domain and use cases (`internal/core`)
@@ -43,8 +43,9 @@ is intentionally outside the release contract and uses the Linux build in WSL.
   flags, the environment, and the CWD.
 - `internal/tui/` — Bubble Tea model, routes, views, Huh forms, and theme; no direct
   writes to domain files.
-- `internal/terminal/` — verified tmux client switching, caller-terminal attach, and
-  dedicated viewer launch; it does not accept raw target strings from the interface.
+- `internal/terminal/` — attached tmux client discovery, explicit client switching,
+  ownership-verified navigation, and the CLI attach boundary; it does not accept raw
+  target strings from the interface.
 - `internal/core/` — domain model, use cases, persistence, and process adapters.
 - `internal/core/templates/` — built-in templates installed by `project init`.
 - `internal/core/skill/workspace/SKILL.md` — binary-owned general agent guidance,
@@ -296,16 +297,19 @@ Each workspace receives a tmux session. Worktrees are windows, specific agent Ru
 panes, and the orchestrator has a separate window started from the workspace directory.
 Supporting services are a separate record type and do not inherit agent identity.
 
-The TUI's `t` action uses a runtime-only tmux session group derived from the canonical
-workspace/session identity. The group shares canonical windows and panes but keeps a
-separately addressable viewer session and client, so the TUI client is not switched.
-One attached viewer client is reused for later targets; zero clients causes a fresh
-terminal launcher attempt, and multiple clients are rejected as ambiguous. Viewer
-creation, group membership, window/pane ownership, and the canonical socket are
-verified immediately before each effect. Viewer state is not written to Workspace
-domain records and is never treated as an Agent, Session, Run, service, or runtime
-owner. `g` and `workspace attach` retain their current-client and caller-terminal
-contracts respectively.
+The TUI's `g` action resolves a fresh core navigation target, lists attached clients on
+that target's socket, and always presents the client picker, including for a single
+client. It stores only the last successfully used client as a project-local UI
+preference under ignored `.workspace` data, with one file per socket; this does not
+modify Workspace domain records or tracked project configuration. The picker marks and
+preselects that client while the same live client remains attached, otherwise it uses a
+deterministic order of current clients. Before switching, the terminal boundary
+rechecks socket compatibility, target ownership, and the selected client's TTY and
+available process/creation identity, then switches by explicit client TTY and verified
+workspace/window/pane IDs. Cancellation has no tmux effect. A missing or changed client
+requires a new choice. TUI navigation works outside tmux by selecting an existing
+client on the target server; it never attaches the caller's terminal. The CLI's
+`workspace attach` behavior remains unchanged.
 
 The project Dispatcher uses a separate `workspace-dispatcher-<project-id>` tmux session
 and a `dispatcher` window. Its runner is selected by `--scope project` and

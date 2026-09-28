@@ -22,33 +22,33 @@ func TestKeyEnablementPerRepresentativeKind(t *testing.T) {
 	cases := []struct {
 		name              string
 		setup             func(*Model)
-		terminal, jump    bool
+		jump              bool
 		actions           bool
 		forbidden, wanted []string
 	}{
 		{
-			name:     "task",
-			setup:    func(m *Model) { m.route = route{Page: "task", EntityID: "task_work"} },
-			terminal: true, jump: false, actions: true,
-			forbidden: []string{"g jump", "5 More"},
-			wanted:    []string{"t terminal", "1 Sessions", "3 Results"},
+			name:  "task",
+			setup: func(m *Model) { m.route = route{Page: "task", EntityID: "task_work"} },
+			jump:  false, actions: true,
+			forbidden: []string{"g jump", "t terminal", "5 More"},
+			wanted:    []string{"1 Sessions", "3 Results"},
 		},
 		{
-			name:     "session",
-			setup:    func(m *Model) { m.route = route{Page: "session", EntityID: "sess_worker"} },
-			terminal: true, jump: true, actions: true,
-			wanted: []string{"t terminal", "g jump"},
+			name:  "session",
+			setup: func(m *Model) { m.route = route{Page: "session", EntityID: "sess_worker"} },
+			jump:  true, actions: true,
+			wanted: []string{"g jump"}, forbidden: []string{"t terminal"},
 		},
 		{
-			name:     "artifact",
-			setup:    func(m *Model) { m.route = route{Page: "artifact", EntityID: "artifact_x"} },
-			terminal: false, jump: false, actions: false,
+			name:  "artifact",
+			setup: func(m *Model) { m.route = route{Page: "artifact", EntityID: "artifact_x"} },
+			jump:  false, actions: false,
 			forbidden: []string{"t terminal", "g jump", "a actions"},
 		},
 		{
-			name:     "decision",
-			setup:    func(m *Model) { m.route = route{Page: "decision", EntityID: "decision_x"} },
-			terminal: false, jump: false, actions: false,
+			name:  "decision",
+			setup: func(m *Model) { m.route = route{Page: "decision", EntityID: "decision_x"} },
+			jump:  false, actions: false,
 			forbidden: []string{"t terminal", "g jump", "a actions"},
 		},
 		{
@@ -60,13 +60,13 @@ func TestKeyEnablementPerRepresentativeKind(t *testing.T) {
 				}
 				m.route = route{Page: "project", SelectedID: "ws_x"}
 			},
-			terminal: true, jump: true, actions: true,
-			wanted: []string{"t terminal", "g jump", "a actions"},
+			jump: true, actions: true,
+			wanted: []string{"g jump", "a actions"}, forbidden: []string{"t terminal"},
 		},
 		{
-			name:     "runtime",
-			setup:    func(m *Model) { m.route = route{Page: "runtime"} },
-			terminal: false, jump: false, actions: true,
+			name:  "runtime",
+			setup: func(m *Model) { m.route = route{Page: "runtime"} },
+			jump:  false, actions: true,
 			forbidden: []string{"t terminal", "g jump"},
 			wanted:    []string{"a actions"},
 		},
@@ -76,9 +76,6 @@ func TestKeyEnablementPerRepresentativeKind(t *testing.T) {
 			m := workFixture()
 			tc.setup(m)
 			flags := m.contextFlags()
-			if flags.terminal != tc.terminal {
-				t.Errorf("terminal = %t, want %t", flags.terminal, tc.terminal)
-			}
 			if flags.jump != tc.jump {
 				t.Errorf("jump = %t, want %t", flags.jump, tc.jump)
 			}

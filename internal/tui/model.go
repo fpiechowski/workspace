@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"os/exec"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -10,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"workspace/internal/core"
+	"workspace/internal/terminal"
 )
 
 type route struct {
@@ -47,8 +47,9 @@ type collectionItem struct {
 }
 
 type Model struct {
-	backend   Backend
-	navigator Navigator
+	backend           Backend
+	navigator         Navigator
+	clientPreferences ClientPreferenceStore
 
 	projectRoot  string
 	projectID    string
@@ -70,6 +71,7 @@ type Model struct {
 	form            *huh.Form
 	formMode        string
 	formChoice      string
+	formClient      string
 	formWorkflow    string
 	formConfirm     bool
 	formReason      string
@@ -89,51 +91,44 @@ type Model struct {
 	stack       []route
 	routeMemory map[routeKey]routeMemory
 
-	project             core.ProjectOverview
-	issue               core.IssueDetail
-	supervisor          core.SupervisorObservation
-	snapshot            core.WorkspaceSnapshot
-	runtime             core.RuntimeObservation
-	uiStatus            core.UIStatus
-	worktreeInspection  map[string]core.WorktreeObservation
-	preview             core.Preview
-	loadError           string
-	supervisorReadError string
-	runtimeError        string
-	uiError             string
-	lastSuccess         time.Time
-	lastFailure         time.Time
-	generation          uint64
-	managed             bool
-	hidePending         bool
-	hideKey             string
-	projectPending      bool
-	issuePending        bool
-	supervisorPending   bool
-	snapshotPending     bool
-	runtimePending      bool
-	uiPending           bool
-	previewPending      bool
-	navigationPending   bool
-	worktreePending     bool
-	mutationPending     bool
-	closed              bool
-	spinner             spinner.Model
-	animating           bool
-	externalProcess     *ExternalProcessRequest
-	resumeCmd           tea.Cmd
-}
-
-// ExternalProcessRequest is a prepared interactive process which must run
-// after Bubble Tea has fully restored the terminal. Keeping this handoff
-// outside tea.ExecProcess avoids Bubble Tea's renderer stop/start race
-// (https://github.com/charmbracelet/bubbletea/issues/1778).
-type ExternalProcessRequest struct {
-	Cmd            *exec.Cmd
-	Ref            core.EntityRef
-	Mode           NavigationMode
-	AfterReconcile bool
-	Generation     uint64
+	project                  core.ProjectOverview
+	issue                    core.IssueDetail
+	supervisor               core.SupervisorObservation
+	snapshot                 core.WorkspaceSnapshot
+	runtime                  core.RuntimeObservation
+	uiStatus                 core.UIStatus
+	worktreeInspection       map[string]core.WorktreeObservation
+	preview                  core.Preview
+	loadError                string
+	supervisorReadError      string
+	runtimeError             string
+	uiError                  string
+	lastSuccess              time.Time
+	lastFailure              time.Time
+	generation               uint64
+	managed                  bool
+	hidePending              bool
+	hideKey                  string
+	projectPending           bool
+	issuePending             bool
+	supervisorPending        bool
+	snapshotPending          bool
+	runtimePending           bool
+	uiPending                bool
+	previewPending           bool
+	navigationPending        bool
+	navigationSequence       uint64
+	navigationTarget         core.NavigationTarget
+	navigationRef            core.EntityRef
+	navigationClient         *terminal.Client
+	navigationAfterReconcile bool
+	navigationClients        []terminal.Client
+	navigationGeneration     uint64
+	worktreePending          bool
+	mutationPending          bool
+	closed                   bool
+	spinner                  spinner.Model
+	animating                bool
 }
 
 type projectMsg struct {
@@ -187,17 +182,33 @@ type refreshTimerMsg struct{}
 type animationMsg struct{}
 type navigationTargetMsg struct {
 	ref            core.EntityRef
-	mode           NavigationMode
 	afterReconcile bool
 	generation     uint64
+	sequence       uint64
+	client         *terminal.Client
 	target         core.NavigationTarget
+	err            error
+}
+type navigationClientsMsg struct {
+	ref            core.EntityRef
+	afterReconcile bool
+	generation     uint64
+	sequence       uint64
+	target         core.NavigationTarget
+	clients        []terminal.Client
+	lastClient     terminal.Client
+	hasLastClient  bool
+	preferenceErr  error
 	err            error
 }
 type navigationResultMsg struct {
 	ref            core.EntityRef
-	mode           NavigationMode
 	afterReconcile bool
 	generation     uint64
+	sequence       uint64
+	target         core.NavigationTarget
+	client         *terminal.Client
+	preferenceErr  error
 	err            error
 }
 type actionResultMsg struct {
@@ -217,22 +228,26 @@ func New(config Config) *Model {
 	input.CharLimit = 0
 	input.Width = 32
 	m := &Model{
-		backend:      config.Backend,
-		navigator:    config.Navigator,
-		projectRoot:  config.ProjectRoot,
-		projectID:    config.ProjectID,
-		cwd:          config.CWD,
-		workspaceID:  config.WorkspaceID,
-		projectFound: config.ProjectFound,
-		initialError: sanitizeLine(config.InitialError),
-		managed:      config.Managed,
-		hideKey:      core.ID("tuihide"),
-		palette:      makePalette(config.Theme, config.NoColor),
-		width:        80, height: 24,
+		backend:           config.Backend,
+		navigator:         config.Navigator,
+		clientPreferences: config.ClientPreferences,
+		projectRoot:       config.ProjectRoot,
+		projectID:         config.ProjectID,
+		cwd:               config.CWD,
+		workspaceID:       config.WorkspaceID,
+		projectFound:      config.ProjectFound,
+		initialError:      sanitizeLine(config.InitialError),
+		managed:           config.Managed,
+		hideKey:           core.ID("tuihide"),
+		palette:           makePalette(config.Theme, config.NoColor),
+		width:             80, height: 24,
 		keys:               defaultKeyMap(),
 		filterInput:        input,
 		worktreeInspection: make(map[string]core.WorktreeObservation),
 		routeMemory:        make(map[routeKey]routeMemory),
+	}
+	if m.clientPreferences == nil && m.projectRoot != "" {
+		m.clientPreferences = FileClientPreferenceStore{ProjectRoot: m.projectRoot}
 	}
 	m.viewport = viewport.New(76, 16)
 	m.helpViewport = viewport.New(76, 16)
@@ -255,32 +270,9 @@ func (m *Model) Init() tea.Cmd {
 	if !m.projectFound || m.initialError != "" || m.backend == nil {
 		return nil
 	}
-	resume := m.resumeCmd
-	m.resumeCmd = nil
 	// beginRefresh marks the first load as pending; only then does the spinner
 	// animation loop arm, so an idle interface issues no ticks.
-	return tea.Batch(m.beginRefresh(), m.ensureAnimation(), resume)
-}
-
-// TakeExternalProcessRequest transfers a prepared process to the CLI runner.
-// A nil result means that the program exited normally.
-func (m *Model) TakeExternalProcessRequest() *ExternalProcessRequest {
-	request := m.externalProcess
-	m.externalProcess = nil
-	return request
-}
-
-// ResumeExternalProcess applies the result of an external process and prepares
-// the command that the next, fresh tea.Program must run during Init.
-func (m *Model) ResumeExternalProcess(request *ExternalProcessRequest, err error) {
-	m.quit = false
-	_, m.resumeCmd = m.Update(navigationResultMsg{
-		generation:     m.generation,
-		err:            err,
-		ref:            request.Ref,
-		mode:           request.Mode,
-		afterReconcile: request.AfterReconcile,
-	})
+	return tea.Batch(m.beginRefresh(), m.ensureAnimation())
 }
 
 func (m *Model) activeWorkspace() string { return m.workspaceID }

@@ -92,8 +92,8 @@ func TestShellRegionsAtSupportedSizes(t *testing.T) {
 				if !strings.Contains(lines[len(lines)-2], "Saved.") {
 					t.Fatalf("%dx%d status row missing the notice: %q", size[0], size[1], lines[len(lines)-2])
 				}
-				if !strings.Contains(lines[len(lines)-1], "t terminal") {
-					t.Fatalf("%dx%d key legend missing: %q", size[0], size[1], lines[len(lines)-1])
+				if strings.Contains(view, "t terminal") {
+					t.Fatalf("removed terminal shortcut remained visible:\n%s", view)
 				}
 			})
 		}

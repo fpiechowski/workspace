@@ -200,13 +200,18 @@ delete history used by other records.
 The first TUI screen is Tasks: each row combines the task, its state, and the number of
 active executions, sessions, and runs of its current attempt. The primary navigation
 order is Tasks, Sessions, Worktrees, Results, and More. Sessions is a plain collection
-without secondary tabs, with a current/history filter and entry into the session
-details and its terminal, and More provides Needs attention and Recent recorded
-activity among other pages. Opening a task shows its related sessions, worktrees, and
-results, distinguishes process execution from result acceptance, and allows the
-dedicated terminal to be opened or explicitly resumed. If a pane is missing during
-navigation, the TUI proposes a reconcile that requires user confirmation and then
-retries opening the same target.
+without secondary tabs, with a current/history filter and entry into session details;
+`g` on a jump-capable selection opens a picker of attached tmux clients on the verified
+target socket, and More provides Needs attention and Recent recorded activity among
+other pages. The picker appears even for one client and identifies each by TTY and
+current session. It moves only the confirmed client to the exact verified workspace,
+window, and pane. The TUI remembers the last successful client in ignored, project-local
+`.workspace` UI data scoped by tmux socket, marks and preselects it while it remains
+attached, and uses a deterministic live-client default otherwise. Opening a task shows
+its related sessions, worktrees, and results and distinguishes process execution from
+result acceptance. Starting or resuming remains an explicit action in the `a` menu. If
+a pane is missing during navigation, the TUI proposes a confirmed reconcile and retries
+the same selected entity and client; a disconnected client must be chosen again.
 
 At project scope, the TUI exposes Issues and Dispatcher alongside Workspaces. An Issue
 detail shows its source, retrieved revision, status reason, linked Workspaces, and the
@@ -225,17 +230,15 @@ The TUI can run manually as a browser or, after an explicit user action, as a ma
 pane next to the orchestrator. The supervisor does not start, restore, or stop the TUI;
 `workspace tui show` and `workspace tui hide` own that lifecycle, while `q` in the pane
 records hide before exiting. During pause and completed, the pane may remain available
-for review until the user closes it. `t` opens or reuses the exact verified current Run
-in a separate dedicated terminal window and leaves the TUI client in place; `g` remains
-the explicit current-client jump, with a temporary caller-terminal attach only outside
-tmux. On Windows the supported runtime is WSL: the dedicated launcher opens a new
-Windows Terminal window in the current distribution and attaches it to a runtime-only
-tmux viewer session-group. Closing or detaching that viewer does not stop workspace
-processes. Linux desktop terminals and macOS Terminal are supported when discoverable;
-missing launchers, stale viewers, socket mismatches, and ambiguous clients are reported
-as actionable errors without falling back to the TUI's stdio. Without tmux, runtime
-navigation is limited, but the persisted workspace state remains available. The screen
-and shortcut contract is described in
+for review until the user closes it. `g` always presents the attached-client picker for
+the selected target's tmux socket, inside or outside tmux. The TUI rechecks the socket,
+the target's ownership, and the selected client's live identity before switching; it
+does not attach the caller's terminal or silently choose another client. `Esc` and
+`Ctrl+C` cancel without a tmux effect. A different socket from the TUI's attached server,
+an empty client list, or a client that detached or restarted is reported clearly. The
+CLI's `workspace attach` behavior remains unchanged. Without tmux, runtime navigation
+is unavailable, but the persisted workspace state remains available. The screen and
+shortcut contract is described in
 [docs/tui.md](docs/tui.md).
 
 ### Distribution and upgrades

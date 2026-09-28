@@ -45,8 +45,8 @@ func TestPreviewActionLineIsSelectionAware(t *testing.T) {
 		want   []string
 		forbid []string
 	}{
-		{kind: "session", want: []string{"t terminal", "g jump", "Enter details"}},
-		{kind: "task", want: []string{"t terminal", "Enter details"}, forbid: []string{"g jump"}},
+		{kind: "session", want: []string{"g jump", "Enter details"}, forbid: []string{"t terminal"}},
+		{kind: "task", want: []string{"Enter details"}, forbid: []string{"t terminal", "g jump"}},
 		{kind: "artifact", want: []string{"Enter details"}, forbid: []string{"t terminal", "g jump"}},
 		{kind: "decision", want: []string{"Enter details"}, forbid: []string{"t terminal", "g jump"}},
 	}
@@ -108,7 +108,7 @@ func TestEmptyStatesExplainAndOfferNextAction(t *testing.T) {
 		m.width, m.height = 100, 24
 		m.navigate(route{Page: "tasks"})
 		view := m.View()
-		for _, want := range []string{"No tasks yet", "This workspace has no recorded tasks.", "Press o to start the orchestrator"} {
+		for _, want := range []string{"No tasks yet", "This workspace has no recorded tasks.", "Press o, then a to start the orchestrator"} {
 			if !strings.Contains(view, want) {
 				t.Fatalf("tasks empty state missing %q:\n%s", want, view)
 			}

@@ -2,13 +2,13 @@ package tui
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"workspace/internal/core"
+	"workspace/internal/terminal"
 )
 
 func workFixture() *Model {
@@ -43,11 +43,14 @@ func TestTasksAndSessionsCollectionsShowLiveWork(t *testing.T) {
 		m.width, m.height = size[0], size[1]
 		m.navigate(route{Page: "tasks"})
 		view := m.View()
-		for _, text := range []string{"Payments worker", "Retry failed payments", "t terminal"} {
+		for _, text := range []string{"Payments worker", "Retry failed payments"} {
 			if !strings.Contains(view, text) {
 				t.Errorf("%v missing %q:\n%s", size, text, view)
 			}
 		}
+	}
+	if strings.Contains(m.View(), "t terminal") {
+		t.Fatal("removed terminal shortcut remained visible")
 	}
 	m.navigate(route{Page: "tasks"})
 	if m.filteredItems()[0].ID != "task_work" {
@@ -397,45 +400,46 @@ func TestActionFailureShowsErrorInsteadOfOperationKey(t *testing.T) {
 	}
 }
 
-type terminalHarness struct {
-	Backend
-	refs []core.EntityRef
-}
-
-func (h *terminalHarness) ResolveNavigationTarget(_ context.Context, _ string, ref core.EntityRef) (core.NavigationTarget, error) {
-	h.refs = append(h.refs, ref)
-	return core.NavigationTarget{}, nil
-}
-
 type unusedNavigator struct{}
 
-func (unusedNavigator) Select(context.Context, core.NavigationTarget) error        { return nil }
-func (unusedNavigator) OpenDedicated(context.Context, core.NavigationTarget) error { return nil }
-func (unusedNavigator) PrepareAttach(context.Context, core.NavigationTarget) (*exec.Cmd, error) {
+func (unusedNavigator) ListClients(context.Context, core.NavigationTarget) ([]terminal.Client, error) {
 	return nil, nil
 }
+func (unusedNavigator) Jump(context.Context, core.NavigationTarget, terminal.Client) error {
+	return nil
+}
 
-func TestTerminalUsesExactCurrentRunAndConfirmsIdleResume(t *testing.T) {
+func TestResumeActionRemainsExplicitAndDoesNotNavigate(t *testing.T) {
 	m := workFixture()
-	backend := &terminalHarness{}
-	m.backend = backend
-	m.navigator = unusedNavigator{}
-	m.navigate(route{Page: "sessions"})
-	m.route.SelectedID = "sess_worker"
-	cmd := m.openTerminal()
-	if cmd == nil {
-		t.Fatal("terminal command missing")
+	m.route = route{Page: "session", EntityID: "sess_other"}
+	navigator := &countingNavigator{}
+	m.navigator = navigator
+	options, _ := m.availableActions()
+	found := false
+	for _, option := range options {
+		if option.Value == "resume_session" {
+			found = true
+		}
 	}
-	cmd()
-	if len(backend.refs) != 1 || backend.refs[0].ID != "run_worker" || backend.refs[0].Kind != "run" {
-		t.Fatal(backend.refs)
+	if !found {
+		t.Fatal("inactive session lost its explicit resume action")
 	}
-	m.navigationPending = false
-	m.route.SelectedID = "sess_other"
-	m.openTerminal()
-	if m.form == nil || m.formAction.Action != "resume_session" || m.formAction.TargetID != "sess_other" || !m.formAction.OpenTerminal || m.actionPending {
-		t.Fatal("idle session must confirm before launch")
+	call := ActionCall{Action: "resume_session", TargetID: "sess_other"}
+	m.finishAction(actionResultMsg{generation: m.generation, call: call})
+	if m.navigationPending || m.form != nil || navigator.jumps != 0 || navigator.lists != 0 {
+		t.Fatal("resume completion implicitly opened terminal navigation")
 	}
+}
+
+type countingNavigator struct{ jumps, lists int }
+
+func (n *countingNavigator) ListClients(context.Context, core.NavigationTarget) ([]terminal.Client, error) {
+	n.lists++
+	return nil, nil
+}
+func (n *countingNavigator) Jump(context.Context, core.NavigationTarget, terminal.Client) error {
+	n.jumps++
+	return nil
 }
 
 func TestSortAndAnimationDoNotLoseSelection(t *testing.T) {

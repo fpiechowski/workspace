@@ -11,13 +11,15 @@ workspace service list
 workspace service stop service_ID
 ```
 
-The TUI `t` action may create a runtime-only tmux session-group viewer for this
-canonical session. It shares the workspace windows and panes while retaining a separate
-client, allowing a dedicated terminal to be reused without switching the TUI client.
-Viewer groups are not durable Workspace records and do not represent Agents, Sessions,
-Runs, services, or ownership. Closing or detaching the viewer leaves the canonical
-workspace processes running. The `g` TUI action and `workspace attach` continue to use
-the current client and caller-terminal attach paths respectively.
+The TUI `g` action lists attached clients on the selected target's socket and always
+opens a picker, including for one client. A confirmed choice switches that explicit
+client to the fresh ownership-verified workspace/window/pane target. The terminal
+boundary rechecks the socket, target, and client identity before switching; it does not
+attach the TUI's caller terminal or silently choose a replacement if the client is
+gone. The last successfully used client is stored as ignored project-local UI data,
+scoped per tmux socket, and is marked/preselected while that client remains live. This
+preference does not create Workspace records or affect runtime ownership. The CLI
+`workspace attach` behavior remains unchanged.
 
 The orchestrator/user can manage services; workers can manage only services in their
 assigned worktree. Active services block archive/cleanup and revision migration.

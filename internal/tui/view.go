@@ -540,7 +540,7 @@ func (m *Model) itemSummary(items []collectionItem, width int) []string {
 				if run, live := m.currentRun(session); live {
 					lines = append(lines, "Run: "+run.ID, "Model: "+run.Route.Model, "Pane: "+firstNonempty(run.PaneID, "launching"))
 				} else {
-					lines = append(lines, "No live run · t asks to resume")
+					lines = append(lines, "No live run · use a to resume")
 				}
 				if task, ok := m.task(session.TaskID); ok {
 					lines = append(lines, "Task: "+task.Title, statusBadge(task.State))
@@ -557,9 +557,6 @@ func (m *Model) itemSummary(items []collectionItem, width int) []string {
 // previewActions advertises only the commands the selected kind can honor.
 func (m *Model) previewActions(kind string) string {
 	actions := make([]string, 0, 3)
-	if terminalCapable(kind) {
-		actions = append(actions, "t terminal")
-	}
 	if jumpCapable(kind) {
 		actions = append(actions, "g jump")
 	}
@@ -812,7 +809,7 @@ func firstNonempty(value, fallback string) string {
 func emptyState(page string) []string {
 	switch page {
 	case "tasks":
-		return []string{"No tasks yet", "This workspace has no recorded tasks.", "Press o to start the orchestrator, then t to open its terminal."}
+		return []string{"No tasks yet", "This workspace has no recorded tasks.", "Press o, then a to start the orchestrator; use g to jump when a pane exists."}
 	case "worktrees":
 		return []string{"No worktrees yet", "No worktree has been recorded for this workspace.", "Press r to refresh, or 1 to return to Tasks."}
 	case "results":

@@ -36,7 +36,6 @@ type keyMap struct {
 	Primary [5]key.Binding
 	Related [3]key.Binding
 
-	Terminal        key.Binding
 	Jump            key.Binding
 	Orchestrator    key.Binding
 	WorkspacePicker key.Binding
@@ -93,7 +92,6 @@ func defaultKeyMap() keyMap {
 			key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "Results")),
 		},
 
-		Terminal:        key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "terminal")),
 		Jump:            key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "jump")),
 		Orchestrator:    key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "orchestrator")),
 		WorkspacePicker: key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "workspace")),
@@ -129,16 +127,6 @@ func enabled(binding key.Binding, ok bool) key.Binding {
 	return binding
 }
 
-// terminalCapable reports the selection kinds whose `t` command can start or
-// resume a terminal instead of only showing a hint.
-func terminalCapable(kind string) bool {
-	switch kind {
-	case "task", "session", "run", "agent", "orchestrator", "worktree", "service", "workspace":
-		return true
-	}
-	return false
-}
-
 // jumpCapable reports the selection kinds that resolve to a verified tmux
 // target. Durable records without a live process (artifact, handoff, check,
 // decision, change request) are excluded.
@@ -162,7 +150,6 @@ func (m *Model) selectionKind() string {
 // contextFlags is the selection-aware capability snapshot shared by the
 // footer, the full help screen, and tests.
 type contextFlags struct {
-	terminal     bool
 	jump         bool
 	actions      bool
 	filter       bool
@@ -180,7 +167,6 @@ func (m *Model) contextFlags() contextFlags {
 	collection := m.isCollectionPage()
 	options, _ := m.availableActions()
 	return contextFlags{
-		terminal:     terminalCapable(kind),
 		jump:         jumpCapable(kind),
 		actions:      len(options) > 0,
 		filter:       collection,
@@ -245,7 +231,6 @@ func (m *Model) keyGroups() []helpGroup {
 	}
 
 	runtime := []key.Binding{
-		enabled(m.keys.Terminal, flags.terminal),
 		enabled(m.keys.Jump, flags.jump),
 		enabled(m.keys.Orchestrator, flags.workspace),
 	}
@@ -277,17 +262,16 @@ func (m *Model) shortHelp() []key.Binding {
 			out = append(out, enabled(binding, true))
 		}
 	}
-	add(m.keys.Terminal, flags.terminal)
 	add(m.exitBinding(), true)
 	add(m.keys.Open, true)
 	add(m.keys.Up, true)
+	add(m.keys.Actions, flags.actions)
 	add(m.keys.ColumnPrev, flags.boardColumns)
 	add(m.keys.Focus, flags.focus)
 	add(m.keys.Filter, flags.filter)
 	add(m.keys.FilterNext, flags.status)
 	add(m.keys.Sort, flags.sort)
 	add(m.boardBinding(), flags.board)
-	add(m.keys.Actions, flags.actions)
 	add(m.keys.Jump, flags.jump)
 	if flags.taskRelated {
 		add(m.keys.Related[0], true)

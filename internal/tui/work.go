@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 	"workspace/internal/core"
 )
@@ -116,81 +115,6 @@ func (m *Model) stateLabel(state string) string {
 		color = m.palette.warning
 	}
 	return m.palette.style(color, false).Render(label)
-}
-
-// t opens live work or presents an explicit confirmation to create a new run.
-func (m *Model) openTerminal() tea.Cmd {
-	if m.backend == nil || m.snapshot.ObservedAt.IsZero() {
-		m.notice = "Terminal actions need a current snapshot. Press r to refresh."
-		return nil
-	}
-	kind, id := m.route.Page, m.route.EntityID
-	if m.isCollectionPage() {
-		item, _, _ := m.selectedItem()
-		kind, id = item.Kind, item.ID
-	}
-	if kind == "task" {
-		task, ok := m.task(id)
-		if !ok {
-			return nil
-		}
-		sessions := m.taskSessions(task)
-		if len(sessions) == 0 {
-			m.notice = "No session for this attempt. Press o, then t to start the orchestrator."
-			return nil
-		}
-		if len(sessions) > 1 {
-			m.push(route{Page: "sessions", ParentID: id})
-			m.notice = "Choose an agent, then t to open its terminal."
-			return nil
-		}
-		kind, id = "session", sessions[0].ID
-	}
-	if kind == "agent" {
-		m.push(route{Page: "sessions", ParentID: id})
-		m.notice = "Choose a session, then t to open or resume its terminal."
-		return nil
-	}
-	if kind == "orchestrator" {
-		if m.snapshot.Status.Workspace.Status == "archived" {
-			m.notice = "Archived workspaces cannot start or resume the orchestrator."
-			return nil
-		}
-		if session, _ := m.orchestrator(); session != nil {
-			kind, id = "session", session.ID
-		} else {
-			return m.terminalAction("start_orchestrator", "")
-		}
-	}
-	if kind == "session" {
-		session, ok := findSession(m.snapshot.Status.Sessions, id)
-		if !ok {
-			return nil
-		}
-		if m.snapshot.Status.Workspace.Status == "archived" {
-			m.notice = "Archived workspaces cannot resume sessions."
-			return nil
-		}
-		if run, active := m.currentRun(session); active {
-			return m.openDedicated(core.EntityRef{Kind: "run", ID: run.ID})
-		}
-		if session.ClosedAt != nil {
-			m.notice = "This session is closed. Open the orchestrator to plan a new assignment."
-			return nil
-		}
-		return m.terminalAction("resume_session", id)
-	}
-	if kind == "run" || kind == "worktree" || kind == "service" || kind == "workspace" {
-		return m.openDedicated(core.EntityRef{Kind: kind, ID: id})
-	}
-	m.notice = "Select an agent, session, or task to open its terminal."
-	return nil
-}
-
-func (m *Model) terminalAction(action, id string) tea.Cmd {
-	cmd := m.beginAction(action, id)
-	m.formAction.OpenTerminal = true
-	return cmd
 }
 
 func rowText(value string, width int) string {

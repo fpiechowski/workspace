@@ -7,18 +7,60 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"workspace/internal/core"
 )
 
 // Navigator is the terminal boundary used by the CLI and interactive UI.
 type Navigator interface {
+	ListClients(context.Context, core.NavigationTarget) ([]Client, error)
+	Jump(context.Context, core.NavigationTarget, Client) error
 	Select(context.Context, core.NavigationTarget) error
 	Attach(context.Context, core.NavigationTarget) error
-	OpenDedicated(context.Context, core.NavigationTarget) error
+}
+
+// Client is a snapshot of one attached tmux client. TTY is tmux's explicit
+// client target; PID and Created distinguish a reconnect that reuses a TTY.
+// Session and the active IDs are captured to detect a client changing while a
+// selection dialog is open.
+type Client struct {
+	TTY       string `json:"tty"`
+	Session   string `json:"session"`
+	SessionID string `json:"session_id,omitempty"`
+	WindowID  string `json:"window_id,omitempty"`
+	PaneID    string `json:"pane_id,omitempty"`
+	PID       string `json:"pid,omitempty"`
+	Name      string `json:"name,omitempty"`
+	TermName  string `json:"term_name,omitempty"`
+	Created   string `json:"created,omitempty"`
+}
+
+// SameClient reports whether two snapshots identify the same tmux client,
+// excluding its current session/window/pane so a stored preference can survive
+// that client moving elsewhere.
+func (c Client) SameClient(other Client) bool {
+	if c.TTY == "" || c.TTY != other.TTY {
+		return false
+	}
+	return sameOptionalIdentity(c.PID, other.PID) &&
+		sameOptionalIdentity(c.Created, other.Created) &&
+		sameOptionalIdentity(c.Name, other.Name)
+}
+
+// SameSnapshot also checks the state shown in the picker. Jump uses it after
+// the user confirms so a changed client must be selected again.
+func (c Client) SameSnapshot(other Client) bool {
+	return c.SameClient(other) && c.Session == other.Session &&
+		c.SessionID == other.SessionID && c.WindowID == other.WindowID && c.PaneID == other.PaneID
+}
+
+func sameOptionalIdentity(a, b string) bool {
+	if a == "" && b == "" {
+		return true
+	}
+	return a != "" && a == b
 }
 
 type CommandRunner interface {
@@ -44,22 +86,18 @@ func (OSCommandRunner) Run(ctx context.Context, stdin io.Reader, stdout, stderr 
 }
 
 type TmuxNavigator struct {
-	Socket            string
-	Runner            CommandRunner
-	Launcher          Launcher
-	Env               func(string) string
-	Stdin             io.Reader
-	Stdout            io.Writer
-	Stderr            io.Writer
-	dedicatedMu       sync.Mutex
-	dedicatedLaunches map[string]time.Time
+	Socket string
+	Runner CommandRunner
+	Env    func(string) string
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 func NewTmuxNavigator(socket string) *TmuxNavigator {
 	return &TmuxNavigator{
-		Socket: socket, Runner: OSCommandRunner{}, Launcher: NewDefaultLauncher(), Env: os.Getenv,
+		Socket: socket, Runner: OSCommandRunner{}, Env: os.Getenv,
 		Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr,
-		dedicatedLaunches: make(map[string]time.Time),
 	}
 }
 
@@ -175,6 +213,147 @@ func (n *TmuxNavigator) Select(ctx context.Context, target core.NavigationTarget
 	return nil
 }
 
+// ListClients returns every live client on the verified target's tmux server.
+// It deliberately works when the caller is outside tmux; the TUI selects the
+// target client explicitly instead of attaching its own terminal.
+func (n *TmuxNavigator) ListClients(ctx context.Context, target core.NavigationTarget) ([]Client, error) {
+	if err := n.verify(ctx, target); err != nil {
+		return nil, err
+	}
+	socket := n.targetSocket(target)
+	if err := n.verifyCurrentServer(ctx, socket); err != nil {
+		return nil, err
+	}
+	rows, err := n.runner().Output(ctx, socket, "list-clients", "-F", clientFormat)
+	if err != nil {
+		if isNoAttachedClients(err) {
+			return nil, nil
+		}
+		return nil, &core.Error{Code: "client_discovery_failed", Message: "could not discover attached tmux clients: " + err.Error()}
+	}
+	clients, err := parseClients(rows)
+	if err != nil {
+		return nil, &core.Error{Code: "client_discovery_failed", Message: "could not read attached tmux clients: " + err.Error()}
+	}
+	return clients, nil
+}
+
+const clientFormat = "#{client_tty}\t#{client_session}\t#{session_id}\t#{window_id}\t#{pane_id}\t#{client_pid}\t#{client_name}\t#{client_termname}\t#{client_created}"
+
+func parseClients(output string) ([]Client, error) {
+	var clients []Client
+	for _, row := range strings.Split(strings.TrimSpace(output), "\n") {
+		if row == "" {
+			continue
+		}
+		fields := strings.Split(row, "\t")
+		if len(fields) != 9 || strings.TrimSpace(fields[0]) == "" {
+			return nil, fmt.Errorf("unexpected list-clients row")
+		}
+		if _, err := strconv.ParseInt(fields[5], 10, 64); fields[5] != "" && err != nil {
+			return nil, fmt.Errorf("invalid client process ID")
+		}
+		clients = append(clients, Client{
+			TTY: fields[0], Session: fields[1], SessionID: fields[2], WindowID: fields[3], PaneID: fields[4],
+			PID: fields[5], Name: fields[6], TermName: fields[7], Created: fields[8],
+		})
+	}
+	return clients, nil
+}
+
+func isNoAttachedClients(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no clients") || strings.Contains(message, "no client")
+}
+
+// Jump switches exactly the chosen live client to the verified target. The
+// client is re-read immediately before the first tmux mutation; a detached,
+// restarted, or otherwise changed client is never replaced with another one.
+func (n *TmuxNavigator) Jump(ctx context.Context, target core.NavigationTarget, chosen Client) error {
+	if chosen.TTY == "" {
+		return &core.Error{Code: "invalid_client", Message: "an attached tmux client must be selected"}
+	}
+	socket := n.targetSocket(target)
+	if err := n.verifyCurrentServer(ctx, socket); err != nil {
+		return err
+	}
+	if err := n.verify(ctx, target); err != nil {
+		return err
+	}
+	clients, err := n.listClients(ctx, socket)
+	if err != nil {
+		return err
+	}
+	current, ok := findClientSnapshot(clients, chosen)
+	if !ok {
+		return &core.Error{Code: "client_gone", Message: "the selected tmux client detached or restarted; press g and choose a live client"}
+	}
+	if !chosen.SameSnapshot(current) {
+		return &core.Error{Code: "client_changed", Message: "the selected tmux client changed while the picker was open; press g and choose again"}
+	}
+	// Verify the exact pane and window again after client discovery, just before
+	// using the explicit tmux client identity.
+	if err := n.verify(ctx, target); err != nil {
+		return err
+	}
+	clients, err = n.listClients(ctx, socket)
+	if err != nil {
+		return err
+	}
+	if current, ok = findClientSnapshot(clients, chosen); !ok {
+		return &core.Error{Code: "client_gone", Message: "the selected tmux client detached or changed before the jump; press g and choose a live client"}
+	}
+	if !chosen.SameSnapshot(current) {
+		return &core.Error{Code: "client_changed", Message: "the selected tmux client changed before the jump; press g and choose again"}
+	}
+	if _, err := n.runner().Output(ctx, socket, "switch-client", "-c", chosen.TTY, "-t", "="+target.SessionName); err != nil {
+		if live, listErr := n.listClients(ctx, socket); listErr == nil {
+			if current, ok := findClientSnapshot(live, chosen); !ok {
+				return &core.Error{Code: "client_gone", Message: "the selected tmux client detached or restarted before the jump; press g and choose a live client"}
+			} else if !chosen.SameSnapshot(current) {
+				return &core.Error{Code: "client_changed", Message: "the selected tmux client changed before the jump; press g and choose again"}
+			}
+		}
+		return fmt.Errorf("switch selected tmux client: %w", err)
+	}
+	if target.WindowID != "" {
+		windowTarget := "=" + target.SessionName + ":" + target.WindowID
+		if _, err := n.runner().Output(ctx, socket, "select-window", "-t", windowTarget); err != nil {
+			return fmt.Errorf("select verified tmux window: %w", err)
+		}
+	}
+	if target.PaneID != "" {
+		if _, err := n.runner().Output(ctx, socket, "select-pane", "-t", target.PaneID); err != nil {
+			return fmt.Errorf("select verified tmux pane: %w", err)
+		}
+	}
+	return nil
+}
+
+func (n *TmuxNavigator) listClients(ctx context.Context, socket string) ([]Client, error) {
+	rows, err := n.runner().Output(ctx, socket, "list-clients", "-F", clientFormat)
+	if err != nil {
+		if isNoAttachedClients(err) {
+			return nil, nil
+		}
+		return nil, &core.Error{Code: "client_discovery_failed", Message: "could not verify the selected tmux client: " + err.Error()}
+	}
+	clients, err := parseClients(rows)
+	if err != nil {
+		return nil, &core.Error{Code: "client_discovery_failed", Message: "could not verify the selected tmux client: " + err.Error()}
+	}
+	return clients, nil
+}
+
+func findClientSnapshot(clients []Client, chosen Client) (Client, bool) {
+	for _, client := range clients {
+		if chosen.SameClient(client) {
+			return client, true
+		}
+	}
+	return Client{}, false
+}
+
 // Attach uses tmux's attached client when one is available; otherwise it
 // starts the workspace session with the caller's terminal streams.
 func (n *TmuxNavigator) Attach(ctx context.Context, target core.NavigationTarget) error {
@@ -198,29 +377,6 @@ func (n *TmuxNavigator) Attach(ctx context.Context, target core.NavigationTarget
 	return n.runner().Run(ctx, n.Stdin, n.Stdout, n.Stderr, socket, "attach-session", "-t", "="+target.SessionName)
 }
 
-// PrepareAttach verifies the target and prepares an interactive command for
-// the CLI's terminal-restoring handoff loop.
-func (n *TmuxNavigator) PrepareAttach(ctx context.Context, target core.NavigationTarget) (*exec.Cmd, error) {
-	if n.env("TMUX") != "" {
-		return nil, &core.Error{Code: "tmux_server_mismatch", Message: "interactive attach must start outside tmux; use jump from an attached TUI"}
-	}
-	if err := n.verify(ctx, target); err != nil {
-		return nil, err
-	}
-	socket := n.targetSocket(target)
-	if target.WindowID != "" {
-		if _, err := n.runner().Output(ctx, socket, "select-window", "-t", target.WindowID); err != nil {
-			return nil, err
-		}
-	}
-	if target.PaneID != "" {
-		if _, err := n.runner().Output(ctx, socket, "select-pane", "-t", target.PaneID); err != nil {
-			return nil, err
-		}
-	}
-	return exec.Command("tmux", tmuxArgs(socket, "attach-session", "-t", "="+target.SessionName)...), nil
-}
-
 func (n *TmuxNavigator) verifyCurrentServer(ctx context.Context, socket string) error {
 	tmuxEnv := n.env("TMUX")
 	if tmuxEnv == "" {
@@ -232,7 +388,7 @@ func (n *TmuxNavigator) verifyCurrentServer(ctx context.Context, socket string) 
 		expected = "default"
 	}
 	if filepath.Base(currentSocket) != expected {
-		return &core.Error{Code: "tmux_server_mismatch", Message: "attach from outside the current tmux server to use this workspace socket"}
+		return &core.Error{Code: "tmux_server_mismatch", Message: "the TUI is attached to a different tmux server than this workspace; run it outside that server to choose a workspace client"}
 	}
 	return nil
 }

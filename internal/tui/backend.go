@@ -2,9 +2,9 @@ package tui
 
 import (
 	"context"
-	"os/exec"
 
 	"workspace/internal/core"
+	"workspace/internal/terminal"
 )
 
 type Backend interface {
@@ -25,25 +25,13 @@ type IssueBackend interface {
 }
 
 type Navigator interface {
-	Select(context.Context, core.NavigationTarget) error
-	PrepareAttach(context.Context, core.NavigationTarget) (*exec.Cmd, error)
-	OpenDedicated(context.Context, core.NavigationTarget) error
+	ListClients(context.Context, core.NavigationTarget) ([]terminal.Client, error)
+	Jump(context.Context, core.NavigationTarget, terminal.Client) error
 }
-
-// NavigationMode is carried through target resolution, tmux effects, and
-// reconcile retries so an asynchronous result cannot lose whether the user
-// requested a current-client jump or a separate terminal window.
-type NavigationMode string
-
-const (
-	NavigationModeJump      NavigationMode = "jump"
-	NavigationModeDedicated NavigationMode = "dedicated"
-)
 
 type ActionCall struct {
 	NavigationRef         *core.EntityRef
-	NavigationMode        NavigationMode
-	OpenTerminal          bool
+	NavigationClient      *terminal.Client
 	Action                string
 	TargetID              string
 	WorkspaceID           string
@@ -209,4 +197,5 @@ type Config struct {
 	Managed                                  bool
 	Backend                                  Backend
 	Navigator                                Navigator
+	ClientPreferences                        ClientPreferenceStore
 }

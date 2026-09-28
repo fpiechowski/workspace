@@ -56,7 +56,7 @@ func tuiCommand(o *options) *cobra.Command {
 			}
 		}
 		model := tui.New(config)
-		return runTUI(model, o.in, o.out, o.errOut)
+		return runTUI(model, o.in, o.out)
 	})
 	cmd.Flags().StringVar(&theme, "theme", "auto", "Color theme: auto, dark, or light")
 	cmd.Flags().BoolVar(&noColor, "no-color", false, "Disable terminal colors")
@@ -66,33 +66,16 @@ func tuiCommand(o *options) *cobra.Command {
 	return cmd
 }
 
-// runTUI owns the program boundary around interactive external processes.
-// Bubble Tea must have completely stopped (and restored the terminal) before
-// an attach command starts; each return therefore gets a fresh renderer.
-func runTUI(model *tui.Model, input io.Reader, output, errorOutput io.Writer) error {
-	for {
-		program := tea.NewProgram(model,
-			tea.WithInput(input),
-			tea.WithOutput(output),
-			tea.WithAltScreen(),
-		)
-		result, err := program.Run()
-		if err != nil {
-			return err
-		}
-		if next, ok := result.(*tui.Model); ok {
-			model = next
-		}
-		request := model.TakeExternalProcessRequest()
-		if request == nil {
-			return nil
-		}
-		request.Cmd.Stdin = input
-		request.Cmd.Stdout = output
-		request.Cmd.Stderr = errorOutput
-		processErr := request.Cmd.Run()
-		model.ResumeExternalProcess(request, processErr)
-	}
+// runTUI owns the Bubble Tea program boundary. Terminal navigation selects an
+// already attached tmux client and never launches an interactive process.
+func runTUI(model *tui.Model, input io.Reader, output io.Writer) error {
+	program := tea.NewProgram(model,
+		tea.WithInput(input),
+		tea.WithOutput(output),
+		tea.WithAltScreen(),
+	)
+	_, err := program.Run()
+	return err
 }
 
 func tuiDesiredCommand(o *options, desired bool) *cobra.Command {
@@ -182,7 +165,7 @@ func tuiRunnerCommand(o *options) *cobra.Command {
 			Backend:   tui.CoreBackend{Service: scope.Service},
 			Navigator: terminal.NewTmuxNavigator(o.socket),
 		}
-		return runTUI(tui.New(config), o.in, o.out, o.errOut)
+		return runTUI(tui.New(config), o.in, o.out)
 	})
 	cmd.Args = cobra.ExactArgs(3)
 	cmd.Hidden = true

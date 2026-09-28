@@ -82,27 +82,47 @@ Each release contains one root `workspace` executable per supported target and a
 ### Development builds from a checkout
 
 Release installation and local development setup are separate workflows. Use the
-published installer and `workspace upgrade` for stable releases; use
-`scripts/setup-dev.sh` when you need the current checkout. The development setup
-requires Go 1.24 or newer and runs on Linux/WSL or macOS. Native Windows runtime is
-not supported, so Windows Terminal users should run it inside WSL.
+published installer and `workspace upgrade` for stable releases; use the platform
+setup script when you need the current checkout. Development setup requires Go 1.24
+or newer. Native Windows builds the portable CLI as `workspace.exe`; runtime features
+that depend on tmux still require WSL or another supported Unix environment.
 
-From any directory, invoke the script through the checkout path; it locates the
-repository from its own path:
+In native Windows PowerShell, from the checkout:
 
-```sh
-/path/to/workspace/scripts/setup-dev.sh
+```powershell
+.\scripts\setup-dev.ps1
 ```
 
-From the checkout itself, the equivalent command is `./scripts/setup-dev.sh`.
+Or invoke it by absolute path from any directory:
 
-For example, in Windows Terminal + WSL:
+```powershell
+& 'C:\path\to\workspace\scripts\setup-dev.ps1'
+```
+
+The default artifact is `bin/workspace.exe` inside the checkout. The setup creates
+`%USERPROFILE%\bin\workspace.cmd`, a command shim that invokes that artifact, and adds
+`%USERPROFILE%\bin` to the user PATH if needed. Open a new terminal after the first
+setup, then check `Get-Command workspace` and `workspace version`. Rerun the setup
+after source changes to replace the binary. It does not change PowerShell startup files.
+
+In WSL, use the Linux build even when the checkout is on a mounted Windows drive:
 
 ```sh
 /mnt/c/Users/you/Documents/workspace/scripts/setup-dev.sh
 ```
 
-The default stable artifact is `bin/workspace` inside that checkout. The command
+This builds `bin/workspace` for Linux and links `$HOME/.local/bin/workspace` to it.
+Check the selected command with `command -v workspace` and `workspace version`.
+
+From Linux, macOS, or WSL, invoke the shell script through the checkout path; it locates
+the repository from its own path:
+
+```sh
+/path/to/workspace/scripts/setup-dev.sh
+```
+
+From the checkout itself, the equivalent command is `./scripts/setup-dev.sh`. The
+default artifact is `bin/workspace` inside that checkout. The command
 `$HOME/.local/bin/workspace` is a symlink to it, so rerunning the same command after
 source changes atomically refreshes the persistent binary without another shell
 configuration change. Verify the selected command with:
@@ -112,10 +132,12 @@ command -v workspace
 workspace version
 ```
 
-If `$HOME/.local/bin` is not on `PATH`, the setup prints the exact `export` hint;
-apply it in the current shell or add the directory to your shell startup file yourself.
-It does not edit startup files. For isolated tests, set `WORKSPACE_DEV_BUILD_DIR` and
-`WORKSPACE_DEV_INSTALL_DIR`; both may be absolute or relative to the checkout. These
+If `$HOME/.local/bin` is not on `PATH`, the setup prints the exact `export` hint; apply
+it in the current shell or add the directory to your shell startup file yourself. It
+does not edit startup files. On Windows, both `WORKSPACE_DEV_BUILD_DIR` and
+`WORKSPACE_DEV_INSTALL_DIR` may also be set to absolute or checkout-relative paths; by
+default Windows uses `bin` and `%USERPROFILE%\bin`. On Linux/macOS/WSL, set these
+variables for isolated tests; both may be absolute or relative to the checkout. These
 development-only variables are intentionally distinct from the release installer's
 `WORKSPACE_INSTALL_DIR`:
 
@@ -123,6 +145,14 @@ development-only variables are intentionally distinct from the release installer
 WORKSPACE_DEV_BUILD_DIR="/tmp/workspace-dev-bin" \
 WORKSPACE_DEV_INSTALL_DIR="$HOME/.local/bin" \
 /path/to/workspace/scripts/setup-dev.sh
+```
+
+PowerShell override example:
+
+```powershell
+$env:WORKSPACE_DEV_BUILD_DIR = 'C:\temp\workspace-dev-bin'
+$env:WORKSPACE_DEV_INSTALL_DIR = 'C:\Users\you\bin'
+& 'C:\path\to\workspace\scripts\setup-dev.ps1'
 ```
 
 The setup refuses to replace an unrelated existing regular file or symlink named
@@ -377,13 +407,17 @@ workspace tui status --workspace ws_ID
 workspace tui hide --workspace ws_ID
 ```
 
-`t` always keeps this TUI open and opens or reuses a separate terminal window for the
-exact verified current Run. On Windows/WSL, the supported launcher uses Windows
-Terminal, the current WSL distribution, and the explicit tmux socket to attach a
-runtime-only viewer session-group. Closing or detaching that dedicated window does not
-stop workspace processes. Linux desktop terminal launchers and macOS Terminal are used
-when discoverable; unavailable launchers, stale viewers, socket mismatches, and
-ambiguous clients are reported instead of falling back to the TUI's stdin/stdout.
+`g` resolves the selected workspace target and opens a picker of attached tmux clients
+on that target's socket, even when only one client is available. Each row shows the
+client TTY and current session. Confirming a row moves that explicit client to the
+verified workspace, window, and pane; `Esc` or `Ctrl+C` cancels without changing tmux.
+The TUI remembers the last successfully used client in ignored, project-local
+`.workspace` data scoped by socket, marks it `last used`, and preselects it while it
+remains attached. Outside tmux, the TUI still selects from the target server's attached
+clients and never attaches its own terminal. A missing client, discovery failure,
+changed target/client, or socket mismatch is reported without choosing another client.
+Use `a` to start or resume an agent, then `g` to choose a client. The CLI command
+`workspace attach` keeps its existing behavior.
 
 Without a workspace, the project tabs are `1 Workspaces`, `2 Issues`, and `3 Dispatcher`.
 The Issues tab shows durable revisions and linked Workspaces; opening an Issue shows its
@@ -393,22 +427,22 @@ lands on Tasks. `1`–`5` open Tasks, Sessions,
 Worktrees, Results, and More; below 60 columns the tabs shorten to `1 Tasks`,
 `2 Sess`, `3 Trees`, `4 Out`, and `5 More`. Sessions is a plain collection without
 secondary tabs: `f` switches between the current and history views, `Enter` opens the
-session details, and `t` opens or resumes its terminal in a dedicated terminal window.
+session details, and `g` opens the attached-client picker for a verified tmux jump.
 `Tab`/`Shift+Tab` switches the
 result type on Results only (the active type is named in the helper line).
 `Up`/`Down` or `j`/`k` changes the selection, `Enter` opens an item, `Esc` goes back,
 `/` filters a collection, and `f` switches between the status and history views. `s`
-sorts the list. `t` opens or reuses the selected agent's dedicated terminal or a resume confirmation;
-`o`, then `t`, quickly opens or starts the orchestrator. More groups Agents, Services,
+sorts the list. Use `a` for explicit start or resume actions and `g` to choose an attached
+tmux client for a verified target. `o` opens the orchestrator page. More groups Agents, Services,
 Decisions, Change requests, Runtime, Needs attention, Recent recorded activity, and
 Documents, so attention and recorded activity are reachable from `5`. `a` opens only
 the operations available for the selection, including creating and fully deleting
 workspaces in the project picker, starting completed-workspace conversation, reopening
 or archiving a completed workspace, and deleting unrelated tasks and inactive sessions
-while ordinary task mutations remain unavailable after completion. `g` jumps the current
-verified tmux client/window/pane (or temporarily attaches the caller's terminal outside
-tmux). `t` keeps the TUI in place and opens or reuses a separate dedicated terminal
-window for the exact verified current Run. `r`
+while ordinary task mutations remain unavailable after completion. `g` always opens the
+attached-client picker and then moves the explicitly selected client to the verified
+tmux client/window/pane, including when the TUI itself runs outside tmux. A successful
+choice is remembered per project and tmux socket. `r`
 refreshes the read without reconcile, and `?` shows scrollable help grouped into
 Navigation, View, Runtime, Actions, and Exit (already reachable at 40×12). `--theme`
 accepts `auto`, `dark`, or `light`; `--no-color` forces textual badges.

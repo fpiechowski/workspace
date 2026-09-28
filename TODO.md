@@ -17,6 +17,8 @@ List of planned improvements. Items are ordered by priority.
 - [ ] **Concurrency monitoring statistics** — add monitoring for the number of agents and sessions running in parallel.
 - [x] **Refresh indicator in the TUI** — replace the current refresh notification with an icon indicating that a refresh is in progress.
 - [x] **`idle` session status** — extend session statuses with `idle` and detect it when the agent is not doing work.
+- [ ] **Reasoning effort for profile config on route level instead of profile level** - move reasoning effort from profile level (shared for all routes in the profile) to individual route, so that reasoning efforts can be set per route
+- [ ] **Check how orchestrator agent profile in workflow config overrides the default orchestrator profile** - is it agent name convention, that `orchestrator` agent in a workflow is the agent used for orchestrating a workspace?
 
 - [x] **User TUI** — add a terminal interface based on Bubble Tea and Bubbles.
   - **Goal:** make it easier for a person to inspect state and operate the project. The existing CLI exposes YAML/JSON, which works well for agents and scripts but is less convenient for everyday human use.
@@ -30,7 +32,7 @@ List of planned improvements. Items are ordered by priority.
   - **Release contract:** a pinned official-actions workflow validates tags on `master`, builds `workspace_VERSION_{linux_amd64,linux_arm64,darwin_amd64,darwin_arm64}.tar.gz` with embedded metadata, writes `checksums.txt`, and publishes only a complete draft-then-published GitHub Release.
   - **Completion criteria:** the public v0.1.0 repository/release exists, all four assets and checksums validate, the documented installer works in a fresh directory, and `workspace upgrade` passes its no-op verification.
 
-- [x] **Repeatable local development builds** — provide a safe persistent binary workflow for contributors using Linux/macOS or Windows Terminal + WSL.
-  - **Development contract:** `scripts/setup-dev.sh` finds the checkout from its own path, builds an ignored `bin/workspace` artifact atomically, and links a configurable user-writable command directory to that artifact.
+- [x] **Repeatable local development builds** — provide a safe persistent binary workflow for contributors using native Windows, Linux/macOS, or WSL.
+  - **Development contract:** `scripts/setup-dev.sh` and `scripts/setup-dev.ps1` find the checkout from their own paths, build an ignored `bin/workspace[.exe]` artifact atomically, and register a configurable user-writable command (`workspace` symlink or `workspace.cmd`) for that artifact.
   - **Safety contract:** reruns refresh the existing setup link, failed builds preserve the last working artifact, unrelated command files and symlinks are never silently replaced, and development overrides remain separate from release installer variables.
-  - **Completion criteria:** the documented setup and isolated fixture test cover invocation, refresh, spaces, conflict protection, and failed-build preservation.
+  - **Completion criteria:** the documented setup and isolated fixture test cover invocation, refresh, spaces, conflict protection, and failed-build preservation for supported shells.

@@ -383,9 +383,14 @@ func (m *Model) updateForm(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.form = form
 	}
 	if !ok || m.form.State == huh.StateAborted {
+		mode := m.formMode
 		m.form = nil
 		m.formMode = ""
 		m.formConfirm = false
+		if mode == "navigation_client" {
+			m.cancelNavigation()
+			m.notice = "Jump cancelled."
+		}
 		m.rebuildViewport()
 		return m, cmd
 	}
@@ -393,6 +398,12 @@ func (m *Model) updateForm(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	mode := m.formMode
+	if mode == "navigation_client" {
+		choice := m.form.GetString("client")
+		m.form = nil
+		m.formMode = ""
+		return m, tea.Batch(cmd, m.acceptNavigationClient(choice))
+	}
 	if mode == "select" {
 		action := m.form.GetString("action")
 		target := m.formTargetID
@@ -504,18 +515,7 @@ func (m *Model) finishAction(message actionResultMsg) tea.Cmd {
 		m.pop()
 	}
 	if message.call.NavigationRef != nil {
-		mode := message.call.NavigationMode
-		if mode == "" {
-			mode = NavigationModeJump
-		}
-		return tea.Batch(m.beginRefresh(), m.navigationAttempt(*message.call.NavigationRef, true, mode))
-	}
-	if message.call.OpenTerminal {
-		ref := core.EntityRef{Kind: "session", ID: message.call.TargetID}
-		if message.call.Action == "start_orchestrator" {
-			ref = core.EntityRef{Kind: "orchestrator"}
-		}
-		return tea.Batch(m.beginRefresh(), m.openDedicated(ref))
+		return tea.Batch(m.beginRefresh(), m.navigationAttempt(*message.call.NavigationRef, true, message.call.NavigationClient))
 	}
 	return m.beginRefresh()
 }
@@ -673,7 +673,7 @@ func (m *Model) dialogSeverityKind() dialogSeverity {
 	switch m.formMode {
 	case "destructive":
 		return severityDanger
-	case "select", "workflow", "create_workspace":
+	case "select", "workflow", "create_workspace", "navigation_client":
 		return severityNeutral
 	default:
 		return actionSeverity(m.formAction.Action)

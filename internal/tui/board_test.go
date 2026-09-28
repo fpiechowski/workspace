@@ -270,7 +270,7 @@ func TestBoardEmptyAndNoMatchStatesReuseExistingCopy(t *testing.T) {
 	empty := New(Config{ProjectFound: true, WorkspaceID: "ws_empty_board", NoColor: true})
 	empty.width, empty.height = 120, 32
 	empty.navigate(route{Page: "tasks", View: "board"})
-	if view := empty.View(); !strings.Contains(view, "No tasks yet") || !strings.Contains(view, "Press o to start the orchestrator") {
+	if view := empty.View(); !strings.Contains(view, "No tasks yet") || !strings.Contains(view, "Press o, then a to start the orchestrator") {
 		t.Fatalf("board empty state missing the Tasks copy:\n%s", view)
 	}
 

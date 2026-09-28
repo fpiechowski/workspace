@@ -112,7 +112,8 @@ that the TUI never creates a workspace.
 **Sessions.** A selectable entry combines the agent, the logical session state, and its
 current Run. The list excludes deleted sessions, supports the current/history filter
 (`f`), and has no secondary tabs or its own `Tab` cycle. Opening an entry shows the
-session details, and `t` opens or resumes its verified terminal.
+session details. `g` opens an attached-client picker for a verified jump when the
+selection has a live tmux target; `a` keeps start and resume as explicit actions.
 
 **Worktrees.** Selectable tree rows show stored revision lineage using `├─`, `└─`, and
 continuation columns before the name. Metadata includes the source revision and related
@@ -161,10 +162,15 @@ workspace loads remain explicit body messages rather than relying on the header 
 
 **Navigation and terminal.** Arrows or `j`/`k` select an entry; `Enter` opens details,
 and `1`–`5` move between Tasks, Sessions, Worktrees, Results, and More. `Tab` changes
-the result type on Results. `t` opens the verified current terminal, and starting or
-resuming requires explicit form confirmation. Multiple task sessions require choosing a
-specific session. A historical Run retains its exact target and does not automatically
-redirect to a newer execution.
+the result type on Results. `g` always opens the attached-client picker for a
+jump-capable selection, even when only one client is attached. Rows identify the
+client's TTY and current session; the last successfully used client is marked and
+preselected while it remains live. The picker is ordered deterministically otherwise.
+Confirming moves only that client to the exact verified workspace, window, and pane.
+`Esc` and `Ctrl+C` cancel without a tmux effect. Starting or resuming remains an
+explicit, confirmed `a` action. Multiple task sessions require choosing a specific
+session. A historical Run retains its exact target and does not automatically redirect
+to a newer execution.
 
 **Filter.** `/` edits a case-insensitive search over name, ID, and subtitle. `Enter`
 confirms. `Esc` while editing restores the previous filter and selection; outside editing
@@ -173,7 +179,7 @@ previous page. The footer shows the available action.
 
 **Help and shortcuts.** All shortcuts come from one centralized `bubbles/key` set. The
 footer and full help render only bindings enabled for the current selection; unsupported
-`t`, `g`, and `a` are not advertised for entries without a process or action. Full help
+`g` and `a` are not advertised for entries without a process or action. Full help
 scrolls through `bubbles/viewport` and is grouped into **Navigation, View, Runtime,
 Actions, Exit**, so every group is reachable at 40×12; the status row shows the scroll
 position. On task details, `1`–`3` are shortcuts to related resources, not primary

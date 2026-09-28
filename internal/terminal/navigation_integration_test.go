@@ -102,6 +102,30 @@ func TestNavigatorRealPTYAndClientSelection(t *testing.T) {
 	err = navigator.Select(ctx, target)
 	expectNavigationCode(t, err, "navigation_ambiguous")
 
+	clients, err := navigator.ListClients(ctx, target)
+	if err != nil || len(clients) != 2 {
+		t.Fatalf("listed clients = %+v, %v", clients, err)
+	}
+	var chosen Client
+	for _, client := range clients {
+		if client.TTY == clientB.tty {
+			chosen = client
+		}
+	}
+	if chosen.TTY == "" {
+		t.Fatalf("selected client %q was not in the client list: %+v", clientB.tty, clients)
+	}
+	if err := navigator.Jump(ctx, target, chosen); err != nil {
+		t.Fatal(err)
+	}
+	clientBPane := strings.TrimSpace(tmuxOutput(t, socket, "display-message", "-p", "-c", clientB.tty, "#{pane_id}"))
+	if clientBPane != targetPane {
+		t.Fatalf("explicit jump selected the wrong pane: got %q want %q", clientBPane, targetPane)
+	}
+	// Restore the TUI client's original pane before exercising its legacy
+	// workspace attach behavior below.
+	tmuxOutput(t, socket, "switch-client", "-c", clientA.tty, "-t", sourcePane)
+
 	detachScriptClient(t, socket, clientB)
 	waitClientCount(t, socket, 1)
 	if err := navigator.Select(ctx, target); err != nil {

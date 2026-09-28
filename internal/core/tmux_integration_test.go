@@ -168,8 +168,8 @@ func TestTmuxEndToEnd(t *testing.T) {
 		t.Fatalf("managed split changed the active orchestrator pane: ui=%+v orchestrator=%+v", uiPane, orch)
 	}
 	frame := waitTUIFrame(t, rt, ui.PaneID, "Fix checkout")
-	if !strings.Contains(frame, "Agents & runs") {
-		t.Fatalf("managed TUI did not render Agents & runs: %s", frame)
+	if !strings.Contains(frame, "tasks ·") {
+		t.Fatalf("managed TUI did not render its Tasks page: %s", frame)
 	}
 	if _, err := rt.call(ctx, "send-keys", "-t", ui.PaneID, "q"); err != nil {
 		t.Fatal(err)
@@ -294,8 +294,8 @@ func TestTmuxEndToEnd(t *testing.T) {
 	if uiPaneCount != 1 {
 		t.Fatalf("UI recovery created %d owned panes, want one: %+v", uiPaneCount, recoveredTopology.Panes)
 	}
-	if frame := waitTUIFrame(t, rt, recoveredUI.PaneID, "Fix checkout"); !strings.Contains(frame, "Agents & runs") {
-		t.Fatalf("recovered TUI did not render Agents & runs: %s", frame)
+	if frame := waitTUIFrame(t, rt, recoveredUI.PaneID, "Fix checkout"); !strings.Contains(frame, "tasks ·") {
+		t.Fatalf("recovered TUI did not render its Tasks page: %s", frame)
 	}
 	statusBeforeWindowLoss, err := s.Status(ctx, id)
 	if err != nil {
@@ -309,6 +309,7 @@ func TestTmuxEndToEnd(t *testing.T) {
 	}
 	orchestratorRunBeforeWindowLoss := resumedOrchestrator.CurrentRunID
 	oldOrchestratorWindow := resumedOrchestrator.WindowID
+	oldRecoveredUIPane := recoveredUI.PaneID
 	if _, err := rt.call(ctx, "kill-window", "-t", oldOrchestratorWindow); err != nil {
 		t.Fatal(err)
 	}
@@ -346,10 +347,10 @@ func TestTmuxEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	recoveredUI = waitUIStatus(t, s, id, func(status UIStatus) bool {
-		return status.State == "running" && status.PaneID != "" && status.WindowID == recoveredOrchestrator.WindowID && status.PaneID != recoveredUI.PaneID
+		return status.State == "running" && status.PaneID != "" && status.WindowID == recoveredOrchestrator.WindowID && status.PaneID != oldRecoveredUIPane
 	})
-	if frame := waitTUIFrame(t, rt, recoveredUI.PaneID, "Fix checkout"); !strings.Contains(frame, "Agents & runs") {
-		t.Fatalf("TUI did not return in the recovered orchestrator window: %s", frame)
+	if frame := waitTUIFrame(t, rt, recoveredUI.PaneID, "Fix checkout"); !strings.Contains(frame, "tasks ·") {
+		t.Fatalf("TUI did not return to its Tasks page in the recovered orchestrator window: %s", frame)
 	}
 	recoveredTopology, err = rt.ObserveTopology(ctx, id)
 	if err != nil {
@@ -420,8 +421,8 @@ func TestTmuxEndToEnd(t *testing.T) {
 		width, height int
 		want          string
 	}{
-		{width: 210, height: 18, want: "Agents & runs"},
-		{width: 120, height: 40, want: "Agents & runs"},
+		{width: 210, height: 18, want: "tasks ·"},
+		{width: 120, height: 40, want: "tasks ·"},
 		{width: 60, height: 10, want: "q"},
 	} {
 		if _, err := rt.call(ctx, "resize-window", "-t", recoveredOrchestrator.WindowID, "-x", strconv.Itoa(size.width), "-y", strconv.Itoa(size.height)); err != nil {
@@ -684,7 +685,7 @@ func waitTUIFrame(t *testing.T, runtime Tmux, paneID, title string) string {
 	for time.Now().Before(deadline) {
 		var err error
 		frame, err = runtime.call(context.Background(), "capture-pane", "-p", "-t", paneID, "-S", "-")
-		if err == nil && strings.Contains(frame, title) && strings.Contains(frame, "Agents & runs") {
+		if err == nil && strings.Contains(frame, title) && strings.Contains(frame, "tasks ·") {
 			return frame
 		}
 		time.Sleep(50 * time.Millisecond)

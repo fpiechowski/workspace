@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"os"
 	"time"
 
 	keybind "github.com/charmbracelet/bubbles/key"
@@ -196,63 +195,11 @@ func (m *Model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.rebuildViewport()
 		return m, m.scheduleIfIdle()
 	case navigationTargetMsg:
-		if msg.generation != m.generation {
-			return m, nil
-		}
-		m.navigationPending = false
-		if msg.err != nil {
-			return m, m.navigationFailure(msg.err, msg.ref, msg.afterReconcile, msg.mode)
-		}
-		if m.navigator == nil {
-			m.loadError = "terminal navigation is unavailable"
-			m.rebuildViewport()
-			return m, nil
-		}
-		if msg.mode == NavigationModeDedicated {
-			navigator, target, gen := m.navigator, msg.target, m.generation
-			m.navigationPending = true
-			return m, func() tea.Msg {
-				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-				defer cancel()
-				return navigationResultMsg{generation: gen, ref: msg.ref, mode: msg.mode, afterReconcile: msg.afterReconcile, err: navigator.OpenDedicated(ctx, target)}
-			}
-		}
-		if os.Getenv("TMUX") != "" {
-			navigator, target, gen := m.navigator, msg.target, m.generation
-			m.navigationPending = true
-			return m, func() tea.Msg {
-				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-				defer cancel()
-				return navigationResultMsg{generation: gen, ref: msg.ref, mode: msg.mode, afterReconcile: msg.afterReconcile, err: navigator.Select(ctx, target)}
-			}
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		cmd, err := m.navigator.PrepareAttach(ctx, msg.target)
-		cancel()
-		if err != nil {
-			return m, m.navigationFailure(err, msg.ref, msg.afterReconcile, msg.mode)
-		}
-		// Do not use tea.ExecProcess here. Bubble Tea v1.3.10 can restart its
-		// renderer before the old renderer goroutine stops, leaving animation
-		// updates in the model but no longer flushing frames (upstream #1778).
-		m.externalProcess = &ExternalProcessRequest{
-			Cmd: cmd, Ref: msg.ref, Mode: msg.mode, AfterReconcile: msg.afterReconcile, Generation: m.generation,
-		}
-		m.quit = true
-		return m, tea.Quit
+		return m.handleNavigationTarget(msg)
+	case navigationClientsMsg:
+		return m.handleNavigationClients(msg)
 	case navigationResultMsg:
-		if msg.generation != m.generation {
-			return m, nil
-		}
-		m.navigationPending = false
-		if msg.err != nil {
-			return m, m.navigationFailure(msg.err, msg.ref, msg.afterReconcile, msg.mode)
-		}
-		m.loadError = ""
-		if msg.mode == NavigationModeDedicated {
-			m.notice = "Dedicated terminal opened or reused."
-		}
-		return m, m.beginRefresh()
+		return m.handleNavigationResult(msg)
 	case actionResultMsg:
 		return m, m.finishAction(msg)
 	case hideResultMsg:
@@ -302,10 +249,16 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.form != nil {
 		if msg.Type == tea.KeyEsc || key == "ctrl+c" {
+			picker := m.formMode == "navigation_client"
 			m.form = nil
 			m.formMode = ""
 			m.formConfirm = false
-			m.notice = "Action cancelled."
+			if picker {
+				m.cancelNavigation()
+				m.notice = "Jump cancelled."
+			} else {
+				m.notice = "Action cancelled."
+			}
 			m.rebuildViewport()
 			return m, nil
 		}
@@ -314,6 +267,21 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.actionPending {
 		m.notice = "An action is still in progress. Wait for its result before leaving this workspace."
 		return m, nil
+	}
+	if m.navigationPending {
+		switch key {
+		case "esc", "ctrl+c":
+			m.cancelNavigation()
+			m.notice = "Jump cancelled."
+			m.rebuildViewport()
+			return m, nil
+		case "r":
+			m.cancelNavigation()
+			m.notice = "Jump cancelled; refreshing the current view."
+		default:
+			m.notice = "Tmux navigation is still being verified. Press Esc to cancel."
+			return m, nil
+		}
 	}
 	if m.managed && key == "ctrl+c" {
 		m.filtering = false
@@ -439,9 +407,6 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.validateSelection()
 		m.rebuildViewport()
 		return m, nil
-	}
-	if keybind.Matches(msg, m.keys.Terminal) {
-		return m, m.openTerminal()
 	}
 	if keybind.Matches(msg, m.keys.WorkspacePicker) {
 		m.push(route{Page: "project"})
@@ -740,54 +705,4 @@ func (m *Model) openSelection() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
-}
-
-func (m *Model) jumpSelected() tea.Cmd {
-	item, _, items := m.selectedItem()
-	if m.route.Page == "orchestrator" {
-		return m.jump(core.EntityRef{Kind: "orchestrator"})
-	}
-	if m.route.Page == "worktree" || m.route.Page == "session" || m.route.Page == "run" || m.route.Page == "service" {
-		return m.jump(core.EntityRef{Kind: m.route.Page, ID: m.route.EntityID})
-	}
-	if len(items) == 0 {
-		return nil
-	}
-	if item.Kind == "run" {
-		return m.jump(core.EntityRef{Kind: "run", ID: item.ID})
-	}
-	if item.Kind == "workspace" || item.Kind == "worktree" || item.Kind == "session" || item.Kind == "service" {
-		return m.jump(core.EntityRef{Kind: item.Kind, ID: item.ID})
-	}
-	return m.jump(core.EntityRef{Kind: item.Kind, ID: item.ID})
-}
-
-func (m *Model) jump(ref core.EntityRef) tea.Cmd {
-	return m.jumpAttempt(ref, false)
-}
-
-func (m *Model) jumpAttempt(ref core.EntityRef, afterReconcile bool) tea.Cmd {
-	return m.navigationAttempt(ref, afterReconcile, NavigationModeJump)
-}
-
-func (m *Model) openDedicated(ref core.EntityRef) tea.Cmd {
-	return m.navigationAttempt(ref, false, NavigationModeDedicated)
-}
-
-func (m *Model) navigationAttempt(ref core.EntityRef, afterReconcile bool, mode NavigationMode) tea.Cmd {
-	if m.backend == nil || m.navigator == nil || m.navigationPending {
-		return nil
-	}
-	m.navigationPending = true
-	workspace := m.workspaceID
-	if workspace == "" && ref.Kind == "workspace" {
-		workspace = ref.ID
-	}
-	backend, gen := m.backend, m.generation
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		target, err := backend.ResolveNavigationTarget(ctx, workspace, ref)
-		return navigationTargetMsg{generation: gen, ref: ref, mode: mode, afterReconcile: afterReconcile, target: target, err: err}
-	}
 }
