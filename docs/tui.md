@@ -98,10 +98,13 @@ sources and missing parent records are labeled explicitly. The tree describes cr
 lineage, not task `depends_on` edges or subsequent merges. Legacy records without a
 stored parent are not linked based on coincident handoff revisions.
 
-`a` in the project picker provides workspace creation (title, description, and explicit
+`a` in the project picker provides workspace creation (title, description, an explicit
 mode choice: a named workflow with `plan-first` preselected, or `No workflow (manual
-orchestration)`) as
-well as permanent deletion of the selected workspace. Deletion is available only after
+orchestration)`, and an `Autonomous run` toggle) as
+well as permanent deletion of the selected workspace. The toggle is compatible with
+both workflow choices and reaches `CreateOptions.Autonomous`; the core still requires a
+deliver-capable orchestrator route, so creation fails with `autonomy_unsupported`
+otherwise. Deletion is available only after
 entering the full ID and does not require release or archive. It is a full discard: it
 stops the runtime and removes state, all worktrees including uncommitted files, and
 local `workspace/<id>/…` branches. This operation cannot be undone. Workflow selection
@@ -243,6 +246,34 @@ Snapshot, tmux, UI, and Git reads have separate asynchronous states. A late resp
 from an old workspace cannot overwrite the current selection. A failed read shows an
 error and preserves the last good snapshot as stale. An unavailable runtime does not
 block browsing persisted state.
+
+## Autonomous runs
+
+An autonomous workspace is visible throughout the shell. The workspace header shows an
+autonomy badge next to the workspace status: `● autonomous running` (accent), `✓ autonomous
+delivered` (success), or `○ autonomous disabled` (neutral). The badge is plain text as well
+as colored, so the state word survives `--no-color`. An interactive workspace (`autonomy`
+absent) shows no badge. More lists an `Autonomy` entry for any workspace with an autonomy
+record, and its detail page shows the mode, source, enabled revision and time, the disabled
+reason, and, once delivered, the full final report: outcome, recommendation, phase,
+integration head, artifact IDs and the pending user commands.
+
+A delivered report is also a Needs-attention entry (`Autonomous run delivered: <outcome>`)
+so it cannot be missed. `Enter` opens the same report view. After delivery the run stops and
+the ordinary user actions (land, complete) remain in the action menu; `complete` is never
+performed by the TUI.
+
+While the run is running or delivered, the Orchestrator, Runtime and Autonomy pages offer
+`Disable autonomous run`. It opens a required reason form and then a confirmation that
+records the current workspace revision as a guard and uses a `tui_<ULID>` operation key, so a
+repeated confirmation cannot apply twice and a stale revision is rejected. The action calls
+the same core `autonomy disable` contract; selecting it does not auto-accept any result.
+
+The TUI is the user's terminal, but it deliberately does not offer `autonomy enable` on an
+existing workspace (that is a terminal-only decision, PLAN assumption A4), and it never
+accepts handoffs or answers decisions on the user's behalf. The Decisions collection and
+detail mark autonomous gate decisions with `by orchestrator (autonomous)` and expose the
+subject, evidence and Run provenance.
 
 ## Terminal and Managed Pane
 

@@ -659,7 +659,7 @@ func (m *Model) isCollectionPage() bool {
 
 func (m *Model) isDetailPage() bool {
 	switch m.route.Page {
-	case "task", "worktree", "session", "run", "agent", "service", "artifact", "handoff", "check", "decision", "change_request", "issue", "dispatcher", "preview", "orchestrator", "runtime", "error":
+	case "task", "worktree", "session", "run", "agent", "service", "artifact", "handoff", "check", "decision", "change_request", "issue", "dispatcher", "preview", "orchestrator", "runtime", "autonomy", "error":
 		return true
 	default:
 		return false

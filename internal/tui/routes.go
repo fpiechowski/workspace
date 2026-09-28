@@ -55,6 +55,9 @@ func (m *Model) allItems() []collectionItem {
 			{ID: "activity", Kind: "page", Title: "Recent recorded activity", Subtitle: "Runs, handoffs, artifacts and decisions"},
 			{ID: "documents", Kind: "page", Title: "Documents", Subtitle: "Workspace, workflow and input snapshots"},
 		}
+		if autonomy := s.Status.Workspace.Autonomy; autonomy != nil {
+			items = append(items, collectionItem{ID: "autonomy", Kind: "page", Title: "Autonomy", Subtitle: m.autonomyNotice()})
+		}
 	case "tasks":
 		for _, task := range s.Status.Workspace.Tasks {
 			if task.DeletedAt != nil {
@@ -195,7 +198,14 @@ func (m *Model) allItems() []collectionItem {
 			if decision.Answer == "" {
 				state = "pending"
 			}
-			items = append(items, collectionItem{ID: decision.ID, Kind: "decision", Title: decision.Question, Subtitle: decision.Kind + " · " + state, State: state})
+			subtitle := decision.Kind + " · " + state
+			if decision.ResolvedBy != "" {
+				subtitle += " · by " + decision.ResolvedBy
+			}
+			if decision.Autonomous {
+				subtitle += " (autonomous)"
+			}
+			items = append(items, collectionItem{ID: decision.ID, Kind: "decision", Title: decision.Question, Subtitle: subtitle, State: state})
 		}
 		if decision := s.Status.Workspace.PendingDecision; decision != nil {
 			found := false
@@ -330,6 +340,9 @@ func (m *Model) attentionItems() []collectionItem {
 	taskProblems := make(map[string]struct{})
 	reportedTaskRuns := make(map[string]struct{})
 	reportedRuns := make(map[string]struct{})
+	if autonomy := m.snapshot.Status.Workspace.Autonomy; autonomy != nil && autonomy.State == "delivered" {
+		items = append(items, collectionItem{ID: m.snapshot.Status.Workspace.ID, Kind: "autonomy", Title: m.autonomyNotice(), Subtitle: autonomyReportPending(autonomy.Report), State: "delivered"})
+	}
 	if decision := m.snapshot.Status.Workspace.PendingDecision; decision != nil {
 		items = append(items, collectionItem{ID: decision.ID, Kind: "decision", Title: "Pending decision: " + decision.Question, State: "pending"})
 	}
@@ -397,7 +410,7 @@ func (m *Model) attentionItems() []collectionItem {
 	sort.SliceStable(items, func(i, j int) bool {
 		priority := func(item collectionItem) int {
 			switch item.Kind {
-			case "decision":
+			case "decision", "autonomy":
 				return 0
 			case "runtime":
 				return 1

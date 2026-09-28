@@ -209,6 +209,8 @@ func actionVerb(action string) string {
 		return "Completing workspace"
 	case "reopen_workspace":
 		return "Reopening workspace"
+	case "disable_autonomy":
+		return "Disabling autonomy"
 	case "retry_task":
 		return "Retrying task"
 	case "close_session":

@@ -28,6 +28,9 @@ func (m *Model) detailContent() string {
 	if m.route.Page == "orchestrator" {
 		return m.orchestratorContent()
 	}
+	if m.route.Page == "autonomy" {
+		return m.autonomyContent()
+	}
 	if m.route.Page == "issue" {
 		return m.issueContent()
 	}
@@ -301,6 +304,15 @@ func (m *Model) detailContent() string {
 		doc.title("Decision", decision.Question, firstNonempty(decision.Answer, "pending"))
 		doc.section("Facts")
 		doc.field("Kind", decision.Kind)
+		if decision.ResolvedBy != "" {
+			doc.field("Resolved by", decision.ResolvedBy)
+		}
+		if decision.Autonomous {
+			doc.field("Autonomous", "yes")
+		}
+		if decision.Subject != "" {
+			doc.field("Subject", decision.Subject)
+		}
 		doc.section("Options")
 		doc.bullets(decision.Options)
 		if decision.Answer != "" {
@@ -308,8 +320,18 @@ func (m *Model) detailContent() string {
 			doc.body(decision.Answer)
 			doc.field("Reason", decision.Reason)
 		}
+		if len(decision.Evidence) > 0 {
+			doc.section("Evidence")
+			doc.bullets(decision.Evidence)
+		}
 		doc.section("Provenance")
 		doc.provenance("ID", decision.ID)
+		if decision.RunID != "" {
+			doc.provenance("Run", decision.RunID)
+		}
+		if decision.DecidedAt != nil {
+			doc.provenance("Decided", formatTime(*decision.DecidedAt))
+		}
 	case "change_request":
 		request, ok := findChangeRequest(m.snapshot.Status.Workspace.ChangeRequests, id)
 		if !ok {

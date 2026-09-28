@@ -99,6 +99,10 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		} else {
 			add("Start or resume project Dispatcher", "start_dispatcher")
 		}
+	case "autonomy":
+		if !workspaceClosed && m.snapshot.Status.Workspace.Autonomy != nil && m.snapshot.Status.Workspace.Autonomy.State != "disabled" {
+			add("Disable autonomous run", "disable_autonomy")
+		}
 	case "project":
 		add("Create a new workspace", "create_workspace")
 	case "orchestrator", "runtime":
@@ -127,6 +131,9 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		}
 		if workspaceState != "archived" {
 			add("Reconcile runtime", "reconcile")
+		}
+		if !workspaceClosed && m.snapshot.Status.Workspace.Autonomy != nil && m.snapshot.Status.Workspace.Autonomy.State != "disabled" {
+			add("Disable autonomous run", "disable_autonomy")
 		}
 		if kind == "runtime" {
 			if m.uiStatus.Desired {
@@ -191,6 +198,10 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 	if action == "reopen_workspace" {
 		call.TargetName = firstNonempty(m.snapshot.Status.Workspace.Title, m.workspaceID)
 		call.TargetDetails = "Reopen this completed workspace for explicitly authorized follow-up work. The reason is recorded, the current revision is guarded, accepted tasks and provenance are preserved, and release/integration/testing state must be established again before completion."
+	}
+	if action == "disable_autonomy" {
+		call.TargetName = firstNonempty(m.snapshot.Status.Workspace.Title, m.workspaceID)
+		call.TargetDetails = fmt.Sprintf("Stop resolving orchestrator-level gates on your behalf and return this workspace to the interactive contract. The core guards the current workspace revision %d.", call.ExpectedRevision)
 	}
 	m.formAction = call
 	m.formReason = ""
@@ -297,11 +308,14 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 	if action == "delete_workspace" || action == "delete_task" || action == "delete_session" {
 		return m.openDestructiveConfirm(action)
 	}
-	if action == "retry_task" || action == "close_session" || action == "reopen_workspace" {
+	if action == "retry_task" || action == "close_session" || action == "reopen_workspace" || action == "disable_autonomy" {
 		m.formMode = "reason"
 		label := "Reason for this action"
 		if action == "retry_task" {
 			label = "Why should this task be retried?"
+		}
+		if action == "disable_autonomy" {
+			label = "Why is the autonomous run being disabled?"
 		}
 		m.form = huh.NewForm(huh.NewGroup(
 			huh.NewInput().Key("reason").Title(label).Placeholder("Enter a short reason").Value(&m.formReason).Validate(func(value string) error {
@@ -556,6 +570,8 @@ func actionCaption(call ActionCall) string {
 		return "Resume paused workspace; this does not restart stopped Runs"
 	case "reopen_workspace":
 		return "Reopen completed workspace " + targetName
+	case "disable_autonomy":
+		return "Disable the autonomous run in workspace " + call.WorkspaceID
 	case "reconcile":
 		if call.NavigationRef != nil {
 			return "Terminal unavailable. Reconcile workspace runtime?"
@@ -694,7 +710,7 @@ func actionSeverity(action string) dialogSeverity {
 	switch action {
 	case "delete_workspace", "delete_task", "delete_session", "pause_interrupt":
 		return severityDanger
-	case "archive_workspace", "complete_workspace", "reopen_workspace", "stop_run", "stop_service", "retry_task", "pause":
+	case "archive_workspace", "complete_workspace", "reopen_workspace", "disable_autonomy", "stop_run", "stop_service", "retry_task", "pause":
 		return severityWarning
 	default:
 		return severityNeutral
