@@ -420,12 +420,16 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace artifact list",
 	),
 	"workspace integration": h(
-		"Prepare a shared checkout and immutable input manifest from accepted implementation tasks.",
-		"workspace integration prepare --tasks task_01,task_02",
+		"Prepare a shared checkout of accepted implementation tasks and, after explicit user approval, land the accepted integration into the target branch.",
+		"workspace integration prepare --tasks task_01,task_02\nworkspace integration land --user-confirmed",
 	),
 	"workspace integration prepare": h(
 		"Create the integration worktree for accepted implementation tasks. Omit --tasks to include all accepted implementation tasks. With a landing workflow the default base is the current tip of the target branch.",
 		"workspace integration prepare --target main",
+	),
+	"workspace integration land": h(
+		"Fast-forward the accepted integration into the target branch after explicit user approval. The workspace must be an active plan-first workflow in the integration phase with an accepted integrator; the target must fast-forward and be a clean checkout when checked out. The merge is local only and never pushes.",
+		"workspace integration land --expected-revision 12 --user-confirmed",
 	),
 	"workspace decision": h(
 		"Refresh pending workflow questions and record explicit user answers.",
@@ -561,15 +565,15 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace resume",
 	),
 	"workspace complete": h(
-		"Complete an intentionally manual workspace after the user explicitly confirms it. The workspace must have no active Runs, services or non-accepted tasks; a workspace with a selected workflow uses release confirmation instead.",
-		"workspace complete --reason \"Analysis delivered\" --user-confirmed",
+		"Complete an intentionally manual workspace, or a plan-first workflow whose accepted integration has landed (or that has nothing to integrate), after the user explicitly confirms it. The workspace must have no active Runs, services or non-accepted tasks; an extended workflow with release/live-test gates still uses release confirmation instead.",
+		"workspace complete --reason \"Analysis delivered\" --user-confirmed\nworkspace complete --user-confirmed --expected-revision 12",
 	),
 	"workspace reopen": h(
 		"Reopen only a completed workspace for explicitly authorized follow-up work. The exact current revision and a non-empty reason are required; an agent actor must also pass --user-confirmed. The prior WORKSPACE.md is preserved under history/reopen_ID/.",
 		"workspace reopen --reason \"User requested follow-up fixes\" --expected-revision 12 --operation-key reopen-1",
 	),
 	"workspace archive": h(
-		"Archive a completed workspace so it can no longer receive normal delegation operations. A workflow workspace requires a confirmed release; a completed manual workspace does not.",
+		"Archive a completed workspace so it can no longer receive normal delegation operations. A workflow that declares a release gate requires a confirmed release; a completed manual or plan-first workspace does not.",
 		"workspace archive",
 	),
 	"workspace clean": h(
@@ -695,6 +699,7 @@ var flagHelpSpecs = map[string]map[string]string{
 	"workspace handoff accept":      {"reason-file": "Review feedback file."},
 	"workspace handoff reject":      {"reason-file": "Review feedback file; required when rejecting."},
 	"workspace integration prepare": {"tasks": "Accepted task IDs; repeat or comma-separate. Defaults to all implementation tasks.", "base": "Target base revision.", "target": "Branch the integration lands into; defaults to the workspace base ref for landing workflows."},
+	"workspace integration land":    {"target": "Target branch; must match the prepared integration target.", "expected-revision": "Required current workspace revision.", "user-confirmed": "Attest that the user explicitly approved landing into the target branch when running from an agent session."},
 	"workspace decision answer": {
 		"answer":            "Selected option or answer text (required).",
 		"reason":            "User's explanation for the answer.",

@@ -728,3 +728,251 @@ func TestReopenJSONAndHelpContract(t *testing.T) {
 		}
 	}
 }
+
+type cliFakeRuntime struct {
+	launches int
+	panes    map[string]core.Pane
+}
+
+func (r *cliFakeRuntime) Launch(_ context.Context, l core.Launch) (core.Pane, error) {
+	r.launches++
+	if r.panes == nil {
+		r.panes = map[string]core.Pane{}
+	}
+	p := core.Pane{ID: "cli%" + strconv.Itoa(r.launches), SessionID: l.SessionID, RunID: l.RunID, WorkspaceID: l.WorkspaceID}
+	r.panes[p.ID] = p
+	return p, nil
+}
+func (r *cliFakeRuntime) Inspect(_ context.Context, id string) (core.Pane, error) {
+	p, ok := r.panes[id]
+	if !ok {
+		return core.Pane{}, &core.Error{Code: "pane_missing", Message: "missing pane"}
+	}
+	return p, nil
+}
+func (r *cliFakeRuntime) Stop(_ context.Context, id string) error { delete(r.panes, id); return nil }
+func (r *cliFakeRuntime) StopWorkspace(_ context.Context, workspaceID string) error {
+	for id, p := range r.panes {
+		if p.WorkspaceID == workspaceID {
+			delete(r.panes, id)
+		}
+	}
+	return nil
+}
+func (r *cliFakeRuntime) Attach(context.Context, string, string) error { return nil }
+
+func cliGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v %s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func cliCommit(t *testing.T, dir, message string) {
+	t.Helper()
+	cliGit(t, dir, "-c", "user.name=Workspace Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", message)
+}
+
+func cliFinishTask(t *testing.T, s *core.Service, ws string, session core.Session, worktree core.Worktree, artifact string) {
+	t.Helper()
+	ctx := context.Background()
+	dir := filepath.Join(worktree.Path, "work-products")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{artifact, "CHECKS.log"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("Verified CLI fixture result\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h, err := s.SubmitHandoff(ctx, ws, core.HandoffOptions{
+		Session:   session.ID,
+		Summary:   "Completed",
+		Artifacts: []string{"work-products/" + artifact, "work-products/CHECKS.log"},
+		Checks:    []core.Check{{Command: "fixture checks", ExitCode: 0, Evidence: "CHECKS.log"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReviewHandoff(ctx, ws, h.ID, true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StopSession(ctx, ws, session.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func cliCreateTask(t *testing.T, s *core.Service, ws, name, role string, deps []string) core.Task {
+	t.Helper()
+	task, err := s.CreateTask(context.Background(), ws, core.TaskSpec{Name: name, Title: name, Goal: "Bounded CLI task", Role: role, DependsOn: deps, AcceptanceCriteria: []string{"Produce an inspected result"}}, "cli-task:"+name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return task
+}
+
+func cliStartTask(t *testing.T, s *core.Service, ws string, task core.Task, worktreeID string) (core.Session, core.Worktree) {
+	t.Helper()
+	ctx := context.Background()
+	prompt := map[string]string{"planner": "planning", "implementer": "implementation", "integrator": "implementation"}[task.Role]
+	agent, err := s.CreateAgent(ctx, ws, core.AgentOptions{Name: task.Name, Role: task.Role, PromptTemplate: prompt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var worktree core.Worktree
+	if worktreeID == "" {
+		worktree, err = s.CreateWorktree(ctx, ws, core.WorktreeOptions{Name: task.Name})
+		if err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		status, statusErr := s.Status(ctx, ws)
+		if statusErr != nil {
+			t.Fatal(statusErr)
+		}
+		for _, candidate := range status.Worktrees {
+			if candidate.ID == worktreeID {
+				worktree = candidate
+			}
+		}
+		if worktree.ID == "" {
+			t.Fatalf("worktree %s missing", worktreeID)
+		}
+	}
+	session, err := s.StartSession(ctx, ws, core.SessionOptions{Agent: agent.ID, Worktree: worktree.ID, Task: task.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return session, worktree
+}
+
+// TestIntegrationLandJSON drives a plan-first v2 workspace to an accepted
+// integration and lands it through the real CLI command, checking the JSON
+// contract and the compare-and-swap ref update on an unchecked-out target.
+func TestIntegrationLandJSON(t *testing.T) {
+	project := t.TempDir()
+	ctx := context.Background()
+	for _, args := range [][]string{
+		{"init"},
+		{"-c", "user.name=Workspace Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"},
+	} {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = project
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	if _, err := core.InitProject(ctx, project); err != nil {
+		t.Fatal(err)
+	}
+	s := &core.Service{Root: project, Runtime: &cliFakeRuntime{}, Executable: os.Args[0]}
+	cfg, err := s.Config()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Clients = map[string]core.Client{"test": {Adapter: "command", LaunchArgv: []string{os.Args[0], "{prompt}"}}}
+	cfg.Profiles = map[string]core.Profile{}
+	cfg.Defaults.OrchestratorProfile = "frontier"
+	for _, name := range []string{"frontier", "implementation", "live-testing"} {
+		cfg.Profiles[name] = core.Profile{Routes: []core.Route{{ID: name + "-a", Client: "test", Provider: "a", Model: "test-model", MaxConcurrency: 8}}}
+	}
+	config, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".workspace", "config.yaml"), config, 0600); err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.Create(ctx, core.CreateOptions{Title: "CLI landing", Input: "Land a change", Workflow: "plan-first", OperationKey: "cli-landing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws := created.Workspace.ID
+	cliGit(t, project, "branch", "release")
+
+	plan := cliCreateTask(t, s, ws, "plan", "planner", nil)
+	pp, pw := cliStartTask(t, s, ws, plan, "")
+	cliFinishTask(t, s, ws, pp, pw, "PLAN.md")
+	if _, err := s.AdvanceWorkflow(ctx, ws, "plan_review", ""); err != nil {
+		t.Fatal(err)
+	}
+	impl := cliCreateTask(t, s, ws, "implementation", "implementer", []string{plan.ID})
+	if _, err := s.AdvanceWorkflow(ctx, ws, "implementing", ""); err != nil {
+		t.Fatal(err)
+	}
+	ip, iw := cliStartTask(t, s, ws, impl, "")
+	if err := os.WriteFile(filepath.Join(iw.Path, "fix.txt"), []byte("implementation\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cliGit(t, iw.Path, "add", "fix.txt")
+	cliGit(t, iw.Path, "-c", "user.name=Workspace Test", "-c", "user.email=test@example.invalid", "commit", "-m", "fix issue")
+	cliFinishTask(t, s, ws, ip, iw, "IMPLEMENTATION.md")
+	if _, err := s.AdvanceWorkflow(ctx, ws, "integration", ""); err != nil {
+		t.Fatal(err)
+	}
+	i, err := s.PrepareIntegration(ctx, ws, core.IntegrationOptions{Target: "release", OperationKey: "cli-integration"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	integrator := cliCreateTask(t, s, ws, "integrator", "integrator", []string{impl.ID})
+	is, iwt := cliStartTask(t, s, ws, integrator, i.WorktreeID)
+	integrationWorktree := ""
+	status, err := s.Status(ctx, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, wt := range status.Worktrees {
+		if wt.ID == i.WorktreeID {
+			integrationWorktree = wt.Path
+		}
+	}
+	if integrationWorktree == "" {
+		t.Fatal("integration worktree missing")
+	}
+	cliGit(t, integrationWorktree, "-c", "user.name=Workspace Test", "-c", "user.email=test@example.invalid", "merge", "--no-ff", "--no-edit", i.Heads[0])
+	cliFinishTask(t, s, ws, is, iwt, "INTEGRATION.md")
+
+	status, err = s.Status(ctx, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Workspace.Integration == nil || status.Workspace.Integration.HeadCommit == "" {
+		t.Fatal("integration was not accepted")
+	}
+	headCommit := status.Workspace.Integration.HeadCommit
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{
+		"--json", "--project", project, "integration", "land", "--workspace", ws,
+		"--target", "release", "--user-confirmed",
+		"--expected-revision", strconv.Itoa(status.Workspace.Revision),
+		"--operation-key", "cli-land-op",
+	}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("integration land failed: %d %s", code, errOut.String())
+	}
+	var landed struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &landed); err != nil {
+		t.Fatal(err)
+	}
+	if !landed.OK || landed.Data.Workspace.Integration == nil || landed.Data.Workspace.Integration.Landing == nil || landed.Data.Workspace.Integration.Landing.State != "landed" {
+		t.Fatalf("land response: %s", out.String())
+	}
+	if got := cliGit(t, project, "rev-parse", "refs/heads/release"); got != headCommit {
+		t.Fatalf("release ref: got %s want %s", got, headCommit)
+	}
+
+	var helpOut, helpErr bytes.Buffer
+	if code := Execute([]string{"help", "integration", "land"}, nil, &helpOut, &helpErr); code != 0 || helpErr.Len() != 0 {
+		t.Fatalf("integration land help failed: %d %s", code, helpErr.String())
+	}
+	for _, want := range []string{"integration land", "--target", "--expected-revision", "--user-confirmed"} {
+		if !strings.Contains(helpOut.String(), want) {
+			t.Errorf("integration land help lacks %q:\n%s", want, helpOut.String())
+		}
+	}
+}

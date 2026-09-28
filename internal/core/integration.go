@@ -87,6 +87,9 @@ func (s *Service) PrepareIntegration(ctx context.Context, selector string, opt I
 		if err := requireWorkflowCapability(d, capIntegration); err != nil {
 			return err
 		}
+		if landingLanded(d) {
+			return fail("workspace_completed", "the integration already landed; reopen the workspace to prepare a new integration")
+		}
 		if _, err := d.previous(opt.OperationKey, opt); err != nil {
 			return err
 		}

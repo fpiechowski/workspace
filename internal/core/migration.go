@@ -53,6 +53,9 @@ func revisionGate(s *Service, d *Document, revision int, reason string) error {
 	if strings.TrimSpace(reason) == "" {
 		return fail("reason_required", "explain the revision change")
 	}
+	if landingLanded(d) {
+		return fail("workspace_completed", "landed work requires workspace reopen before revising inputs or workflow")
+	}
 	if d.State.Status != "paused" || d.State.Release.UserConfirmed {
 		return fail("workspace_not_paused", "pause unreleased work before revising its inputs or workflow")
 	}

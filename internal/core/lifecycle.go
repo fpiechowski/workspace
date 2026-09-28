@@ -81,11 +81,11 @@ func (s *Service) archive(ctx context.Context, selector string, expectedRevision
 			}
 			return fail("release_required", "confirm release before archiving")
 		}
-		// A workflow workspace still requires the explicit release confirmation.
-		// An intentionally manual workspace reaches completed only through the
-		// dedicated user-confirmed complete operation, so archive does not ask
-		// for a workflow release reference (user decision 2026-09-17).
-		if !d.State.Release.UserConfirmed && !d.State.Manual() {
+		// Only a workflow that declares a release gate still requires the
+		// explicit release confirmation. A completed manual workspace and a
+		// completed plan-first workspace (v1 or v2) become archivable without a
+		// release reference (user decision 2026-09-17).
+		if workflowHasCapability(d, capRelease) && !d.State.Release.UserConfirmed {
 			return fail("release_required", "confirm release before archiving")
 		}
 		for _, p := range d.Registry.Services {

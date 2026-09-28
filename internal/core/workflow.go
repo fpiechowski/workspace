@@ -606,6 +606,24 @@ func (s *Service) ConfirmRelease(ctx context.Context, selector, reference string
 	return out, err
 }
 
+// landingMenuActions suggests the next landing decision for an integration
+// phase: prepare, then the user-approved land, then complete.
+func landingMenuActions(d *Document) []MenuAction {
+	if landingLanded(d) || !hasLiveImplementer(d.State.Tasks) {
+		return []MenuAction{{"complete", "Complete this workflow workspace", fmt.Sprintf("complete --user-confirmed --expected-revision %d", d.State.Revision)}}
+	}
+	if d.State.Integration != nil {
+		if _, err := acceptedRole(d, "integrator"); err == nil {
+			target := integrationTarget(d)
+			return []MenuAction{{"land", "Land integration into " + target + " (user approval)", fmt.Sprintf("integration land --target %s --expected-revision %d --user-confirmed", target, d.State.Revision)}}
+		}
+	}
+	return []MenuAction{
+		{"prepare", "Prepare the integration worktree", "integration prepare"},
+		{"advance", "Check requirements", "workflow advance"},
+	}
+}
+
 type MenuAction struct {
 	ID      string `json:"id" yaml:"id"`
 	Label   string `json:"label" yaml:"label"`
@@ -670,6 +688,8 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 			out.Actions = append(out.Actions, MenuAction{"decision", "Answer the pending question", fmt.Sprintf("decision answer %s --expected-revision %d", d.State.PendingDecision.ID, d.State.PendingDecision.Revision)})
 		} else if out.Phase == "awaiting_release" {
 			out.Actions = append(out.Actions, MenuAction{"release", "Confirm deployment or release", "release confirm --reference <reference>"})
+		} else if workflowHasCapability(d, capLanding) && out.Phase == integrationPhase(d) {
+			out.Actions = append(out.Actions, landingMenuActions(d)...)
 		} else {
 			out.Actions = append(out.Actions, MenuAction{"advance", "Check requirements and advance workflow", "workflow advance"})
 		}

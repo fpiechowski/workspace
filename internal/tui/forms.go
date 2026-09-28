@@ -118,6 +118,9 @@ func (m *Model) availableActions() ([]huh.Option[string], string) {
 		if m.snapshot.Status.Workspace.Manual() && workspaceState != "completed" && workspaceState != "archived" {
 			add("Complete this manual workspace", "complete_workspace")
 		}
+		if m.snapshot.Status.Workspace.LandingReadyToComplete() {
+			add("Complete this workflow workspace", "complete_workspace")
+		}
 		if workspaceState == "completed" {
 			add("Reopen completed workspace", "reopen_workspace")
 			add("Archive completed workspace", "archive_workspace")
@@ -179,7 +182,11 @@ func (m *Model) beginAction(action, targetID string) tea.Cmd {
 	}
 	if action == "complete_workspace" {
 		call.TargetName = firstNonempty(m.snapshot.Status.Workspace.Title, m.workspaceID)
-		call.TargetDetails = "Complete this manual workspace. The core refuses completion while Runs, services or non-accepted tasks remain; archive then no longer requires a workflow release reference."
+		if m.snapshot.Status.Workspace.Manual() {
+			call.TargetDetails = "Complete this manual workspace. The core refuses completion while Runs, services or non-accepted tasks remain; archive then no longer requires a workflow release reference."
+		} else {
+			call.TargetDetails = "Complete this plan-first workflow. The core requires the accepted integration to have landed (or nothing to integrate) and no active Runs, services or non-accepted tasks."
+		}
 	}
 	if action == "reopen_workspace" {
 		call.TargetName = firstNonempty(m.snapshot.Status.Workspace.Title, m.workspaceID)
@@ -539,7 +546,7 @@ func actionCaption(call ActionCall) string {
 	case "archive_workspace":
 		return "Archive completed workspace " + targetName
 	case "complete_workspace":
-		return "Complete manual workspace " + targetName
+		return "Complete workspace " + targetName
 	case "pause":
 		return "Pause the workspace and leave current Runs untouched"
 	case "resume_workspace":
