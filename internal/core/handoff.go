@@ -412,9 +412,24 @@ func promoteRejectedHandoffProvenance(d *Document, h *Handoff, t *Task) {
 }
 
 func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept bool, feedback string, keys ...string) (Handoff, error) {
+	return s.ReviewHandoffAudited(ctx, selector, id, accept, feedback, "", nil, keys...)
+}
+
+// ReviewHandoffAudited is ReviewHandoff with the rationale and evidence an
+// autonomous orchestrator must attach while the run is running. The rationale
+// joins the idempotency payload only when non-empty, so non-autonomous and
+// pre-existing receipts keep their digests.
+func (s *Service) ReviewHandoffAudited(ctx context.Context, selector, id string, accept bool, feedback, rationale string, evidence []string, keys ...string) (Handoff, error) {
 	var out Handoff
-	err := mutate(s, ctx, selector, keys, []any{"handoff.review", id, accept, feedback}, &out, s.requireOrchestrator, func(d *Document) error {
+	request := any([]any{"handoff.review", id, accept, feedback})
+	if strings.TrimSpace(rationale) != "" || len(evidence) > 0 {
+		request = []any{"handoff.review", id, accept, feedback, rationale, evidence}
+	}
+	err := mutate(s, ctx, selector, keys, request, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		if err := s.requireGateRationale(d, rationale); err != nil {
 			return err
 		}
 		if err := rejectNewWorkspaceWork(d, "reviewing task results"); err != nil {
@@ -504,6 +519,9 @@ func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept
 			if strings.TrimSpace(feedback) == "" {
 				return fail("feedback_required", "give a reason for rejection")
 			}
+			if err := s.requireAutonomyBound(d, "autonomous.handoff_reject", "task:"+t.ID, 2, "rejection"); err != nil {
+				return err
+			}
 			h.State = "rejected"
 			t.State = "needs_changes"
 			t.Reason = feedback
@@ -540,6 +558,15 @@ func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept
 		} else {
 			addMessage(d, d.State.OrchestratorAgentID, fromSession, h.FromAgent, "review", "Handoff "+h.ID+" "+h.State+". "+feedback, h.ID, "")
 		}
+		kind := "autonomous.handoff_accept"
+		subject := "handoff:" + h.ID
+		if !accept {
+			kind = "autonomous.handoff_reject"
+			subject = "task:" + t.ID
+		} else if t.Role == "planner" {
+			kind = "autonomous.plan_acceptance"
+		}
+		s.appendGateDecision(d, kind, subject, rationale, evidence)
 		return saveDocument(d)
 	})
 	return out, err

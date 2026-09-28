@@ -1,96 +1,95 @@
-# Implementation report — task_01M3MJYR3CFG2SYPQ3Q4A39YS1 (I1: Autonomy state, creation, enable/disable, status)
+# Implementation report — task_01M3MJYR9QGF20V1CN9WV9NC08 (I2: Decision audit model and rationale-carrying gate mutations)
 
 ## Commit
 
-- `3af359c` — `feat: add workspace autonomy state and lifecycle`
+- `4072865` — `feat: add autonomy decision audit to gate mutations`
 
 ## Changes
 
-### Core state model (`internal/core/model.go`, `internal/core/workflow_model.go`)
+### Core audit helpers (`internal/core/autonomy.go`)
 
-- Added `Workspace.Autonomy *Autonomy` (`yaml|json:"autonomy,omitempty"`), so a
-  non-autonomous document serializes exactly as before.
-- Added `Autonomy` (`mode`, `state`, `enabled_at`, `enabled_revision`, `source`,
-  `disabled_at`, `disabled_reason`, `report`) and `AutonomyReport` (`outcome`,
-  `recommendation`, `artifact_ids`, `phase`, `integration_head`, `pending`,
-  `revision`, `created_at`) types per PLAN §3.1.
-- Added the omitempty `Decision` audit fields (`resolved_by`, `autonomous`,
-  `subject`, `evidence`, `session_id`, `run_id`, `decided_at`) and a
-  `Workspace.AutonomyRunning()` helper. The minimal Decision extension landed
-  here so `autonomy.enabled`/`autonomy.disabled` can record their resolver; I2
-  extends the gate mutations that consume the same fields.
+- `isAgentActor`, `requireGateRationale`, `appendGateDecision`,
+  `autonomyDecisionCount`, `requireAutonomyBound` implement the PLAN §3.4
+  contract: while `Autonomy.State == running` and the actor is an agent, an
+  orchestrator-level gate needs a non-empty rationale, and the gate and its
+  audit `Decision` are written in the same mutation.
+- `DecisionRecordOptions` and `RecordDecision` add
+  `workspace decision record --kind autonomous.assumption|autonomous.question_answer
+  --subject … --rationale … --evidence …`. It is orchestrator-agent only and
+  only while the run is running, with a receipted, replayable payload.
+- Decisions carry `ResolvedBy: orchestrator`, `Autonomous: true`, a `Subject`
+  (`handoff:…`, `task:…`, `phase:…`), `Evidence`, `SessionID`, `RunID`,
+  `DecidedAt` and a per-kind question; the narrative gets one
+  `## Autonomous decisions` line. `autonomy.enabled`/`autonomy.disabled`
+  continue to use the I1 helper.
 
-### Creation (`internal/core/project.go`, `internal/core/issue_workspace.go`, `internal/core/issues.go`)
+### Gate mutations
 
-- `CreateOptions.Autonomous bool` (`json:",omitempty"`) joins the idempotency
-  payload without changing existing digests.
-- `createWorkspaceLegacy` refuses autonomous creation with
-  `autonomy_unsupported` when the resolved orchestrator profile has no route
-  whose client declares the `deliver` capability, then persists
-  `autonomy.state=running`, `source=create`, `mode=autonomous` for both
-  plan-first and `--no-workflow` creation.
-- `IssueDispatchOptions.Autonomous` is threaded into the linked workspace
-  creation. `DispatchIssue` refuses a project-scoped (Dispatcher) actor with
-  `forbidden` before `dispatchIssue` clears the actor; a user dispatch succeeds.
+- `ReviewHandoffAudited` (handoff accept/reject): rationale is required while a
+  run is running; accept records `autonomous.plan_acceptance` for planners and
+  `autonomous.handoff_accept` otherwise; reject records
+  `autonomous.handoff_reject` and enforces the 2-rejection bound.
+- `AdvanceWorkflowAudited`: requires rationale, records
+  `autonomous.phase_advance` with `phase:<new>`.
+- `UpdateStateAudited`: requires rationale only for a `phase` patch and records
+  `autonomous.phase_advance`.
+- `RetireTaskAudited` (cancel/abandon/supersede) records `autonomous.retire`.
+- `RetryTaskAudited`: requires rationale, enforces the 1-retry bound and records
+  `autonomous.retry`.
 
-### Lifecycle (`internal/core/autonomy.go`, `internal/core/reopen.go`)
+The existing entry points (`ReviewHandoff`, `AdvanceWorkflow`, `UpdateState`,
+`RetireTask`, `RetryTask`, `RetryTaskGuarded`) delegate with an empty rationale,
+so their callers and tests are unchanged. Rationale and evidence join the
+idempotency payload only when non-empty (`omitempty` struct fields, or a
+conditionally extended array), preserving historical receipt digests.
 
-- New `EnableAutonomy`: `requireUser` (agents always get
-  `user_decision_required`), refuses `needs_workflow`, completed and archived
-  workspaces and an existing `PendingDecision`, enforces the expected revision,
-  requires a deliver-capable orchestrator route, then appends an
-  `autonomy.enabled` decision in the same mutation.
-- New `DisableAutonomy`: user or orchestrator with `--user-confirmed`,
-  requires an autonomy record, a reason and the expected revision; records
-  `disabled_at`/`disabled_reason` and appends an `autonomy.disabled` decision.
-- Shared `resolvedOrchestratorProfile`/`requireAutonomySupport` helpers.
-- `ReopenWorkspace` now clears `Autonomy`; the full pre-reopen document
-  (including the autonomy record) is already preserved under
-  `history/reopen_ID/WORKSPACE.md`.
+### Bounds and failure injection
 
-### Interfaces (`internal/cli/*`, `internal/tui/*`)
+- Rejection and retry counts are derived per task and per orchestrator Run from
+  the appended decisions (`autonomyDecisionCount`); exceeding a bound returns
+  `autonomy_bound_exceeded`.
+- `flushDocumentTestHook` (nil in production) lets a test inject a persistence
+  failure and prove the gate change and its decision are lost together.
 
-- `workspace create --autonomous`, `workspace issue dispatch --autonomous`, and
-  new `workspace autonomy enable|disable` commands (with `--reason`,
-  `--expected-revision`, `--user-confirmed`) plus help/flag documentation.
-- TUI create form gained an `Autonomous run` confirm; `ActionCall.Autonomous`
-  is translated by `createOptions` into `CreateOptions.Autonomous`.
-- `status --json` and the workspace document expose autonomy automatically via
-  the `Workspace` projection.
+### Interfaces
+
+- CLI: `--rationale`/`--evidence` on `handoff accept|reject`,
+  `workflow advance`, `state update`, `task retry|cancel|abandon|supersede`, plus
+  the new `decision record` command and updated help/flag documentation. The TUI
+  and other callers keep using the unchanged entry points.
 
 ## Acceptance criteria
 
-- Autonomy types exist as designed; a non-autonomous `CreateOptions`, `Workspace`
-  and `Decision` keep their exact JSON/YAML shape and a created non-autonomous
-  `WORKSPACE.md` contains no `autonomy:` front matter (targeted test).
-- `create --autonomous` persists `state=running`, `source=create` for plan-first
-  and manual; replays idempotently under the same key; a changed flag under the
-  same key returns `operation_conflict`. The TUI form passes `Autonomous`.
-- Dispatcher dispatch with `Autonomous` returns `forbidden`; a user dispatch
-  creates a running autonomous workspace.
-- Creation and enable return `autonomy_unsupported` without a deliver-capable
-  orchestrator route.
-- `autonomy enable` refuses agent actors, `needs_workflow`, completed, archived
-  and pending-decision workspaces; revision guard and receipt replay work; it
-  appends `autonomy.enabled`.
-- `autonomy disable` works for the user and attesting orchestrator, records the
-  reason, replays idempotently and appends `autonomy.disabled`.
-- `reopen` clears autonomy while the history copy retains `state: running`;
-  `status --json` exposes autonomy.
+- Autonomy-running agent gates without `--rationale` return `rationale_required`;
+  with a rationale, the gate and a
+  `Decision{ResolvedBy: orchestrator, Autonomous: true, Subject, Evidence, RunID}`
+  commit together. `TestAutonomyGateSaveFailureIsAtomic` injects a save failure
+  and shows the handoff, task state, decisions and revision are unchanged.
+- Without autonomy, agents need no rationale and no audit decision is written
+  (`TestAutonomyGateWithoutAutonomyNeedsNoRationale`); old receipts replay
+  through the audited entry points with an empty rationale
+  (`TestAutonomyGateReceiptDigestsUnchanged`).
+- `decision record` works only for the orchestrator agent while running, with
+  idempotent receipts and the documented kinds
+  (`TestAutonomyDecisionRecord`, `TestAutonomyCLIDecisionRecordIsOrchestratorOnly`).
+- Rejection (2) and retry (1) bounds return `autonomy_bound_exceeded`
+  (`TestAutonomyRejectionBound`, `TestAutonomyRetryRationaleAndBound`).
 
 ## Checks
 
-See `work-products/CHECKS.yaml`. All commands exited 0: gofmt clean,
-`go vet ./...`, the two targeted autonomy test runs, and the full
-`go test ./... -count=1 -timeout 570s`.
+See `work-products/CHECKS-I2.yaml`. All commands exited 0: gofmt clean,
+`go vet ./...`, the targeted `Decision|Handoff|Autonomy` core run,
+`go test ./internal/cli -count=1`, and the full `go test ./... -count=1`.
 
 ## Risks and deviations
 
-- Documentation (README/PRODUCT/ARCHITECTURE/docs) is intentionally deferred to
-  I4 per PLAN §5, whose file list owns those documents; I1 changes no doc file.
-- The `Decision` audit fields landed in I1 (allowed by the task) so the lifecycle
-  decisions can record `ResolvedBy`; I2 should reuse them rather than duplicate.
-- `autonomy report`, the safety boundary (`autonomy_excluded`) and the menu are
-  I3 scope and are not implemented here.
-- The full tmux race suite was not required for I1; the complete non-race
-  package suite was run instead.
+- The rejection bound counts rejections made by the current orchestrator Run, so
+  a resumed orchestrator Run starts a fresh count. The PLAN says "per task
+  during a run" and the Decision provenance is the concrete Run, so this is the
+  literal reading; a stricter cross-Run counter would need an extra durable
+  field.
+- Evidence is taken from `--evidence` verbatim; no artifact IDs are inferred.
+- Documentation (`README`, `PRODUCT`, `ARCHITECTURE`, `docs/*`) stays in the I4
+  scope per PLAN §5, so this task changes no document.
+- The safety boundary (`autonomy_excluded`), `autonomy report` and the menu are
+  I3 scope.

@@ -456,6 +456,10 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace decision answer decision_01 --answer yes --user-confirmed",
 		requiredArgument("id", "Pending decision ID to answer."),
 	),
+	"workspace decision record": h(
+		"Record an orchestrator judgment that has no gate mutation, such as an autonomous assumption taken while resolving an ambiguity. Allowed only while an autonomous run is running.",
+		"workspace decision record --kind autonomous.assumption --subject task:task_01 --rationale \"Chose the conservative reading of the issue\"",
+	),
 	"workspace release": h(
 		"Record explicit deployment or release confirmation for the workflow.",
 		"workspace release confirm --reference production-2026-09-14 --user-confirmed",
@@ -659,7 +663,7 @@ var flagHelpSpecs = map[string]map[string]string{
 	"workspace dispatcher start": {
 		"profile": "Explicit Dispatcher profile override; otherwise use defaults.dispatcher_profile, then defaults.orchestrator_profile.",
 	},
-	"workspace workflow advance": {"to": "Expected next phase; fail if the workflow would advance from a different phase."},
+	"workspace workflow advance": {"to": "Expected next phase; fail if the workflow would advance from a different phase.", "rationale": "Autonomous-run rationale for advancing the workflow.", "evidence": "Audit evidence for the autonomous decision; repeat or comma-separate."},
 	"workspace workflow migrate": {
 		"reason":            "Why this workflow-template revision is required (required).",
 		"expected-revision": "Current workspace revision required for this migration (required).",
@@ -692,10 +696,10 @@ var flagHelpSpecs = map[string]map[string]string{
 	},
 	"workspace session bind-thread": {"thread-id": "Native client conversation or session ID."},
 	"workspace task create":         {"spec-file": "YAML or Markdown frontmatter task specification file (required)."},
-	"workspace task retry":          {"reason": "Reason recorded for starting the new attempt."},
-	"workspace task cancel":         {"reason": "Reason recorded for cancelling the task (required)."},
-	"workspace task abandon":        {"reason": "Reason recorded for abandoning the task (required)."},
-	"workspace task supersede":      {"reason": "Reason recorded for superseding the task (required)."},
+	"workspace task retry":          {"reason": "Reason recorded for starting the new attempt.", "rationale": "Autonomous-run rationale for retrying the task.", "evidence": "Audit evidence for the autonomous decision; repeat or comma-separate."},
+	"workspace task cancel":         {"reason": "Reason recorded for cancelling the task (required).", "rationale": "Autonomous-run rationale for retiring the task.", "evidence": "Audit evidence for the autonomous decision; repeat or comma-separate."},
+	"workspace task abandon":        {"reason": "Reason recorded for abandoning the task (required).", "rationale": "Autonomous-run rationale for retiring the task.", "evidence": "Audit evidence for the autonomous decision; repeat or comma-separate."},
+	"workspace task supersede":      {"reason": "Reason recorded for superseding the task (required).", "rationale": "Autonomous-run rationale for retiring the task.", "evidence": "Audit evidence for the autonomous decision; repeat or comma-separate."},
 	"workspace message send": {
 		"body-file":  "File containing the message body (required).",
 		"to":         "Compatibility recipient Agent ID or persona name; accepted only when exactly one eligible Session exists.",
@@ -719,8 +723,8 @@ var flagHelpSpecs = map[string]map[string]string{
 		"check":        "Captured check receipt ID; repeat for multiple checks.",
 		"risk":         "Known risk; repeat for multiple risks.",
 	},
-	"workspace handoff accept":      {"reason-file": "Review feedback file."},
-	"workspace handoff reject":      {"reason-file": "Review feedback file; required when rejecting."},
+	"workspace handoff accept":      {"reason-file": "Review feedback file.", "rationale": "Autonomous-run rationale for accepting the result.", "evidence": "Artifact IDs, check IDs or commits supporting the decision."},
+	"workspace handoff reject":      {"reason-file": "Review feedback file; required when rejecting.", "rationale": "Autonomous-run rationale for rejecting the result.", "evidence": "Artifact IDs, check IDs or commits supporting the decision."},
 	"workspace integration prepare": {"tasks": "Accepted task IDs; repeat or comma-separate. Defaults to all implementation tasks.", "base": "Target base revision.", "target": "Branch the integration lands into; defaults to the workspace base ref for landing workflows."},
 	"workspace integration land":    {"target": "Target branch; must match the prepared integration target.", "expected-revision": "Required current workspace revision.", "user-confirmed": "Attest that the user explicitly approved landing into the target branch when running from an agent session."},
 	"workspace decision answer": {
@@ -730,9 +734,15 @@ var flagHelpSpecs = map[string]map[string]string{
 		"expected-revision": "Revision of the pending decision (required).",
 		"user-confirmed":    "Attest that this answer was explicitly supplied by the user.",
 	},
+	"workspace decision record": {
+		"kind":      "Decision kind: autonomous.assumption or autonomous.question_answer.",
+		"subject":   "Decision subject, such as task:task_01, handoff:handoff_01 or phase:plan_review.",
+		"rationale": "Recorded rationale for the decision (required).",
+		"evidence":  "Artifact IDs, check IDs or commits supporting the decision; repeat or comma-separate.",
+	},
 	"workspace release confirm":        {"reference": "Release or deployment reference (required).", "user-confirmed": "Attest explicit user release confirmation when running from an agent session."},
 	"workspace complete":               {"reason": "Reason recorded for the completion.", "user-confirmed": "Attest the explicit user completion request when running from an agent session.", "expected-revision": "Required current workspace revision."},
-	"workspace state update":           {"patch-file": "YAML/JSON patch for title, body, status or phase (required).", "expected-revision": "Required current workspace revision (required)."},
+	"workspace state update":           {"patch-file": "YAML/JSON patch for title, body, status or phase (required).", "expected-revision": "Required current workspace revision (required).", "rationale": "Autonomous-run rationale for a phase-changing patch.", "evidence": "Audit evidence for the autonomous decision; repeat or comma-separate."},
 	"workspace state edit":             {"file": "Import an edited WORKSPACE.md instead of opening EDITOR.", "expected-revision": "Required revision when using --file."},
 	"workspace change-request prepare": {"worktree": "Worktree to diff; defaults to integration.", "target": "Target branch.", "title": "Change-request title.", "body-file": "Change-request description file."},
 	"workspace change-request publish": {"user-confirmed": "Attest that the user approved the prepared diff and description (required in agent sessions)."},
