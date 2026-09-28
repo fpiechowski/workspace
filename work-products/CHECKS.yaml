@@ -10,6 +10,6 @@
 - command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./internal/bootstrap ./internal/release ./internal/terminal ./internal/tui ./internal/upgrade -count=1 -timeout 90s
   exit_code: 0
   evidence: CHECKS.log
-- command: grep -rn issue-resolution internal --include='*_test.go'
-  exit_code: 1
-  evidence: CHECKS.log
+- command: bash -c '! grep -rn issue-resolution internal --include="*_test.go"'
+  exit_code: 0
+  evidence: check_01M3KKS6WE2KRN7F9BKQS69BJ6.log
