@@ -41,6 +41,7 @@ type ActionCall struct {
 	Input                 string
 	Workflow              string
 	NoWorkflow            bool
+	Autonomous            bool
 	Key                   string
 	ExpectedRevision      int
 	ExpectedIssueRevision int
@@ -169,7 +170,7 @@ func (b CoreBackend) PerformAction(ctx context.Context, selector string, call Ac
 // createOptions translates a TUI creation action into the core creation
 // contract. NoWorkflow and Workflow are mutually exclusive by construction.
 func createOptions(call ActionCall) core.CreateOptions {
-	return core.CreateOptions{Title: call.TargetName, Input: call.Input, Workflow: call.Workflow, NoWorkflow: call.NoWorkflow, OperationKey: call.Key}
+	return core.CreateOptions{Title: call.TargetName, Input: call.Input, Workflow: call.Workflow, NoWorkflow: call.NoWorkflow, Autonomous: call.Autonomous, OperationKey: call.Key}
 }
 
 func (b CoreBackend) HideManagedUI(ctx context.Context, selector, key string) error {

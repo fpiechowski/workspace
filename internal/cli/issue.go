@@ -120,6 +120,7 @@ func issueCommands(o *options) *cobra.Command {
 	dispatchCmd.Args = cobra.ExactArgs(1)
 	dispatchCmd.Flags().StringVar(&dispatch.Workflow, "workflow", "", "Configured workflow; defaults to plan-first")
 	dispatchCmd.Flags().BoolVar(&dispatch.NoWorkflow, "no-workflow", false, "Create an active manual Workspace")
+	dispatchCmd.Flags().BoolVar(&dispatch.Autonomous, "autonomous", false, "Start the linked Workspace in an autonomous run; user dispatches only")
 	dispatchCmd.Flags().StringVar(&dispatch.Base, "base", "HEAD", "Base Git revision")
 	dispatchCmd.Flags().StringVar(&dispatch.Title, "title", "", "Workspace title override")
 	dispatchCmd.Flags().BoolVar(&dispatch.Start, "start", false, "Also start the linked Workspace Orchestrator")

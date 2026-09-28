@@ -109,6 +109,7 @@ func (s *Service) ReopenWorkspace(ctx context.Context, selector string, opt Reop
 		d.State.Integration = nil
 		d.State.LiveTest = LiveTest{}
 		d.State.Release = Release{}
+		d.State.Autonomy = nil
 		for i := range d.State.ChangeRequests {
 			d.State.ChangeRequests[i].State = "outdated"
 		}

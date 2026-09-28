@@ -106,7 +106,49 @@ type Decision struct {
 	Answer      string     `yaml:"answer,omitempty" json:"answer,omitempty"`
 	Reason      string     `yaml:"reason,omitempty" json:"reason,omitempty"`
 	AnsweredAt  *time.Time `yaml:"answered_at,omitempty" json:"answered_at,omitempty"`
+	// Audit fields for the autonomy record. They are all omitempty so existing
+	// decisions keep their serialized shape and receipt digests.
+	ResolvedBy string     `yaml:"resolved_by,omitempty" json:"resolved_by,omitempty"`
+	Autonomous bool       `yaml:"autonomous,omitempty" json:"autonomous,omitempty"`
+	Subject    string     `yaml:"subject,omitempty" json:"subject,omitempty"`
+	Evidence   []string   `yaml:"evidence,omitempty" json:"evidence,omitempty"`
+	SessionID  string     `yaml:"session_id,omitempty" json:"session_id,omitempty"`
+	RunID      string     `yaml:"run_id,omitempty" json:"run_id,omitempty"`
+	DecidedAt  *time.Time `yaml:"decided_at,omitempty" json:"decided_at,omitempty"`
 }
+
+// Autonomy records the per-workspace autonomous run. A nil pointer means the
+// workspace follows the interactive contract. Mode is "autonomous"; State is
+// running, delivered or disabled.
+type Autonomy struct {
+	Mode            string          `yaml:"mode,omitempty" json:"mode,omitempty"`
+	State           string          `yaml:"state" json:"state"`
+	EnabledAt       *time.Time      `yaml:"enabled_at,omitempty" json:"enabled_at,omitempty"`
+	EnabledRevision int             `yaml:"enabled_revision,omitempty" json:"enabled_revision,omitempty"`
+	Source          string          `yaml:"source,omitempty" json:"source,omitempty"`
+	DisabledAt      *time.Time      `yaml:"disabled_at,omitempty" json:"disabled_at,omitempty"`
+	DisabledReason  string          `yaml:"disabled_reason,omitempty" json:"disabled_reason,omitempty"`
+	Report          *AutonomyReport `yaml:"report,omitempty" json:"report,omitempty"`
+}
+
+// AutonomyReport is the durable final report that ends an autonomous run
+// instead of a user question.
+type AutonomyReport struct {
+	Outcome         string     `yaml:"outcome" json:"outcome"`
+	Recommendation  string     `yaml:"recommendation,omitempty" json:"recommendation,omitempty"`
+	ArtifactIDs     []string   `yaml:"artifact_ids,omitempty" json:"artifact_ids,omitempty"`
+	Phase           string     `yaml:"phase,omitempty" json:"phase,omitempty"`
+	IntegrationHead string     `yaml:"integration_head,omitempty" json:"integration_head,omitempty"`
+	Pending         []string   `yaml:"pending,omitempty" json:"pending,omitempty"`
+	Revision        int        `yaml:"revision,omitempty" json:"revision,omitempty"`
+	CreatedAt       *time.Time `yaml:"created_at,omitempty" json:"created_at,omitempty"`
+}
+
+// AutonomyRunning reports whether the workspace is mid autonomous run.
+func (w Workspace) AutonomyRunning() bool {
+	return w.Autonomy != nil && w.Autonomy.State == "running"
+}
+
 type Integration struct {
 	WorktreeID  string   `yaml:"worktree_id" json:"worktree_id"`
 	TaskIDs     []string `yaml:"task_ids" json:"task_ids"`

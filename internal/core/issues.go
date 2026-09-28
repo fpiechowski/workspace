@@ -97,6 +97,7 @@ type IssueDispatchOptions struct {
 	IssueID      string
 	Workflow     string
 	NoWorkflow   bool
+	Autonomous   bool
 	Base         string
 	Title        string
 	Start        bool

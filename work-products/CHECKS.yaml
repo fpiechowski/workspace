@@ -1,12 +1,15 @@
 - command: gofmt -l ./cmd ./internal
   exit_code: 0
-  evidence: evidence-gofmt.txt
+  evidence: evidence-autonomy-gofmt.txt
 - command: go vet ./...
   exit_code: 0
-  evidence: evidence-vet.txt
-- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 180s
+  evidence: evidence-autonomy-vet.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID -u WORKSPACE_ROLE -u WORKSPACE_PARENT_SESSION_ID go test ./internal/core -run 'Autonomy' -count=1
   exit_code: 0
-  evidence: evidence-go-test-all.txt
-- command: go build -o /tmp/workspace-t3-removal ./cmd/workspace && python3 scripts/check-install.py /tmp/workspace-t3-removal
+  evidence: evidence-autonomy-core-test.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID -u WORKSPACE_ROLE -u WORKSPACE_PARENT_SESSION_ID go test ./internal/cli -run 'Autonom' -count=1
   exit_code: 0
-  evidence: evidence-install.txt
+  evidence: evidence-autonomy-cli-test.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID -u WORKSPACE_ROLE -u WORKSPACE_PARENT_SESSION_ID go test ./... -count=1 -timeout 570s
+  exit_code: 0
+  evidence: evidence-autonomy-go-test-all.txt

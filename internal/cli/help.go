@@ -142,6 +142,18 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace issue dispatch issue_01 --workflow plan-first --start --operation-key dispatch:issue_01",
 		requiredArgument("issue", "Durable Issue ID."),
 	),
+	"workspace autonomy": h(
+		"Manage the per-workspace autonomous run. While a run is in progress the orchestrator resolves the orchestrator-level gates on recorded judgment and ends with a durable report; operations with external, lifecycle or authorization effects stay reserved for the user.",
+		"workspace autonomy enable --reason \"User approved unattended run\" --expected-revision 3",
+	),
+	"workspace autonomy enable": h(
+		"Enable autonomous mode for an existing active workspace. Only the terminal user may run it; agents are refused because enabling hands over the user's gates. The workspace must be active, have a selected workflow or manual mode, have no pending decision and a deliver-capable orchestrator route.",
+		"workspace autonomy enable --reason \"User approved unattended run\" --expected-revision 3 --operation-key autonomy:enable:1",
+	),
+	"workspace autonomy disable": h(
+		"Make an autonomous workspace interactive again and record the reason. The user may always disable it; an orchestrator agent must attest the user's request with --user-confirmed. The exact current revision is required.",
+		"workspace autonomy disable --reason \"User resumed interactive control\" --expected-revision 4\nworkspace autonomy disable --reason \"User resumed interactive control\" --expected-revision 4 --user-confirmed",
+	),
 	"workspace dispatcher": h(
 		"Manage the singleton project-scoped Dispatcher. It handles project Issue intake and routing only; Workspace Orchestrators own execution.",
 		"workspace dispatcher status\nworkspace dispatcher start --profile dispatcher",
@@ -612,6 +624,7 @@ var flagHelpSpecs = map[string]map[string]string{
 		"no-workflow": "Create an active workspace with no workflow for manual orchestration; cannot be combined with --workflow.",
 		"base":        "Base Git revision to freeze for the workspace.",
 		"from-issue":  "Existing durable Issue ID; mutually exclusive with intent, --input-file and --issue.",
+		"autonomous":  "Start the workspace in an autonomous run; requires a deliver-capable orchestrator route.",
 	},
 	"workspace issue create": {
 		"title":      "Issue title; tracker title is used when omitted.",
@@ -629,9 +642,19 @@ var flagHelpSpecs = map[string]map[string]string{
 	"workspace issue dispatch": {
 		"workflow":    "Configured workflow; mutually exclusive with --no-workflow.",
 		"no-workflow": "Create an active manual Workspace.",
+		"autonomous":  "Start the linked Workspace in an autonomous run; the project Dispatcher is refused.",
 		"base":        "Base Git revision to freeze for the Workspace.",
 		"title":       "Workspace title override; defaults to the Issue title.",
 		"start":       "Explicitly start the linked Workspace Orchestrator after creation.",
+	},
+	"workspace autonomy enable": {
+		"reason":            "Why autonomous mode is being enabled.",
+		"expected-revision": "Exact current workspace revision required before enabling.",
+	},
+	"workspace autonomy disable": {
+		"reason":            "Why autonomous mode is being disabled.",
+		"expected-revision": "Exact current workspace revision required before disabling.",
+		"user-confirmed":    "Agent attestation that the user requested disabling autonomy.",
 	},
 	"workspace dispatcher start": {
 		"profile": "Explicit Dispatcher profile override; otherwise use defaults.dispatcher_profile, then defaults.orchestrator_profile.",

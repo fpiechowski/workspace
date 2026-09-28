@@ -332,6 +332,7 @@ func createWorkflowChoice(choice string) (string, bool) {
 
 func (m *Model) openCreateWorkspaceForm(names []string) tea.Cmd {
 	m.formTitle, m.formInput, m.formWorkflow = "", "", "plan-first"
+	m.formAutonomous = false
 	options := []huh.Option[string]{
 		huh.NewOption("Choose later", ""),
 		huh.NewOption("No workflow (manual orchestration)", createManualChoice),
@@ -354,7 +355,8 @@ func (m *Model) openCreateWorkspaceForm(names []string) tea.Cmd {
 			return nil
 		}),
 		huh.NewSelect[string]().Key("workflow").Title("Workflow").Options(options...).Value(&m.formWorkflow),
-	)).WithWidth(m.dialogWidth()).WithHeight(m.formHeight(7)).WithTheme(huhTheme(m.palette))
+		huh.NewConfirm().Key("autonomous").Title("Autonomous run").Description("Run without collecting user decisions (requires a deliver-capable orchestrator route)").Affirmative("Yes").Negative("No").Value(&m.formAutonomous),
+	)).WithWidth(m.dialogWidth()).WithHeight(m.formHeight(9)).WithTheme(huhTheme(m.palette))
 	return m.form.Init()
 }
 
@@ -439,6 +441,7 @@ func (m *Model) updateForm(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.formAction.TargetName = strings.TrimSpace(m.form.GetString("title"))
 		m.formAction.Input = strings.TrimSpace(m.form.GetString("input"))
 		m.formAction.Workflow, m.formAction.NoWorkflow = createWorkflowChoice(m.form.GetString("workflow"))
+		m.formAction.Autonomous = m.form.GetBool("autonomous")
 		m.form = nil
 		m.formMode = ""
 		return m, tea.Batch(cmd, m.runAction(m.formAction))
