@@ -110,7 +110,7 @@ func flowClients() []terminal.Client {
 	}
 }
 
-func openNavigationPicker(t *testing.T, clients []terminal.Client, prefs ClientPreferenceStore) (*Model, *navigationFlowBackend, *navigationFlowNavigator, navigationTargetMsg) {
+func discoverNavigationClients(t *testing.T, clients []terminal.Client, prefs ClientPreferenceStore) (*Model, *navigationFlowBackend, *navigationFlowNavigator, navigationClientsMsg) {
 	t.Helper()
 	target := flowTarget()
 	backend := &navigationFlowBackend{targets: []core.NavigationTarget{target}}
@@ -135,17 +135,23 @@ func openNavigationPicker(t *testing.T, clients []terminal.Client, prefs ClientP
 	if !ok {
 		t.Fatalf("client discovery returned %T", discover())
 	}
+	return model, backend, navigator, clientsMessage
+}
+
+func openNavigationPicker(t *testing.T, clients []terminal.Client, prefs ClientPreferenceStore) (*Model, *navigationFlowBackend, *navigationFlowNavigator, navigationClientsMsg) {
+	t.Helper()
+	model, backend, navigator, clientsMessage := discoverNavigationClients(t, clients, prefs)
 	model.Update(clientsMessage)
 	if model.form == nil || model.formMode != "navigation_client" {
 		t.Fatalf("g did not open the client picker: form=%v mode=%q", model.form != nil, model.formMode)
 	}
-	return model, backend, navigator, resolved
+	return model, backend, navigator, clientsMessage
 }
 
-func TestJumpAlwaysShowsClientPickerAndJumpsChosenClient(t *testing.T) {
-	for _, count := range []int{1, 2} {
-		t.Run(map[int]string{1: "one client", 2: "multiple clients"}[count], func(t *testing.T) {
-			clients := flowClients()[:count]
+func TestMultipleClientsShowPickerAndJumpChosenClient(t *testing.T) {
+	for _, chosenIndex := range []int{0, 1} {
+		t.Run("chosen client "+string(rune('0'+chosenIndex)), func(t *testing.T) {
+			clients := flowClients()
 			prefs := &memoryClientPreferences{values: map[string]terminal.Client{}}
 			model, backend, navigator, _ := openNavigationPicker(t, clients, prefs)
 			if prefs.loads != 1 {
@@ -157,11 +163,10 @@ func TestJumpAlwaysShowsClientPickerAndJumpsChosenClient(t *testing.T) {
 			if backend.resolveCalls[0] != (core.EntityRef{Kind: "session", ID: "sess_worker"}) {
 				t.Fatalf("resolved wrong selection: %+v", backend.resolveCalls)
 			}
-			chosenIndex := count - 1
-			if chosenIndex > 0 {
+			for step := 0; step < chosenIndex; step++ {
 				_, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
 			}
-			if selected := model.formClient; selected != strings.TrimSpace(string(rune('0'+chosenIndex))) {
+			if selected := model.formClient; selected != string(rune('0'+chosenIndex)) {
 				t.Fatalf("picker selection = %q, want %d", selected, chosenIndex)
 			}
 			jumpCommand := pressFormKey(model, tea.KeyMsg{Type: tea.KeyEnter})
@@ -262,7 +267,7 @@ func TestJumpCancellationAndFailureNeverSavePreference(t *testing.T) {
 	for _, key := range []string{"esc", "ctrl+c"} {
 		t.Run("cancel "+key, func(t *testing.T) {
 			prefs := &memoryClientPreferences{values: map[string]terminal.Client{}}
-			model, _, navigator, _ := openNavigationPicker(t, flowClients()[:1], prefs)
+			model, _, navigator, _ := openNavigationPicker(t, flowClients(), prefs)
 			msg := tea.KeyMsg{Type: tea.KeyEsc}
 			if key == "ctrl+c" {
 				msg = tea.KeyMsg{Type: tea.KeyCtrlC}
@@ -275,7 +280,7 @@ func TestJumpCancellationAndFailureNeverSavePreference(t *testing.T) {
 	}
 	t.Run("failed jump", func(t *testing.T) {
 		prefs := &memoryClientPreferences{values: map[string]terminal.Client{}}
-		model, _, navigator, _ := openNavigationPicker(t, flowClients()[:1], prefs)
+		model, _, navigator, _ := openNavigationPicker(t, flowClients(), prefs)
 		navigator.jumpErr = errors.New("tmux switch failed")
 		model.form = nil
 		model.formMode = ""
@@ -290,7 +295,7 @@ func TestJumpCancellationAndFailureNeverSavePreference(t *testing.T) {
 
 func TestPreferenceWriteFailureReportsSuccessfulJumpSeparately(t *testing.T) {
 	prefs := &memoryClientPreferences{values: map[string]terminal.Client{}, saveErr: errors.New("disk full")}
-	model, _, _, _ := openNavigationPicker(t, flowClients()[:1], prefs)
+	model, _, _, _ := openNavigationPicker(t, flowClients(), prefs)
 	model.form = nil
 	model.formMode = ""
 	result := model.acceptNavigationClient("0")().(navigationResultMsg)
@@ -300,6 +305,162 @@ func TestPreferenceWriteFailureReportsSuccessfulJumpSeparately(t *testing.T) {
 	model.Update(result)
 	if !strings.Contains(model.notice, "Jump completed") || !strings.Contains(model.notice, "disk full") {
 		t.Fatalf("preference failure was not visible without misreporting the jump: %q", model.notice)
+	}
+}
+
+func TestSingleClientJumpsWithoutPicker(t *testing.T) {
+	clients := flowClients()[:1]
+	prefs := &memoryClientPreferences{values: map[string]terminal.Client{}}
+	model, backend, navigator, clientsMessage := discoverNavigationClients(t, clients, prefs)
+	if prefs.loads != 0 {
+		t.Fatalf("single-client discovery loaded the last-used preference: %d", prefs.loads)
+	}
+	_, command := model.Update(clientsMessage)
+	if model.form != nil || model.formMode != "" || model.navigationClients != nil {
+		t.Fatalf("single client opened the picker: form=%v mode=%q clients=%+v", model.form != nil, model.formMode, model.navigationClients)
+	}
+	if !model.navigationPending {
+		t.Fatal("single-client jump did not keep the navigation flow pending")
+	}
+	if !strings.Contains(model.notice, "only attached") {
+		t.Fatalf("automatic jump notice = %q", model.notice)
+	}
+	result, ok := findNavigationResult(command)
+	if !ok || result.err != nil {
+		t.Fatalf("automatic jump result = %#v", result)
+	}
+	if len(backend.resolveCalls) != 2 {
+		t.Fatalf("automatic jump did not recheck the target: %+v", backend.resolveCalls)
+	}
+	if len(navigator.jumps) != 1 || navigator.jumps[0].client != clients[0] || navigator.jumps[0].target != flowTarget() {
+		t.Fatalf("automatic jump used the wrong client or target: %+v", navigator.jumps)
+	}
+	model.Update(result)
+	if len(prefs.saves) != 1 || prefs.saves[0].client != clients[0] || prefs.saves[0].socket != flowTarget().Socket {
+		t.Fatalf("automatic jump did not save the only client: %+v", prefs.saves)
+	}
+	if !strings.Contains(model.notice, "Jumped") || model.navigationPending {
+		t.Fatalf("automatic jump result was not reported: notice=%q pending=%t", model.notice, model.navigationPending)
+	}
+}
+
+func TestSingleClientTargetChangedDuringDiscovery(t *testing.T) {
+	first := flowTarget()
+	changed := first
+	changed.PaneID = "%new"
+	backend := &navigationFlowBackend{targets: []core.NavigationTarget{first, changed}}
+	navigator := &navigationFlowNavigator{clients: flowClients()[:1]}
+	prefs := &memoryClientPreferences{values: map[string]terminal.Client{}}
+	model := workFixture()
+	model.backend, model.navigator, model.clientPreferences = backend, navigator, prefs
+	model.navigate(route{Page: "sessions"})
+	model.route.SelectedID = "sess_worker"
+	resolved, ok := model.jumpSelected()().(navigationTargetMsg)
+	if !ok {
+		t.Fatal("g did not resolve the jump-capable selection")
+	}
+	_, discover := model.handleNavigationTarget(resolved)
+	clientsMessage, ok := discover().(navigationClientsMsg)
+	if !ok {
+		t.Fatal("client discovery did not produce a client message")
+	}
+	_, command := model.Update(clientsMessage)
+	result, ok := findNavigationResult(command)
+	if !ok || !isNavigationError(result.err, "navigation_target_changed") {
+		t.Fatalf("changed target was not reported: %#v", result)
+	}
+	if len(navigator.jumps) != 0 || len(prefs.saves) != 0 {
+		t.Fatalf("changed target still jumped or saved: jumps=%+v saves=%+v", navigator.jumps, prefs.saves)
+	}
+	model.Update(result)
+	if !strings.Contains(model.notice, "during client discovery") || !strings.Contains(model.notice, "press g") {
+		t.Fatalf("automatic drift notice = %q", model.notice)
+	}
+}
+
+func TestSingleClientGoneOnAutomaticPath(t *testing.T) {
+	clients := flowClients()[:1]
+	prefs := &memoryClientPreferences{values: map[string]terminal.Client{}}
+	model, _, navigator, clientsMessage := discoverNavigationClients(t, clients, prefs)
+	navigator.jumpErr = &core.Error{Code: "client_gone", Message: "the selected tmux client detached or restarted"}
+	_, command := model.Update(clientsMessage)
+	result, ok := findNavigationResult(command)
+	if !ok || !isNavigationError(result.err, "client_gone") {
+		t.Fatalf("detached single client was not reported: %#v", result)
+	}
+	model.Update(result)
+	if model.form != nil || len(navigator.jumps) != 1 || navigator.jumps[0].client != clients[0] || len(prefs.saves) != 0 || !strings.Contains(model.notice, "Press g to choose a live client") {
+		t.Fatalf("automatic client_gone handling = form=%v jumps=%+v saves=%+v notice=%q", model.form != nil, navigator.jumps, prefs.saves, model.notice)
+	}
+}
+
+func TestSingleClientPreferenceSaveFailureReportedSeparately(t *testing.T) {
+	clients := flowClients()[:1]
+	prefs := &memoryClientPreferences{values: map[string]terminal.Client{}, saveErr: errors.New("disk full")}
+	model, _, _, clientsMessage := discoverNavigationClients(t, clients, prefs)
+	_, command := model.Update(clientsMessage)
+	result, ok := findNavigationResult(command)
+	if !ok || result.err != nil || result.preferenceErr == nil {
+		t.Fatalf("automatic preference failure was confused with a jump failure: %#v", result)
+	}
+	model.Update(result)
+	if !strings.Contains(model.notice, "Jump completed") || !strings.Contains(model.notice, "disk full") {
+		t.Fatalf("automatic preference failure was not visible: %q", model.notice)
+	}
+}
+
+func TestSingleClientStaleDiscoveryDoesNotJump(t *testing.T) {
+	t.Run("stale sequence", func(t *testing.T) {
+		prefs := &memoryClientPreferences{values: map[string]terminal.Client{}}
+		model, _, navigator, clientsMessage := discoverNavigationClients(t, flowClients()[:1], prefs)
+		clientsMessage.sequence++
+		_, command := model.Update(clientsMessage)
+		if result, ok := findNavigationResult(command); ok || len(navigator.jumps) != 0 {
+			t.Fatalf("stale sequence started a jump: result=%#v jumps=%+v", result, navigator.jumps)
+		}
+	})
+	t.Run("stale generation", func(t *testing.T) {
+		prefs := &memoryClientPreferences{values: map[string]terminal.Client{}}
+		model, _, navigator, clientsMessage := discoverNavigationClients(t, flowClients()[:1], prefs)
+		clientsMessage.generation++
+		_, command := model.Update(clientsMessage)
+		if result, ok := findNavigationResult(command); ok || len(navigator.jumps) != 0 {
+			t.Fatalf("stale generation started a jump: result=%#v jumps=%+v", result, navigator.jumps)
+		}
+	})
+	t.Run("changed target", func(t *testing.T) {
+		prefs := &memoryClientPreferences{values: map[string]terminal.Client{}}
+		model, _, navigator, clientsMessage := discoverNavigationClients(t, flowClients()[:1], prefs)
+		clientsMessage.target.PaneID = "%changed"
+		_, command := model.Update(clientsMessage)
+		if result, ok := findNavigationResult(command); ok || len(navigator.jumps) != 0 {
+			t.Fatalf("changed target started a jump: result=%#v jumps=%+v", result, navigator.jumps)
+		}
+		if !strings.Contains(model.notice, "before the jump started") || !strings.Contains(model.notice, "Press g to try again") {
+			t.Fatalf("single-client stale notice = %q", model.notice)
+		}
+	})
+}
+
+func TestEscDuringAutomaticJumpDropsResult(t *testing.T) {
+	clients := flowClients()[:1]
+	prefs := &memoryClientPreferences{values: map[string]terminal.Client{}}
+	model, _, navigator, clientsMessage := discoverNavigationClients(t, clients, prefs)
+	_, command := model.Update(clientsMessage)
+	if !model.navigationPending {
+		t.Fatal("automatic jump did not stay pending")
+	}
+	model.updateKey(tea.KeyMsg{Type: tea.KeyEsc})
+	if model.navigationPending || len(navigator.jumps) != 0 {
+		t.Fatalf("Esc did not cancel the in-flight jump: pending=%t jumps=%+v", model.navigationPending, navigator.jumps)
+	}
+	result, ok := findNavigationResult(command)
+	if !ok {
+		t.Fatal("automatic jump produced no result")
+	}
+	model.Update(result)
+	if !strings.Contains(model.notice, "Jump cancelled") || strings.Contains(model.notice, "Jumped") || model.navigationPending {
+		t.Fatalf("stale result changed the cancelled flow: notice=%q pending=%t", model.notice, model.navigationPending)
 	}
 }
 

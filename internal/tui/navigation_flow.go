@@ -96,7 +96,7 @@ func (m *Model) handleNavigationTarget(msg navigationTargetMsg) (tea.Model, tea.
 	m.navigationClient = cloneClient(msg.client)
 	m.navigationGeneration = msg.generation
 	if msg.client != nil {
-		return m, m.jumpClientCommand(msg.target, msg.ref, *msg.client, msg.afterReconcile, msg.generation, msg.sequence, false)
+		return m, m.jumpClientCommand(msg.target, msg.ref, *msg.client, msg.afterReconcile, msg.generation, msg.sequence, false, false)
 	}
 	navigator, target, preferences, generation, sequence := m.navigator, msg.target, m.clientPreferences, msg.generation, msg.sequence
 	m.notice = "Finding attached tmux clients…"
@@ -108,7 +108,7 @@ func (m *Model) handleNavigationTarget(msg navigationTargetMsg) (tea.Model, tea.
 			generation: generation, sequence: sequence, ref: msg.ref,
 			afterReconcile: msg.afterReconcile, target: target, clients: clients, err: err,
 		}
-		if err == nil && len(clients) > 0 && preferences != nil {
+		if err == nil && len(clients) > 1 && preferences != nil {
 			result.lastClient, result.hasLastClient, result.preferenceErr = preferences.LoadLastUsed(target.Socket)
 		}
 		return result
@@ -132,9 +132,16 @@ func (m *Model) handleNavigationClients(msg navigationClientsMsg) (tea.Model, te
 	}
 	if m.generation != m.navigationGeneration || msg.target != m.navigationTarget || msg.ref != m.navigationRef {
 		m.endNavigationFlow()
-		m.notice = "The selected workspace target changed before the client picker opened. Press g to try again."
+		if len(msg.clients) == 1 {
+			m.notice = "The selected workspace target changed before the jump started. Press g to try again."
+		} else {
+			m.notice = "The selected workspace target changed before the client picker opened. Press g to try again."
+		}
 		m.rebuildViewport()
 		return m, nil
+	}
+	if len(msg.clients) == 1 {
+		return m, m.jumpClientCommand(msg.target, msg.ref, msg.clients[0], msg.afterReconcile, msg.generation, msg.sequence, true, true)
 	}
 	clients, marked := orderedClients(msg.clients, msg.lastClient, msg.hasLastClient && msg.preferenceErr == nil)
 	options := make([]huh.Option[string], 0, len(clients))
@@ -191,10 +198,10 @@ func (m *Model) acceptNavigationClient(value string) tea.Cmd {
 		return nil
 	}
 	chosen := m.navigationClients[index]
-	return m.jumpClientCommand(m.navigationTarget, m.navigationRef, chosen, m.navigationAfterReconcile, m.generation, m.navigationSequence, true)
+	return m.jumpClientCommand(m.navigationTarget, m.navigationRef, chosen, m.navigationAfterReconcile, m.generation, m.navigationSequence, true, false)
 }
 
-func (m *Model) jumpClientCommand(target core.NavigationTarget, ref core.EntityRef, client terminal.Client, afterReconcile bool, generation, sequence uint64, recheckTarget bool) tea.Cmd {
+func (m *Model) jumpClientCommand(target core.NavigationTarget, ref core.EntityRef, client terminal.Client, afterReconcile bool, generation, sequence uint64, recheckTarget, automatic bool) tea.Cmd {
 	backend, navigator, preferences := m.backend, m.navigator, m.clientPreferences
 	workspace := m.workspaceID
 	if workspace == "" && ref.Kind == "workspace" {
@@ -203,7 +210,11 @@ func (m *Model) jumpClientCommand(target core.NavigationTarget, ref core.EntityR
 	chosen := client
 	m.navigationPending = true
 	m.navigationClient = &chosen
-	m.notice = "Verifying the selected client and jumping to the workspace pane…"
+	if automatic {
+		m.notice = "Jumping the only attached tmux client to the verified workspace pane…"
+	} else {
+		m.notice = "Verifying the selected client and jumping to the workspace pane…"
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 		defer cancel()
@@ -213,7 +224,11 @@ func (m *Model) jumpClientCommand(target core.NavigationTarget, ref core.EntityR
 				return navigationResultMsg{generation: generation, sequence: sequence, ref: ref, afterReconcile: afterReconcile, target: target, client: &chosen, err: err}
 			}
 			if current != target {
-				err := &core.Error{Code: "navigation_target_changed", Message: "the selected tmux target changed while the picker was open; press g and choose again"}
+				message := "the selected tmux target changed while the picker was open; press g and choose again"
+				if automatic {
+					message = "the selected tmux target changed during client discovery; press g to try again"
+				}
+				err := &core.Error{Code: "navigation_target_changed", Message: message}
 				return navigationResultMsg{generation: generation, sequence: sequence, ref: ref, afterReconcile: afterReconcile, target: target, client: &chosen, err: err}
 			}
 		}
