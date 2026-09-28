@@ -4,9 +4,25 @@
 - command: go vet ./...
   exit_code: 0
   evidence: evidence-vet.txt
+- command: go test ./internal/tui/ -count=1
+  exit_code: 0
+  evidence: evidence-go-test-tui.txt
+- command: go test ./internal/terminal/ -count=1
+  exit_code: 0
+  evidence: evidence-go-test-terminal.txt
+- command: go test ./internal/core/ -run 'TestResolveDispatcherNavigationTarget|TestWorkspaceRuntimeAndNavigationUseVerifiedOwnership|TestDispatcherLifecycleAndReplay|TestDispatcher|TestProjectOverview|TestWorkspaceSnapshot|TestSupervisor|TestProjectDispatcher' -count=1
+  exit_code: 0
+  evidence: evidence-go-test-core-targeted.txt
 - command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 180s
   exit_code: 0
   evidence: evidence-go-test-all.txt
-- command: go build -o /tmp/workspace-t3-removal ./cmd/workspace && python3 scripts/check-install.py /tmp/workspace-t3-removal
+- command: WORKSPACE_TMUX_TEST=1 env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test -race ./internal/core/ -run 'Navigator|Navigation|Dispatcher|Supervisor|Tmux' -count=1 -timeout 300s
   exit_code: 0
-  evidence: evidence-install.txt
+  evidence: evidence-tmux-core.txt
+- command: WORKSPACE_TMUX_TEST=1 env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test -race ./internal/terminal/ ./internal/tui/ -count=1 -timeout 120s
+  exit_code: 1
+  evidence: evidence-tmux-term-tui.txt
+  note: Pre-existing environment failure TestNavigatorRealPTYAndClientSelection (pseudo-TTY client did not attach); reproduced on base aa72616494937c5c977187ade2fd342d230fac93. The internal/tui package passes within the same run.
+- command: python3 work-products/check-doc-links.py
+  exit_code: 0
+  evidence: evidence-doc-links.txt

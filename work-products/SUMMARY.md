@@ -1,20 +1,33 @@
-# Summary — task_01M3KJ6ZS58GEEJX4E4TSS17MR (Documentation, skill, backlog)
+# Summary — task_01M3MZD82YXFS0G5HKV46G5JNQ
 
-Updated the contract documentation, both bundled skill copies, and the backlog for the
-plan-first v2 workflow, the removal of `issue-resolution`, and the auto-migration.
+Implemented the accepted plan for TUI jump (`g`) support on the project Dispatcher
+page. Keyboard-only, matching the orchestrator detail page; `workspace dispatcher
+attach` is unchanged.
 
-- README/PRODUCT/ARCHITECTURE now describe the plan-first v2 phase order
-  (`planning → plan_review → implementing → integration → completed`), the user-approved
-  local `integration land` gate, conflict handling, `complete` for plan-first, the
-  release-gate-only archive rule, the removed workflow, and the on-load migration.
-- docs/operations.md documents `integration land` as a receipted mutation with its local
-  git fast-forward/CAS effect; docs/revisions.md documents that landed work blocks
-  revision/retry; runtime/tui/trackers wording updated.
-- Both `internal/core/skill/workspace/SKILL.md` and `.agents/skills/workspace/SKILL.md`
-  are now byte-identical and describe the integration/land/complete flow.
-- TODO.md records the four deferred follow-ups (stacked strategy, CR-based landing,
-  project-level integration branch, optional removal of the extended machine).
+- **Core** (`internal/core/navigation.go`): `NavigationTarget` gains `ProjectID`;
+  `ResolveNavigationTarget` handles `Kind=dispatcher` by resolving the durable
+  current Run from `DispatcherStatus` and the verified project topology pane,
+  enforcing the `tickDispatcher` ownership gate and returning `pane_missing`
+  otherwise (not-started / no live run / unverified / mismatch). Never a scan.
+- **Terminal** (`internal/terminal/navigation.go`): `TmuxNavigator.verify` accepts
+  a project-scoped dispatcher target (canonical
+  `workspace-dispatcher-<project-id>` session plus project/kind/session/run pane
+  metadata); `ListClients`/`Select`/`Attach`/`Jump` work through the existing
+  `=<session>` paths. Workspace-kind verification is unchanged.
+- **TUI** (`keymap.go`, `navigation_flow.go`, `detail.go`): `jumpCapable` includes
+  `dispatcher`; `dispatcherJumpReady()` gates `contextFlags().jump`; the footer,
+  full help and page hint advertise `g jump` only while the Dispatcher is running,
+  and `g` is inert otherwise. `jumpSelected` dispatches `EntityRef{Kind:
+  dispatcher}` through the unchanged picker/preference/recheck flow. No
+  actions-menu entry.
+- **Docs**: `docs/tui.md`, `PRODUCT.md`, `ARCHITECTURE.md` describe the
+  jump-capable Dispatcher, the hidden-when-idle rule, and the unchanged CLI attach.
+- **Tests**: core resolution cases, terminal accept/reject + ListClients/Jump,
+  and TUI success / no-live / changed-target / detached-client flows, plus keymap
+  and project-scope coverage.
 
-Commit `ee255be`. Checks: gofmt clean, `go vet ./...` and `go test ./...` pass, all
-documentation links resolve, the skill copies match, and no stale `issue-resolution`
-reference remains outside removal/migration notes.
+Commit `bf5a3e92780bd60195261dbcc95c4a19a2a77253`. Checks: `gofmt` clean,
+`go vet ./...` passes, `go test ./...` passes (with worker env vars unset),
+targeted tmux core navigation/dispatcher suite passes; the only tmux failure
+(`TestNavigatorRealPTYAndClientSelection`) is pre-existing and reproduces on the
+base commit.

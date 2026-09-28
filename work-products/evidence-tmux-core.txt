@@ -1,1 +1,1 @@
-ok  	workspace/internal/core	35.665s
+ok  	workspace/internal/core	58.104s
