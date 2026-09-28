@@ -130,7 +130,7 @@ func TestManualWorkspaceMenuModes(t *testing.T) {
 		t.Fatalf("pending menu lost the selection action: %+v", pendingMenu.Actions)
 	}
 
-	// The fixture creates an issue-resolution workspace and keeps advancing.
+	// The fixture creates an extended workflow workspace and keeps advancing.
 	workflowMenu, err := s.Menu(ctx, fixtureWorkspaceID(t, s))
 	if err != nil {
 		t.Fatal(err)
@@ -259,7 +259,7 @@ func TestManualWorkspaceWorkflowOnlyOperationsUnavailable(t *testing.T) {
 	} else {
 		expectCode(t, err, "operation_not_applicable")
 	}
-	if _, err := s.SelectWorkflow(ctx, ws, "issue-resolution"); err == nil {
+	if _, err := s.SelectWorkflow(ctx, ws, "extended"); err == nil {
 		t.Fatal("workflow selection converted a manual workspace")
 	} else {
 		expectCode(t, err, "operation_not_applicable")

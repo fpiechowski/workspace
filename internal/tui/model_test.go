@@ -319,7 +319,7 @@ func TestPauseInterruptConfirmationCapturesExactActiveTargets(t *testing.T) {
 }
 
 func TestWorkflowSelectionLoadsNamesThenOpensGuardedConfirmation(t *testing.T) {
-	backend := &actionHarness{workflows: []string{"issue-resolution", "plan-first"}}
+	backend := &actionHarness{workflows: []string{"extended", "plan-first"}}
 	model := New(Config{ProjectFound: true, WorkspaceID: "ws_workflow", Backend: backend})
 	model.snapshot = core.WorkspaceSnapshot{ObservedAt: time.Now(), Status: core.Status{Workspace: core.Workspace{ID: "ws_workflow", Status: "needs_workflow", Revision: 9}}}
 	cmd := model.beginAction("select_workflow", "")
@@ -330,7 +330,7 @@ func TestWorkflowSelectionLoadsNamesThenOpensGuardedConfirmation(t *testing.T) {
 	if model.actionPending || model.formMode != "workflow" || model.form == nil || model.form.View() == "" {
 		t.Fatalf("workflow selector did not open: pending=%t mode=%q form=%v", model.actionPending, model.formMode, model.form)
 	}
-	if !strings.Contains(model.form.View(), "issue-resolution") || !strings.Contains(model.form.View(), "plan-first") {
+	if !strings.Contains(model.form.View(), "extended") || !strings.Contains(model.form.View(), "plan-first") {
 		t.Fatalf("workflow selector omitted configured names: %q", model.form.View())
 	}
 	_ = model.confirmWorkflowSelection("plan-first")
