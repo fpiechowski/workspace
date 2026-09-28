@@ -1,24 +1,27 @@
-# Summary — task_01M3MJYR9QGF20V1CN9WV9NC08 (I2: Decision audit model and rationale-carrying gate mutations)
+# Summary — task_01M3MJYRHCY7FP8RBR2G95MCV6 (I3: Safety boundary enforcement, final report, menu)
 
-Implemented PLAN.md §3.4 and §5-I2: the per-decision audit model and rationale
-required for orchestrator gates resolved during an autonomous run.
+Implemented PLAN.md §3.5, §4 and §5-I3: the code-level safety boundary, the
+receipted final autonomy report and the menu switch.
 
-- While `autonomy.state=running`, agent `handoff accept|reject`,
-  `workflow advance`, `state update --phase` and `task retry|cancel|supersede`
-  without a rationale fail with `rationale_required`. With a rationale, the gate
-  and an `autonomous.*` `Decision` (`ResolvedBy: orchestrator`, `Autonomous: true`,
-  `Subject`, `Evidence`, `SessionID`, `RunID`, `DecidedAt`) commit in one
-  mutation; an injected save failure leaves neither behind.
-- `workspace decision record` records `autonomous.assumption` and
-  `autonomous.question_answer` for the orchestrator only while running, with
-  idempotent receipts.
-- Rejection and retry bounds (2/1) are tracked per task per orchestrator Run;
-  exceeding them returns `autonomy_bound_exceeded`.
-- Historical behavior is preserved: the non-audited entry points and existing
-  receipts keep their digests because rationale/evidence join the payload only
-  when non-empty. Tests, CLI help and flags were updated.
+- `rejectAutonomousAttestation` makes `integration land`, `complete`,
+  `decision answer`, `release confirm`, `change-request publish/resolve`,
+  `reopen`, `archive`, non-dry-run `clean`, workspace/task/session `delete` and
+  `state edit` return `autonomy_excluded` for an agent actor while the run is
+  running, even with `--user-confirmed` or `forge.publication: allowed`. The
+  terminal user is never excluded and the ordinary contract returns after
+  `delivered`/`disabled`.
+- `workspace autonomy report --outcome --summary-file [--artifact] [--pending]`
+  validates the outcome against state (`integration_changed`, `handoff_pending`,
+  `session_active`, `pending_required`, `invalid_outcome`), stores an immutable
+  summary artifact atomically, sets `delivered`, appends an
+  `autonomous.final_report` decision and replays idempotently.
+- `menu --json` shows `autonomy report` while running in integration or when a
+  manual workspace's work is accepted, and the report plus `land`/`complete`
+  after delivery.
+- End-to-end tests cover the autonomous plan-first flow to `ready_to_land`
+  (agent land/complete refused, user land + complete succeeding), the manual flow
+  to `ready_to_complete`, the boundary table and the menu.
 
-Commit `4072865`. Checks (`work-products/CHECKS-I2.yaml`): gofmt clean,
-`go vet ./...`, the targeted core run, `go test ./internal/cli -count=1`, and the
-full `go test ./...` all pass. Docs, report, menu and the safety boundary remain
-in the I3/I4 scope.
+Commit `48eab2b`. Checks (`work-products/CHECKS-I3.yaml`): gofmt clean,
+`go vet ./...`, the targeted core run, the CLI autonomy run and the full
+`go test ./...` all pass. Docs and the orchestrator guidance notice stay in I4.

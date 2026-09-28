@@ -1,0 +1,2 @@
+ok  	workspace/internal/cli	2.350s
+exit_code=0

@@ -41,5 +41,25 @@ func autonomyCommands(o *options) *cobra.Command {
 	disableCmd.Flags().BoolVar(&disable.UserConfirmed, "user-confirmed", false, "Attest that the user requested disabling autonomy")
 	group.AddCommand(disableCmd)
 
+	var report core.AutonomyReportOptions
+	reportCmd := command("report", "Deliver the autonomous final report and end the run", func(c *cobra.Command, _ []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.ReportAutonomy(c.Context(), id, report, o.key)
+		if err != nil {
+			return err
+		}
+		return o.emit(v)
+	})
+	reportCmd.Flags().StringVar(&report.Outcome, "outcome", "", "ready_to_land | ready_to_complete | blocked | failed")
+	reportCmd.Flags().StringVar(&report.Recommendation, "recommendation", "", "One-paragraph recommendation shown to the user")
+	reportCmd.Flags().StringVar(&report.SummaryFile, "summary-file", "", "Markdown summary stored as an immutable report artifact")
+	reportCmd.Flags().StringSliceVar(&report.Artifacts, "artifact", nil, "Additional report artifact; repeat or comma-separate")
+	reportCmd.Flags().StringSliceVar(&report.Pending, "pending", nil, "Pending item for a blocked/failed report; repeat or comma-separate")
+	reportCmd.Flags().IntVar(&report.ExpectedRevision, "expected-revision", 0, "Required current workspace revision")
+	group.AddCommand(reportCmd)
+
 	return group
 }

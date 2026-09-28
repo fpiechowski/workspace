@@ -37,6 +37,9 @@ func (s *Service) CompleteWorkspace(ctx context.Context, selector string, opt Co
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := s.rejectAutonomousAttestation(d, "complete"); err != nil {
+			return err
+		}
 		if d.State.Manual() {
 			return s.completeManual(d, opt, &out)
 		}

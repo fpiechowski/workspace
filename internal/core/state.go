@@ -79,7 +79,9 @@ func (s *Service) UpdateStateAudited(ctx context.Context, selector string, expec
 // changes through the same gates as state update. Runtime fields are immutable.
 func (s *Service) EditState(ctx context.Context, selector string, expected int, content []byte, keys ...string) (Status, error) {
 	var out Status
-	err := mutate(s, ctx, selector, keys, []any{"state.edit", expected, content}, &out, s.requireUser, func(d *Document) error {
+	err := mutate(s, ctx, selector, keys, []any{"state.edit", expected, content}, &out, func(d *Document) error {
+		return s.requireUserNotAutonomous(d, "state edit")
+	}, func(d *Document) error {
 		if err := s.requireUser(d); err != nil {
 			return err
 		}

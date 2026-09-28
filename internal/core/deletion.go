@@ -34,6 +34,9 @@ func (s *Service) DeleteWorkspace(ctx context.Context, selector, key string, exp
 		if err != nil {
 			return false, err
 		}
+		if err := s.rejectAutonomousAttestation(d, "workspace delete"); err != nil {
+			return false, err
+		}
 		if err := s.requireUser(d); err != nil {
 			return false, err
 		}
@@ -213,7 +216,9 @@ func (s *Service) DeleteTask(ctx context.Context, selector, id, key string, guar
 		Task  string
 		Guard MutationGuard
 	}{id, guard}
-	err := mutate(s, ctx, selector, []string{key}, request, &out, s.requireUser, func(d *Document) error {
+	err := mutate(s, ctx, selector, []string{key}, request, &out, func(d *Document) error {
+		return s.requireUserNotAutonomous(d, "task delete")
+	}, func(d *Document) error {
 		if guard.ExpectedRevision != 0 && d.State.Revision != guard.ExpectedRevision {
 			return fail("revision_conflict", "workspace changed while deletion was being confirmed")
 		}
@@ -301,7 +306,9 @@ func (s *Service) DeleteSession(ctx context.Context, selector, id, key string, g
 		Session string
 		Guard   MutationGuard
 	}{id, guard}
-	err := mutate(s, ctx, selector, []string{key}, request, &out, s.requireUser, func(d *Document) error {
+	err := mutate(s, ctx, selector, []string{key}, request, &out, func(d *Document) error {
+		return s.requireUserNotAutonomous(d, "session delete")
+	}, func(d *Document) error {
 		if guard.ExpectedRevision != 0 && d.State.Revision != guard.ExpectedRevision {
 			return fail("revision_conflict", "workspace changed while deletion was being confirmed")
 		}
