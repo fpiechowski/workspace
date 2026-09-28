@@ -491,6 +491,10 @@ type CreateOptions struct {
 	// manual orchestration. It cannot be combined with Workflow and is kept in
 	// the idempotency payload so retries cannot reinterpret the earlier choice.
 	NoWorkflow bool `json:",omitempty"`
+	// Autonomous starts the workspace in an autonomous run (state=running,
+	// source=create). It is kept in the idempotency payload; omitempty keeps
+	// existing receipt digests unchanged for non-autonomous creation.
+	Autonomous bool `json:",omitempty"`
 }
 
 const exampleWorkflow = "plan-first"
@@ -603,6 +607,11 @@ func (s *Service) createWorkspaceLegacy(ctx context.Context, opt CreateOptions, 
 	if !opt.NoWorkflow && opt.Workflow == "" {
 		opt.Workflow = exampleWorkflow
 	}
+	if opt.Autonomous {
+		if err := requireAutonomySupport(cfg, opt.Workflow, opt.NoWorkflow); err != nil {
+			return Status{}, err
+		}
+	}
 	if strings.TrimSpace(opt.Input) == "" {
 		fetcher := s.IssueFetcher
 		if fetcher == nil {
@@ -663,6 +672,10 @@ func (s *Service) createWorkspaceLegacy(ctx context.Context, opt CreateOptions, 
 	if d.State.WorkflowSelected() {
 		orch.Profile = workflowProfile(cfg, d, "orchestrator", orch.Profile)
 		d.Registry.Agents[0] = orch
+	}
+	if opt.Autonomous {
+		enabledAt := nowUTC()
+		d.State.Autonomy = &Autonomy{Mode: "autonomous", State: "running", EnabledAt: &enabledAt, EnabledRevision: d.State.Revision, Source: "create"}
 	}
 	body, err := s.render("WORKSPACE.md.tmpl", agentPromptData{Workspace: d.State, Manual: d.State.Manual()})
 	if err != nil {

@@ -385,6 +385,7 @@ func newRoot(o *options) *cobra.Command {
 	createCmd.Flags().StringVar(&create.FromIssue, "from-issue", "", "Create from an existing durable Issue ID; mutually exclusive with intent, --input-file and --issue")
 	createCmd.Flags().StringVar(&create.Workflow, "workflow", "", "Workflow name; defaults to plan-first")
 	createCmd.Flags().BoolVar(&create.NoWorkflow, "no-workflow", false, "Create an active workspace with no workflow for manual orchestration")
+	createCmd.Flags().BoolVar(&create.Autonomous, "autonomous", false, "Start the workspace in an autonomous run; requires a deliver-capable orchestrator route")
 	createCmd.Flags().StringVar(&create.Base, "base", "HEAD", "Base Git revision")
 	root.AddCommand(createCmd)
 	listCmd := command("list", "List workspaces", func(c *cobra.Command, _ []string) error {
@@ -520,6 +521,7 @@ func newRoot(o *options) *cobra.Command {
 		root.AddCommand(group)
 	}
 	root.AddCommand(issueCommands(o))
+	root.AddCommand(autonomyCommands(o))
 	dispatcher, dispatcherRunner := dispatcherCommands(o)
 	root.AddCommand(dispatcher, dispatcherRunner)
 	root.AddCommand(agentCommands(o), worktreeCommands(o), sessionCommands(o), runCommands(o))

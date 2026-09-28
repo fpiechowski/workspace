@@ -288,7 +288,7 @@ func TestCreateWorkspaceOffersDistinctManualChoice(t *testing.T) {
 		t.Fatalf("create workspace form was not opened: mode=%q", model.formMode)
 	}
 	view := model.form.View()
-	for _, option := range []string{"Choose later", "No workflow (manual orchestration)"} {
+	for _, option := range []string{"Choose later", "No workflow (manual orchestration)", "Autonomous run"} {
 		if !strings.Contains(view, option) {
 			t.Fatalf("creation form lacks %q:\n%s", option, view)
 		}
@@ -306,6 +306,10 @@ func TestCreateWorkspaceOffersDistinctManualChoice(t *testing.T) {
 	options := createOptions(ActionCall{Action: "create_workspace", TargetName: "Manual", Input: "intent", NoWorkflow: true, Key: "tui:1"})
 	if !options.NoWorkflow || options.Workflow != "" || options.Title != "Manual" || options.Input != "intent" || options.OperationKey != "tui:1" {
 		t.Fatalf("manual choice did not reach CreateOptions: %+v", options)
+	}
+	autonomous := createOptions(ActionCall{Action: "create_workspace", TargetName: "Auto", Input: "intent", Workflow: "plan-first", Autonomous: true, Key: "tui:2"})
+	if !autonomous.Autonomous || autonomous.Workflow != "plan-first" || autonomous.NoWorkflow {
+		t.Fatalf("autonomous choice did not reach CreateOptions: %+v", autonomous)
 	}
 }
 

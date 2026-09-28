@@ -101,6 +101,9 @@ type Workspace struct {
 	ChangeRequests      []ChangeRequest `yaml:"change_requests" json:"change_requests"`
 	LiveTest            LiveTest        `yaml:"live_test" json:"live_test"`
 	Release             Release         `yaml:"release" json:"release"`
+	// Autonomy is nil for an interactive workspace. Its fields are all
+	// omitempty so a non-autonomous document serializes exactly as before.
+	Autonomy *Autonomy `yaml:"autonomy,omitempty" json:"autonomy,omitempty"`
 }
 
 // workspaceMode classifies the durable workspace mode. It is the single source

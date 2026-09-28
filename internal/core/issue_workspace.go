@@ -186,6 +186,12 @@ func (s *Service) DispatchIssue(ctx context.Context, opt IssueDispatchOptions) (
 	if opt.NoWorkflow && opt.Workflow != "" {
 		return DispatchResult{}, fail("invalid_option", "--workflow and --no-workflow are mutually exclusive")
 	}
+	// Only a user-invoked dispatch may create an autonomous workspace. The
+	// project Dispatcher is refused here, before dispatchIssue clears the actor
+	// to user authority for its narrow linked-Workspace step.
+	if opt.Autonomous && s.Actor.Scope == "project" {
+		return DispatchResult{}, fail("forbidden", "the project Dispatcher cannot create an autonomous workspace; run the dispatch from the user terminal")
+	}
 	if err := s.authorizeProjectActor(ctx); err != nil {
 		return DispatchResult{}, err
 	}
@@ -211,7 +217,7 @@ func (s *Service) dispatchIssue(ctx context.Context, opt IssueDispatchOptions) (
 	if opt.OperationKey != "" {
 		createKey = "dispatch:create:" + opt.OperationKey
 	}
-	workspace, err := workspaceService.CreateFromIssue(ctx, opt.IssueID, CreateOptions{Title: opt.Title, Workflow: opt.Workflow, NoWorkflow: opt.NoWorkflow, Base: opt.Base, OperationKey: createKey})
+	workspace, err := workspaceService.CreateFromIssue(ctx, opt.IssueID, CreateOptions{Title: opt.Title, Workflow: opt.Workflow, NoWorkflow: opt.NoWorkflow, Autonomous: opt.Autonomous, Base: opt.Base, OperationKey: createKey})
 	if err != nil {
 		return DispatchResult{}, err
 	}

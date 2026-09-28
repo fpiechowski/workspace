@@ -73,6 +73,7 @@ type Model struct {
 	formChoice      string
 	formClient      string
 	formWorkflow    string
+	formAutonomous  bool
 	formConfirm     bool
 	formReason      string
 	formTitle       string
