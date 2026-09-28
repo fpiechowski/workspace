@@ -1,0 +1,18 @@
+- command: git merge-base --is-ancestor 701530da3d4108b7ab9903763941ac318ba3792e HEAD
+  exit_code: 0
+  evidence: evidence-merge-base.txt
+- command: git merge-base --is-ancestor cfe679b39aab8beae1b301e3a4091a54b793fd7f HEAD
+  exit_code: 0
+  evidence: evidence-merge-base.txt
+- command: gofmt -l ./cmd ./internal
+  exit_code: 0
+  evidence: evidence-gofmt.txt
+- command: go vet ./...
+  exit_code: 0
+  evidence: evidence-vet.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test -count=1 ./... -timeout 570s
+  exit_code: 0
+  evidence: evidence-go-test-all.txt
+- command: git diff --check
+  exit_code: 0
+  evidence: CHECKS.log

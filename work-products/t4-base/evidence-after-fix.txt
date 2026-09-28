@@ -1,0 +1,5 @@
+=== RUN   TestCompleteNotApplicableToWorkflowWorkspaces
+--- PASS: TestCompleteNotApplicableToWorkflowWorkspaces (0.22s)
+PASS
+ok  	workspace/internal/core	0.221s
+AFTER_FIX_EXIT=0

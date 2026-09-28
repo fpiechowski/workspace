@@ -1,0 +1,6 @@
+--- FAIL: TestCompleteNotApplicableToWorkflowWorkspaces (0.15s)
+    manual_completion_test.go:201: wanted operation_not_applicable, got workflow_gate: workspace must be in the integration phase to complete
+FAIL
+FAIL	workspace/internal/core	0.154s
+FAIL
+BEFORE_FIX_EXIT=1

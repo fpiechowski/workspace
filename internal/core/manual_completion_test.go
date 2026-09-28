@@ -179,29 +179,55 @@ func TestManualCompletionRequiresUserAttestation(t *testing.T) {
 	}
 }
 
-// Completion is not a workflow operation: selected and pending workflows must
-// keep their existing release/selection paths and stay untouched.
+// Completion is not a general workflow operation: extended/custom workflows
+// and v1 plan-first snapshots stay operation_not_applicable, while a plan-first
+// v2 workspace (which declares the landing capability) is refused by the
+// workflow gate until it reaches the integration phase.
 func TestCompleteNotApplicableToWorkflowWorkspaces(t *testing.T) {
 	s, ws := fixture(t)
 	ctx := context.Background()
 	revision := currentRevision(t, s, ws)
 	if _, err := s.CompleteWorkspace(ctx, ws, CompleteOptions{ExpectedRevision: revision}); err == nil {
-		t.Fatal("workflow workspace was completed manually")
+		t.Fatal("extended workflow workspace was completed manually")
 	} else {
 		expectCode(t, err, "operation_not_applicable")
 	}
 
-	pending, err := s.Create(ctx, CreateOptions{Title: "Pending", Input: "Choose later"})
+	// A new plan-first selection snapshots the v2 landing capabilities, so
+	// completion is refused with the workflow gate outside the integration
+	// phase rather than as an unsupported operation.
+	planFirst, err := s.Create(ctx, CreateOptions{Title: "Plan-first", Input: "Integration gate"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CompleteWorkspace(ctx, pending.Workspace.ID, CompleteOptions{ExpectedRevision: pending.Workspace.Revision}); err == nil {
-		t.Fatal("pending workspace was completed manually")
+	revision = currentRevision(t, s, planFirst.Workspace.ID)
+	if _, err := s.CompleteWorkspace(ctx, planFirst.Workspace.ID, CompleteOptions{ExpectedRevision: revision}); err == nil {
+		t.Fatal("plan-first v2 workspace was completed outside the integration phase")
+	} else {
+		expectCode(t, err, "workflow_gate")
+	}
+
+	// A v1 plan-first snapshot has no landing capability and keeps the frozen
+	// operation_not_applicable contract.
+	v1, err := s.Create(ctx, CreateOptions{Title: "v1 plan-first", Input: "Frozen contract", Workflow: "plan-first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.With(ctx, v1.Workspace.ID, func(d *Document) error {
+		d.State.Workflow.Capabilities = legacySnapshotCapabilities("plan-first")
+		return saveDocument(d)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	revision = currentRevision(t, s, v1.Workspace.ID)
+	if _, err := s.CompleteWorkspace(ctx, v1.Workspace.ID, CompleteOptions{ExpectedRevision: revision}); err == nil {
+		t.Fatal("v1 plan-first snapshot was completed manually")
 	} else {
 		expectCode(t, err, "operation_not_applicable")
 	}
 
-	// Workflow archive still requires the confirmed release.
+	// Workflow archive still requires the confirmed release for workflows that
+	// declare a release gate (the extended fixture).
 	if err := s.With(ctx, ws, func(d *Document) error {
 		d.State.Status = "completed"
 		return saveDocument(d)
