@@ -8,7 +8,11 @@ This is a deliberately small workflow for turning a task description into a plan
 and then implementing that plan. Read WORKSPACE.md before every decision and use
 workspace menu --json for the current phase and available actions.
 
-## 1. Plan
+{{if .Autonomous}}This workspace is running autonomously. Resolve plan and task acceptance and phase
+advance yourself with recorded rationales and evidence, then finish with
+`workspace autonomy report`. Landing and completion stay with the user.
+
+{{end}}## 1. Plan
 
 Read inputs/issue.md and repository instructions. Create one planner Task with the
 required PLAN.md artifact, one planning worktree at the frozen workspace base, and

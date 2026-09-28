@@ -381,6 +381,8 @@ workspace create "Improve workspace creation"
 # --input-file can optionally be combined with --issue URL to preserve the source.
 # Manual orchestration without a workflow:
 workspace create "Ad-hoc analysis" --no-workflow
+# Autonomous run (user-invoked; requires a deliver-capable orchestrator route):
+workspace create "Unattended refactor" --autonomous --operation-key auto-1
 workspace start --workspace ws_ID_Z_ODPOWIEDZI --operation-key orchestrator-1
 workspace attach --workspace ws_ID_Z_ODPOWIEDZI
 ```
@@ -394,6 +396,21 @@ and a fixed limit of 3 parallel workers. Omit `--workflow` for the common case; 
 workspace still waiting in `needs_workflow` can be resolved with `workspace workflow
 select plan-first`. `--workflow` and `--no-workflow` cannot be combined, and a manual
 workspace cannot later be converted to a workflow. [Trackers and snapshots](docs/trackers.md).
+
+A workspace can run autonomously. `workspace create --autonomous` (or a user-run `issue
+dispatch --autonomous`) starts it unattended, and `workspace autonomy enable|disable`
+manages an existing active workspace (`enable` is terminal-user only; anyone authorized may
+disable; `reopen` clears it). While the run is running, the orchestrator resolves the
+orchestrator-level gates (plan and task/integrator acceptance, phase advance up to
+integration, worker questions, bounded retry/retire) with recorded `--rationale`/`--evidence`
+and finishes with `workspace autonomy report --summary-file <path> --outcome
+ready_to_land|ready_to_complete|blocked|failed`, which stores an immutable summary artifact
+and sets `autonomy.state=delivered`. Operations with external, local-branch,
+lifecycle-terminal, or authorization effects — `integration land`, `complete`, change-request
+publish/resolve, `release confirm`, live-testing answers, `reopen`, archive/clean/delete, and
+`state edit` — stay with the user and are refused for agent actors while the run is running.
+Autonomy requires a deliver-capable orchestrator route, and the project Dispatcher can never
+create or enable an autonomous workspace.
 
 Issue operations are project-scoped and local. `workspace issue refresh` reads the
 configured tracker but never changes it; `issue update` changes only local status.

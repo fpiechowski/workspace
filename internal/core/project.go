@@ -88,12 +88,14 @@ var stockPlanFirstTemplateDigests = map[string]bool{
 	"4569beee09d99f7a6c7fec1ad04006f5d41eac8051d32d05e2d69e0b644770bc": true,
 	"584360edfa6b9a9e5ecc4e3313a0b233f32198dbbbef71d0b037d399306eda9d": true,
 	"ada9a62a3d4c1a725ada2a03f97a63b1110ec0e29d703e2ae97292e43576a8af": true,
+	"0f8af62402a8a187ae7fbb022124e7137e1c30920e4526e40694d8e861f3eb1c": true,
 }
 
 var stockOrchestratorPromptDigests = map[string]bool{
 	"9c2f024ae978aa7ac55210a8b7827842d4d57351eaeda922bcb0238ac8b870e2": true,
 	"3c8dba7d97ea130ab30b4b251f33bf481e61e5a1eeb8413ebe7202d12c1ae6dc": true,
 	"851d90f98206ce6e1b73243005dda72c1eb643d506e491405e9cf4621d58eb66": true,
+	"5c789f44ff118a0bf4bc08a521c7ec5184fec138aa247eeb6c3dbadb517df0f0": true,
 }
 
 // ensureProjectScaffold installs missing bundled templates and refreshes only
@@ -666,16 +668,16 @@ func (s *Service) createWorkspaceLegacy(ctx context.Context, opt CreateOptions, 
 	if err := atomicWrite(filepath.Join(dir, "inputs", "issue.md"), []byte(opt.Input)); err != nil {
 		return Status{}, err
 	}
+	if opt.Autonomous {
+		enabledAt := nowUTC()
+		d.State.Autonomy = &Autonomy{Mode: "autonomous", State: "running", EnabledAt: &enabledAt, EnabledRevision: d.State.Revision, Source: "create"}
+	}
 	if err := s.snapshotTemplates(d, opt.Workflow, d.State.Manual()); err != nil {
 		return Status{}, err
 	}
 	if d.State.WorkflowSelected() {
 		orch.Profile = workflowProfile(cfg, d, "orchestrator", orch.Profile)
 		d.Registry.Agents[0] = orch
-	}
-	if opt.Autonomous {
-		enabledAt := nowUTC()
-		d.State.Autonomy = &Autonomy{Mode: "autonomous", State: "running", EnabledAt: &enabledAt, EnabledRevision: d.State.Revision, Source: "create"}
 	}
 	body, err := s.render("WORKSPACE.md.tmpl", agentPromptData{Workspace: d.State, Manual: d.State.Manual()})
 	if err != nil {

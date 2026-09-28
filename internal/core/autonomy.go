@@ -43,6 +43,31 @@ func requireAutonomySupport(cfg Config, workflowID string, manual bool) error {
 	return fail("autonomy_unsupported", "orchestrator profile %q has no client route with the deliver capability", profile)
 }
 
+// autonomyRunNotice is the binary-owned guidance appended to an orchestrator Run
+// prompt while the workspace is in an autonomous run. It cannot go stale with a
+// project's customized templates and carries the judgment rules the orchestrator
+// must apply plus the operations that stay reserved for the user.
+const autonomyRunNotice = `Autonomous mode notice (owned by the workspace binary; project templates cannot change it):
+This workspace is in an autonomous run and this Run is the orchestrator. Resolve the
+orchestrator-level gates yourself instead of asking the user, and record every decision:
+- Plan acceptance and task/integrator result acceptance: accept only when core validation
+  passes, the artifact and commit stay within the task scope, the check evidence covers the
+  declared verification with passing outcomes, and every acceptance criterion maps to
+  evidence. Otherwise reject with actionable feedback. Pass --rationale and --evidence; the
+  gate and its audit decision commit together.
+- Phase advance (planning -> plan_review -> implementing -> integration): advance only when
+  the core gates pass and the implementation tasks derive from the accepted plan.
+- Worker questions: answer from the issue, accepted plan and repository docs. For a product
+  choice pick the most conservative, minimal-scope reading and record it with
+  ` + "`workspace decision record --kind autonomous.assumption`" + `.
+- Retries are bounded to 2 rejections and 1 retry per task per run. When the bound is
+  exceeded, stop and deliver the report with outcome blocked.
+Do not resolve these (the binary refuses them for an agent while running): integration land,
+complete, change-request publish/resolve, release confirm, live-testing decision answer,
+reopen, archive/clean/delete, and state edit. Finish the run with
+` + "`workspace autonomy report --summary-file <path> --outcome ready_to_land|ready_to_complete|blocked|failed`" + `;
+that sets the autonomy state to delivered and leaves the excluded operations reserved for the user.`
+
 // isAgentActor reports whether the current actor is an agent session rather
 // than the terminal user (whose actor is empty).
 func (s *Service) isAgentActor() bool {

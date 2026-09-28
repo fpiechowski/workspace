@@ -19,6 +19,7 @@ type SessionOptions struct {
 }
 type promptData struct {
 	WorkspaceID, WorkspaceDir, AgentID, SessionID, RunID, ParentAgentID, ParentSessionID, BaseCommit string
+	Autonomous                                                                                       bool
 }
 
 // defaultMaxParallelTasks is the bounded worker fallback. It applies both to a
@@ -405,7 +406,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			prompt.Write(instructions)
 			prompt.WriteString("\n\n")
 		}
-		if err = t.Execute(&prompt, promptData{WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, AgentID: a.ID, SessionID: id, RunID: runID, ParentAgentID: parent, ParentSessionID: parentSession, BaseCommit: base}); err != nil {
+		if err = t.Execute(&prompt, promptData{WorkspaceID: d.State.ID, WorkspaceDir: d.Dir, AgentID: a.ID, SessionID: id, RunID: runID, ParentAgentID: parent, ParentSessionID: parentSession, BaseCommit: base, Autonomous: d.State.AutonomyRunning()}); err != nil {
 			return err
 		}
 		prompt.WriteString("\n\nAgent definition instructions:\n" + a.Instructions + "\n")
@@ -435,6 +436,9 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		}
 		if conversationOnly {
 			prompt.WriteString("\n\nCompleted workspace conversation notice:\nThis workspace is completed. This Run is conversation-only: discuss results, answer questions, and clarify follow-up instructions, but do not change accepted task, handoff, artifact, result, attempt, or release state. Only the orchestrator may invoke `workspace reopen` after the user has actually authorized more work.\n")
+		}
+		if a.Role == "orchestrator" && d.State.AutonomyRunning() {
+			prompt.WriteString("\n\n" + autonomyRunNotice + "\n")
 		}
 		promptFile := filepath.Join(d.Dir, "prompts", runID+".md")
 		if err := atomicWrite(promptFile, prompt.Bytes()); err != nil {

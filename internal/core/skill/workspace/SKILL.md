@@ -36,6 +36,8 @@ For a new issue or work description:
    exact frozen revision with `workspace create --from-issue <issue-id>
    --operation-key <stable-key> --json` (omit `--workflow` for the default `plan-first`).
    Pass `--no-workflow` for an explicit manual workspace.
+   Add `--autonomous` (user-invoked only) to start an unattended run; it requires a
+   deliver-capable orchestrator route and is refused for the project Dispatcher.
    For free-form work that is not an Issue, pass the description as the positional intent
    or use `--input-file <file>`. Retain the returned workspace ID; repeat the same
    operation key on transport retry.
@@ -65,7 +67,16 @@ logical and compact; use `session history <session>` or `run list` for execution
 Durable messages address
 Agent IDs; native thread IDs and tmux pane IDs are not workspace mailbox addresses.
 Use `--json --non-interactive` for machine-readable operations. On `decision_required`,
-present the actual choices to the user and record their answer. Preserve existing
+present the actual choices to the user and record their answer. In a running autonomous
+run, do not ask: resolve the orchestrator-level gates (plan and task/integrator acceptance,
+phase advance up to integration, worker questions, bounded retry/retire) with `--rationale`
+and `--evidence` and end with `workspace autonomy report`. Never answer an excluded
+operation (landing, complete, change-request publish/resolve, release, live-testing answer,
+reopen, archive/clean/delete, state edit) with `--user-confirmed` while the run is running:
+those stay with the user and the binary refuses agents. Manage the run with `workspace
+autonomy enable|disable` (`enable` is terminal-user only) and deliver it with `workspace
+autonomy report --summary-file <path> --outcome ready_to_land|ready_to_complete|blocked|failed`.
+Preserve existing
 authorization; invoking this skill alone does not authorize external publication.
 
 Workers persist outputs in their worktrees and submit explicit files through handoff.

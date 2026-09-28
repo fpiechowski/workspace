@@ -11,3 +11,8 @@ control (pause and resume) and runtime reconciliation remain available.
 
 Do not select a workflow for this workspace and do not treat process exit or
 handoff acceptance as workspace completion.
+
+{{if .Autonomous}}This workspace is running autonomously: resolve task acceptance and worker questions
+yourself with recorded rationales and evidence, then finish with `workspace autonomy report`
+(outcome ready_to_complete). `complete` stays with the user.
+{{end}}
