@@ -36,7 +36,7 @@
 | `gofmt -l ./cmd ./internal` | 0 | `evidence-gofmt.txt` |
 | `go vet ./...` | 0 | `evidence-vet.txt` |
 | `env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 570s` | 0 | `evidence-go-test-all.txt` |
-| `WORKSPACE_TMUX_TEST=1 go test -race ./internal/core -timeout 90s` | 0 | `evidence-tmux-core.txt` |
+| `WORKSPACE_TMUX_TEST=1 go test -race -count=1 ./internal/core -run 'TestTmux|TestMigrateLegacyWorkflow' -timeout 90s` | 0 | `evidence-tmux-core.txt` |
 | `go test ./internal/core -run TestMigrateLegacyWorkflowRewritesStateAndSnapshotsHistory -count=1` | 0 | terminal check |
 
 ## Risks and deviations
