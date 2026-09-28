@@ -2,7 +2,7 @@
 
 ## Commit
 
-The implementation commit is recorded below after verification.
+`f7d34d7` — `feat: remove legacy workflow and default plan-first`
 
 ## Changes
 
