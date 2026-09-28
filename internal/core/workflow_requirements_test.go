@@ -18,8 +18,10 @@ func TestPlanFirstCapabilitiesRejectUndeclaredGatesAndDependenciesAtCreate(t *te
 
 	_, err = s.CreateTask(ctx, ws, TaskSpec{Title: "Live test", Goal: "Run a live test", Role: "tester", AcceptanceCriteria: []string{"report"}}, "task:tester")
 	expectCode(t, err, "workflow_capability")
+	// plan-first v2 declares the integration capability, so preparation is
+	// gated by phase rather than by a missing capability.
 	_, err = s.PrepareIntegration(ctx, ws, IntegrationOptions{})
-	expectCode(t, err, "workflow_capability")
+	expectCode(t, err, "workflow_gate")
 
 	planner := plannedTask(t, s, ws, "plan", "planner", nil)
 	_, err = s.CreateTask(ctx, ws, TaskSpec{Title: "Implementation", Goal: "Implement the plan", Role: "implementer", AcceptanceCriteria: []string{"change"}}, "task:implementation")
@@ -29,7 +31,7 @@ func TestPlanFirstCapabilitiesRejectUndeclaredGatesAndDependenciesAtCreate(t *te
 	}
 }
 
-func TestRetiredImplementerDoesNotBlockPlanFirstCompletion(t *testing.T) {
+func TestRetiredImplementerDoesNotBlockPlanFirstIntegration(t *testing.T) {
 	s, _ := fixture(t)
 	ctx := context.Background()
 	created, err := s.Create(ctx, CreateOptions{Title: "Plan-first", Input: "Retirement test", Workflow: "plan-first"})
@@ -53,12 +55,12 @@ func TestRetiredImplementerDoesNotBlockPlanFirstCompletion(t *testing.T) {
 	if _, err := s.AdvanceWorkflow(ctx, ws, "implementing", "advance:implementing"); err != nil {
 		t.Fatal(err)
 	}
-	status, err := s.AdvanceWorkflow(ctx, ws, "completed", "advance:completed")
+	status, err := s.AdvanceWorkflow(ctx, ws, "integration", "advance:integration")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.Workspace.Status != "completed" || status.Workspace.Workflow.Phase != "completed" {
-		t.Fatalf("retired implementation did not allow completion: %+v", status.Workspace)
+	if status.Workspace.Status != "active" || status.Workspace.Workflow.Phase != "integration" {
+		t.Fatalf("retired implementation did not allow the integration stage: %+v", status.Workspace)
 	}
 }
 

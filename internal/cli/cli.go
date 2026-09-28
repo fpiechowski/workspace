@@ -576,7 +576,7 @@ func newRoot(o *options) *cobra.Command {
 	var completeReason string
 	var completeConfirmed bool
 	var completeExpected int
-	complete := command("complete", "Complete an intentionally manual workspace after explicit user confirmation", func(c *cobra.Command, _ []string) error {
+	complete := command("complete", "Complete a manual workspace or a landed plan-first workflow after explicit user confirmation", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err

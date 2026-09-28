@@ -334,6 +334,9 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, key strin
 		if d.State.Release.UserConfirmed {
 			return fail("workspace_completed", "released work requires workspace reopen before retrying tasks")
 		}
+		if landingLanded(d) {
+			return fail("workspace_completed", "landed work requires workspace reopen before retrying tasks")
+		}
 		affected := map[string]bool{t.ID: true}
 		changed := true
 		for changed {
@@ -371,7 +374,7 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, key strin
 			case "implementer":
 				d.State.Workflow.Phase = "implementing"
 			case "integrator":
-				d.State.Workflow.Phase = "integrating"
+				d.State.Workflow.Phase = integrationPhase(d)
 			case "tester":
 				d.State.Workflow.Phase = "live_testing"
 			}

@@ -4,11 +4,12 @@ import (
 	"context"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 type IntegrationOptions struct {
-	Tasks              []string
-	Base, OperationKey string
+	Tasks                      []string
+	Base, Target, OperationKey string
 }
 
 func integrationInputs(d *Document, ids []string) ([]string, []string, error) {
@@ -86,6 +87,9 @@ func (s *Service) PrepareIntegration(ctx context.Context, selector string, opt I
 		if err := requireWorkflowCapability(d, capIntegration); err != nil {
 			return err
 		}
+		if landingLanded(d) {
+			return fail("workspace_completed", "the integration already landed; reopen the workspace to prepare a new integration")
+		}
 		if _, err := d.previous(opt.OperationKey, opt); err != nil {
 			return err
 		}
@@ -96,14 +100,36 @@ func (s *Service) PrepareIntegration(ctx context.Context, selector string, opt I
 		if err := rejectNewWorkspaceWork(d, "preparing integration"); err != nil {
 			return err
 		}
-		if d.State.Workflow == nil || d.State.Workflow.Phase != "integrating" {
-			return fail("workflow_gate", "integration can be prepared in the integrating phase")
+		if d.State.Workflow == nil || d.State.Workflow.Phase != integrationPhase(d) {
+			return fail("workflow_gate", "integration can be prepared in the %s phase", integrationPhase(d))
 		}
 		ids, heads, err := integrationInputs(d, opt.Tasks)
 		if err != nil {
 			return err
 		}
 		base := d.State.Base.Commit
+		target, strategy := "", ""
+		if workflowHasCapability(d, capLanding) {
+			// The accepted result must fast-forward the target, so a landing
+			// workflow integrates onto the current tip of the target branch
+			// rather than the frozen workspace base. --base still overrides.
+			target = opt.Target
+			if target == "" {
+				target = d.State.Base.Ref
+			}
+			if strings.HasPrefix(target, "-") {
+				return fail("invalid_target", "invalid target branch")
+			}
+			if _, err := git(ctx, s.Root, "check-ref-format", "--branch", target); err != nil {
+				return err
+			}
+			tip, err := git(ctx, s.Root, "rev-parse", "--verify", "--end-of-options", target+"^{commit}")
+			if err != nil {
+				return err
+			}
+			base = tip
+			strategy = "merge"
+		}
 		if opt.Base != "" {
 			base, err = git(ctx, s.Root, "rev-parse", "--verify", "--end-of-options", opt.Base+"^{commit}")
 			if err != nil {
@@ -111,9 +137,9 @@ func (s *Service) PrepareIntegration(ctx context.Context, selector string, opt I
 			}
 		}
 		requestDigest = payloadDigest(struct {
-			Tasks, Heads []string
-			Base         string
-		}{ids, heads, base})
+			Tasks, Heads           []string
+			Base, Target, Strategy string
+		}{ids, heads, base, target, strategy})
 		previous, err := d.previous(opt.OperationKey, opt)
 		if err != nil {
 			return err
@@ -135,7 +161,7 @@ func (s *Service) PrepareIntegration(ctx context.Context, selector string, opt I
 			}
 			return nil
 		}
-		out = Integration{TaskIDs: ids, Heads: heads, BaseCommit: base, InputDigest: requestDigest}
+		out = Integration{TaskIDs: ids, Heads: heads, BaseCommit: base, Target: target, Strategy: strategy, InputDigest: requestDigest}
 		name = "integration"
 		for _, w := range d.Registry.Worktrees {
 			if w.Name == name {
@@ -165,9 +191,9 @@ func (s *Service) PrepareIntegration(ctx context.Context, selector string, opt I
 			return err
 		}
 		if payloadDigest(struct {
-			Tasks, Heads []string
-			Base         string
-		}{ids, heads, out.BaseCommit}) != requestDigest {
+			Tasks, Heads           []string
+			Base, Target, Strategy string
+		}{ids, heads, out.BaseCommit, out.Target, out.Strategy}) != requestDigest {
 			return fail("revision_conflict", "accepted implementation changed during preparation")
 		}
 		if err := writeJSON(filepath.Join(d.Dir, "integration", "manifest.json"), out); err != nil {

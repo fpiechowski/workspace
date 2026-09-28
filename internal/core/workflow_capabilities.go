@@ -21,9 +21,15 @@ const (
 	capLiveTest       = "live_test"
 	capChangeRequest  = "change_request"
 	capRelease        = "release"
+	capLanding        = "landing"
 )
 
-func defaultWorkflowCapabilities(id string) []string {
+// legacySnapshotCapabilities is the fallback for persisted snapshots that
+// predate capability persistence (an empty Capabilities list). It keeps the v1
+// semantics of each bundled workflow so an in-flight snapshot never silently
+// changes contract. A v1 plan-first workspace therefore still completes after
+// implementation instead of gaining the integration stage.
+func legacySnapshotCapabilities(id string) []string {
 	base := []string{capTasks, capPhases, capPlanner, capPlannerDepends}
 	switch id {
 	case "plan-first":
@@ -35,6 +41,16 @@ func defaultWorkflowCapabilities(id string) []string {
 	}
 }
 
+// builtinWorkflowCapabilities is the required capability set for a new
+// selection of a bundled workflow. plan-first is v2: mandatory integration and
+// a user-approved landing gate.
+func builtinWorkflowCapabilities(id string) []string {
+	if id == "plan-first" {
+		return []string{capTasks, capPhases, capPlanner, capImplementer, capIntegrator, capPlannerDepends, capIntegration, capLanding}
+	}
+	return nil
+}
+
 func workflowCapabilities(d *Document) []string {
 	if d == nil || d.State.Workflow == nil {
 		return nil
@@ -42,7 +58,7 @@ func workflowCapabilities(d *Document) []string {
 	if len(d.State.Workflow.Capabilities) > 0 {
 		return d.State.Workflow.Capabilities
 	}
-	return defaultWorkflowCapabilities(d.State.Workflow.ID)
+	return legacySnapshotCapabilities(d.State.Workflow.ID)
 }
 
 func workflowHasCapability(d *Document, capability string) bool {
@@ -81,16 +97,41 @@ func requireWorkflowRole(d *Document, role string) error {
 	return nil
 }
 
+// workflowConfigCapabilities returns the capability set a new selection
+// snapshots. A plan-first configuration can only add to the required built-in
+// v2 set: the mandatory integration stage cannot be dropped by a project
+// config that still lists the v1 capabilities. Other workflow ids keep
+// "configured, else nothing" because their capabilities are project-defined.
 func workflowConfigCapabilities(id string, cfg Config) []string {
-	if configured, ok := cfg.Workflows[id]; ok && len(configured.Capabilities) > 0 {
-		return append([]string(nil), configured.Capabilities...)
+	configured := cfg.Workflows[id].Capabilities
+	if id == "plan-first" {
+		return unionCapabilities(configured, builtinWorkflowCapabilities(id))
 	}
-	return defaultWorkflowCapabilities(id)
+	if len(configured) > 0 {
+		return append([]string(nil), configured...)
+	}
+	return nil
+}
+
+func unionCapabilities(configured, required []string) []string {
+	out := make([]string, 0, len(configured)+len(required))
+	seen := map[string]bool{}
+	for _, list := range [][]string{configured, required} {
+		for _, capability := range list {
+			if capability == "" || seen[capability] {
+				continue
+			}
+			seen[capability] = true
+			out = append(out, capability)
+		}
+	}
+	return out
 }
 
 func knownWorkflowCapability(capability string) bool {
 	if capability == capTasks || capability == capTaskRoles || capability == capPhases || capability == capPlannerDepends ||
-		capability == capIntegration || capability == capLiveTest || capability == capChangeRequest || capability == capRelease {
+		capability == capIntegration || capability == capLiveTest || capability == capChangeRequest || capability == capRelease ||
+		capability == capLanding {
 		return true
 	}
 	return capability == capPlanner || capability == capImplementer || capability == capIntegrator || capability == capTester

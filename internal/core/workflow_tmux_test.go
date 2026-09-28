@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,6 +120,156 @@ func TestWorkflowAgentProcess(t *testing.T) {
 		t.Fatal("handoff replay duplicated result")
 	}
 	fmt.Println("handoff", h1.ID)
+}
+
+// TestTmuxLandAndCompletePlanFirst runs a plan-first v2 workspace end to end
+// through implementation, integration, the user-approved land and complete,
+// driving land/complete through the real CLI binary.
+func TestTmuxLandAndCompletePlanFirst(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Getenv("WORKSPACE_TMUX_TEST") != "1" {
+		t.Skip("requires opt-in Linux/macOS tmux")
+	}
+	s, _ := fixture(t)
+	ctx := context.Background()
+	socket := "landing-" + ID("test")
+	rt := Tmux{Socket: socket}
+	s.Runtime = rt
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", socket, "kill-server").Run() })
+	bin := filepath.Join(t.TempDir(), "workspace")
+	cmd := exec.Command("go", "build", "-o", bin, "./cmd/workspace")
+	cmd.Dir = filepath.Join("..", "..")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v %s", err, b)
+	}
+	s.Executable = bin
+	cfg, err := s.Config()
+	if err != nil {
+		t.Fatal(err)
+	}
+	exe, _ := os.Executable()
+	cfg.Clients["test"] = Client{Adapter: "command", LaunchArgv: []string{exe, "-test.run=TestWorkflowAgentProcess", "--", "{prompt_file}", "workflow-client"}}
+	b, _ := yaml.Marshal(cfg)
+	if err := atomicWrite(filepath.Join(s.Root, ".workspace", "config.yaml"), b); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := git(ctx, s.Root, "branch", "release"); err != nil {
+		t.Fatal(err)
+	}
+	w, err := s.Create(ctx, CreateOptions{Title: "Plan-first landing E2E", Input: "Land and complete", Workflow: "plan-first", OperationKey: "plan-first-e2e"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws := w.Workspace.ID
+	if err := s.EnsureSupervisor(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.StopSupervisor(ctx) })
+	orch, err := s.StartOrchestrator(ctx, ws, "orch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wait := func(taskID, sessionID string) {
+		t.Helper()
+		for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); {
+			v, err := s.Status(ctx, ws)
+			if err != nil {
+				t.Fatal(err)
+			}
+			accepted := false
+			ended := false
+			for _, task := range v.Workspace.Tasks {
+				if task.ID == taskID {
+					accepted = task.State == "accepted"
+				}
+			}
+			for _, p := range v.Sessions {
+				if p.ID == sessionID {
+					ended = !p.Active()
+					if p.State == "failed" {
+						output, _ := rt.call(ctx, "capture-pane", "-p", "-t", p.PaneID, "-S", "-")
+						t.Fatalf("worker failed: %s %s", p.Error, output)
+					}
+				}
+			}
+			if accepted && ended {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		output, _ := rt.call(ctx, "capture-pane", "-p", "-t", orch.PaneID, "-S", "-")
+		t.Fatalf("task timeout %s; orchestrator %s", taskID, output)
+	}
+	plan := plannedTask(t, s, ws, "planning", "planner", nil)
+	pp, _ := startTask(t, s, ws, plan)
+	wait(plan.ID, pp.ID)
+	advancePhase(t, s, ws, "plan_review")
+	impl := plannedTask(t, s, ws, "implementation", "implementer", []string{plan.ID})
+	advancePhase(t, s, ws, "implementing")
+	ip, _ := startTask(t, s, ws, impl)
+	wait(impl.ID, ip.ID)
+	advancePhase(t, s, ws, "integration")
+	i, err := s.PrepareIntegration(ctx, ws, IntegrationOptions{Target: "release"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	it := plannedTask(t, s, ws, "integration", "integrator", []string{impl.ID})
+	ia, err := s.CreateAgent(ctx, ws, AgentOptions{Name: "integrator", Role: "integrator", PromptTemplate: "implementation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	is, err := s.StartSession(ctx, ws, SessionOptions{Agent: ia.ID, Task: it.ID, Worktree: i.WorktreeID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wait(it.ID, is.ID)
+	if _, err := s.StopSession(ctx, ws, orch.ID); err != nil {
+		t.Fatal(err)
+	}
+	runWorkspaceCLI(t, bin, s.Root, "integration", "land", "--workspace", ws, "--target", "release", "--user-confirmed", "--expected-revision", strconv.Itoa(currentRevision(t, s, ws)))
+	landed, err := s.Status(ctx, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !landingLanded(&Document{State: landed.Workspace}) {
+		t.Fatalf("CLI land did not record the landing: %+v", landed.Workspace.Integration)
+	}
+	runWorkspaceCLI(t, bin, s.Root, "complete", "--workspace", ws, "--user-confirmed", "--expected-revision", strconv.Itoa(currentRevision(t, s, ws)))
+	v, err := s.Status(ctx, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Workspace.Status != "completed" || v.Workspace.Workflow.Phase != "completed" {
+		t.Fatalf("CLI completion state: %+v", v.Workspace)
+	}
+	if _, err := s.Archive(ctx, ws); err != nil {
+		t.Fatalf("archive failed: %v", err)
+	}
+}
+
+func runWorkspaceCLI(t *testing.T, bin, project string, args ...string) json.RawMessage {
+	t.Helper()
+	full := append([]string{"--json", "--project", project}, args...)
+	cmd := exec.Command(bin, full...)
+	clean := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "WORKSPACE_") {
+			continue
+		}
+		clean = append(clean, entry)
+	}
+	cmd.Env = clean
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("CLI %v: %v: %s", args, err, out)
+	}
+	var response struct {
+		OK   bool            `json:"ok"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(out, &response); err != nil || !response.OK {
+		t.Fatalf("CLI %v response: %s (%v)", args, out, err)
+	}
+	return response.Data
 }
 
 func TestTmuxCompleteIssueWorkflow(t *testing.T) {

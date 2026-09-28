@@ -114,6 +114,24 @@ type Integration struct {
 	BaseCommit  string   `yaml:"base_commit" json:"base_commit"`
 	HeadCommit  string   `yaml:"head_commit" json:"head_commit"`
 	InputDigest string   `yaml:"input_digest" json:"input_digest"`
+	// Target is the branch the accepted integration lands into. It is empty for
+	// the extended machine, whose integration stops at change-request/release.
+	Target string `yaml:"target,omitempty" json:"target,omitempty"`
+	// Strategy is the landing strategy; only "merge" is implemented.
+	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
+	// Landing records the user-approved local merge of an accepted integration.
+	Landing *Landing `yaml:"landing,omitempty" json:"landing,omitempty"`
+}
+
+// Landing is the receipt for a user-approved fast-forward merge of the accepted
+// integration HEAD into the target branch.
+type Landing struct {
+	State         string     `yaml:"state" json:"state"`
+	Target        string     `yaml:"target" json:"target"`
+	Before        string     `yaml:"before" json:"before"`
+	After         string     `yaml:"after" json:"after"`
+	UserConfirmed bool       `yaml:"user_confirmed" json:"user_confirmed"`
+	LandedAt      *time.Time `yaml:"landed_at,omitempty" json:"landed_at,omitempty"`
 }
 type ChangeRequest struct {
 	TaskID             string   `yaml:"task_id,omitempty" json:"task_id,omitempty"`

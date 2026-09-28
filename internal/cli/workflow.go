@@ -25,7 +25,24 @@ func integrationCommands(o *options) *cobra.Command {
 	})
 	prepare.Flags().StringSliceVar(&opt.Tasks, "tasks", nil, "Accepted task IDs; defaults to all implementation tasks")
 	prepare.Flags().StringVar(&opt.Base, "base", "", "Target base revision")
+	prepare.Flags().StringVar(&opt.Target, "target", "", "Branch to land the integration into; defaults to the workspace base ref")
 	group.AddCommand(prepare)
+	var land core.LandingOptions
+	landCmd := command("land", "Land the accepted integration into the target branch after explicit user approval", func(c *cobra.Command, _ []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.LandIntegration(c.Context(), id, land, o.key)
+		if err != nil {
+			return err
+		}
+		return o.emit(v)
+	})
+	landCmd.Flags().StringVar(&land.Target, "target", "", "Target branch; must match the prepared integration target")
+	landCmd.Flags().IntVar(&land.ExpectedRevision, "expected-revision", 0, "Required current workspace revision")
+	landCmd.Flags().BoolVar(&land.UserConfirmed, "user-confirmed", false, "Attest that the user explicitly approved landing into the target branch")
+	group.AddCommand(landCmd)
 	return group
 }
 func decisionCommands(o *options) *cobra.Command {

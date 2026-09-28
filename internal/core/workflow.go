@@ -7,7 +7,17 @@ import (
 	"time"
 )
 
-var workflowPhases = []string{"planning", "plan_review", "implementing", "integrating", "change_requests", "live_test_offer", "live_testing", "awaiting_release", "completed"}
+var workflowPhases = []string{"planning", "plan_review", "implementing", "integration", "integrating", "change_requests", "live_test_offer", "live_testing", "awaiting_release", "completed"}
+
+// integrationPhase returns the phase id used by the integration stage. The
+// landing machine (plan-first v2) calls it "integration"; the extended machine
+// keeps "integrating".
+func integrationPhase(d *Document) string {
+	if workflowHasCapability(d, capLanding) {
+		return "integration"
+	}
+	return "integrating"
+}
 
 // requireWorkflowOperation rejects operations that only apply to a
 // workflow-driven workspace with a stable, non-interactive error. It is a no-op
@@ -83,6 +93,79 @@ func advancePlanFirst(d *Document) error {
 	default:
 		return fail("invalid_state", "unknown plan-first workflow phase %q", phase)
 	}
+	return nil
+}
+
+// advancePlanFirstIntegrated drives the plan-first v2 machine:
+// planning -> plan_review -> implementing -> integration. The integration phase
+// is left only by the user-approved landing and completion operations, so an
+// advance there records the required user decision instead of changing phase.
+func advancePlanFirstIntegrated(d *Document, target string) error {
+	phase := d.State.Workflow.Phase
+	next := ""
+	switch phase {
+	case "planning":
+		if _, err := acceptedRole(d, "planner"); err != nil {
+			return err
+		}
+		next = "plan_review"
+	case "plan_review":
+		plans, err := acceptedRole(d, "planner")
+		if err != nil {
+			return err
+		}
+		count := 0
+		retired := 0
+		for _, t := range d.State.Tasks {
+			if t.Role != "implementer" {
+				continue
+			}
+			if retiredTask(t) {
+				retired++
+				continue
+			}
+			count++
+			linked := false
+			for _, dep := range t.DependsOn {
+				for _, p := range plans {
+					if dep == p.ID {
+						linked = true
+					}
+				}
+			}
+			if !linked {
+				return fail("workflow_gate", "implementation task %s must reference an accepted plan", t.ID)
+			}
+		}
+		if count == 0 && retired == 0 {
+			return fail("workflow_gate", "create implementation tasks before advancing")
+		}
+		next = "implementing"
+	case "implementing":
+		live := false
+		for _, t := range d.State.Tasks {
+			if t.Role == "implementer" && !retiredTask(t) {
+				live = true
+				break
+			}
+		}
+		if live {
+			if _, err := acceptedRole(d, "implementer"); err != nil {
+				return err
+			}
+		}
+		next = "integration"
+	case "integration":
+		return fail("user_decision_required", "integration is ready; land the accepted integration with workspace integration land --user-confirmed after user approval, then run workspace complete --user-confirmed")
+	case "completed":
+		return fail("workspace_completed", "workflow is completed")
+	default:
+		return fail("invalid_state", "unknown plan-first workflow phase %q", phase)
+	}
+	if target != "" && target != next {
+		return fail("workflow_gate", "next phase is %s; cannot skip to %s", next, target)
+	}
+	d.State.Workflow.Phase = next
 	return nil
 }
 
@@ -205,9 +288,13 @@ func advance(ctx context.Context, d *Document, target string) error {
 	if d.State.Status != "active" {
 		return fail("workflow_gate", "workspace is %s", d.State.Status)
 	}
-	// Workflows without the integration capability use the compact
-	// plan/review/implementation/completed state machine. The capability
-	// declaration, rather than a workflow ID, selects these gates.
+	// The capability declaration, rather than a workflow ID, selects the gates.
+	// A landing workflow uses the plan-first v2 machine; a workflow without the
+	// integration capability keeps the compact v1 machine; everything else uses
+	// the extended change-request/live-test/release machine.
+	if workflowHasCapability(d, capLanding) {
+		return advancePlanFirstIntegrated(d, target)
+	}
 	if !workflowHasCapability(d, capIntegration) {
 		next := map[string]string{"planning": "plan_review", "plan_review": "implementing", "implementing": "completed"}[d.State.Workflow.Phase]
 		if target != "" && target != next {
@@ -519,6 +606,24 @@ func (s *Service) ConfirmRelease(ctx context.Context, selector, reference string
 	return out, err
 }
 
+// landingMenuActions suggests the next landing decision for an integration
+// phase: prepare, then the user-approved land, then complete.
+func landingMenuActions(d *Document) []MenuAction {
+	if landingLanded(d) || !hasLiveImplementer(d.State.Tasks) {
+		return []MenuAction{{"complete", "Complete this workflow workspace", fmt.Sprintf("complete --user-confirmed --expected-revision %d", d.State.Revision)}}
+	}
+	if d.State.Integration != nil {
+		if _, err := acceptedRole(d, "integrator"); err == nil {
+			target := integrationTarget(d)
+			return []MenuAction{{"land", "Land integration into " + target + " (user approval)", fmt.Sprintf("integration land --target %s --expected-revision %d --user-confirmed", target, d.State.Revision)}}
+		}
+	}
+	return []MenuAction{
+		{"prepare", "Prepare the integration worktree", "integration prepare"},
+		{"advance", "Check requirements", "workflow advance"},
+	}
+}
+
 type MenuAction struct {
 	ID      string `json:"id" yaml:"id"`
 	Label   string `json:"label" yaml:"label"`
@@ -583,6 +688,8 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 			out.Actions = append(out.Actions, MenuAction{"decision", "Answer the pending question", fmt.Sprintf("decision answer %s --expected-revision %d", d.State.PendingDecision.ID, d.State.PendingDecision.Revision)})
 		} else if out.Phase == "awaiting_release" {
 			out.Actions = append(out.Actions, MenuAction{"release", "Confirm deployment or release", "release confirm --reference <reference>"})
+		} else if workflowHasCapability(d, capLanding) && out.Phase == integrationPhase(d) {
+			out.Actions = append(out.Actions, landingMenuActions(d)...)
 		} else {
 			out.Actions = append(out.Actions, MenuAction{"advance", "Check requirements and advance workflow", "workflow advance"})
 		}

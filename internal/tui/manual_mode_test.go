@@ -80,6 +80,29 @@ func TestArchivedWorkspaceOffersNoConversationOrReopen(t *testing.T) {
 	}
 }
 
+// A plan-first v2 workspace offers completion only once the integration landed
+// or there is nothing to integrate.
+func TestLandedWorkflowOffersCompletion(t *testing.T) {
+	m := workspaceState("ws_landing", "active")
+	m.snapshot.Status.Workspace.Workflow = &core.Workflow{ID: "plan-first", Phase: "integration", Capabilities: []string{"integration", "landing"}}
+	m.snapshot.Status.Workspace.Tasks = []core.Task{{ID: "task_impl", State: "accepted", TaskSpec: core.TaskSpec{Role: "implementer"}}}
+	values := actionValues(t, m)
+	if values["complete_workspace"] {
+		t.Fatalf("unlanded integration offered completion: %+v", values)
+	}
+	if !values["pause"] {
+		t.Fatalf("workflow actions lost pause: %+v", values)
+	}
+	m.snapshot.Status.Workspace.Integration = &core.Integration{
+		HeadCommit: "abc",
+		Landing:    &core.Landing{State: "landed", Target: "master", Before: "aaa", After: "abc"},
+	}
+	values = actionValues(t, m)
+	if !values["complete_workspace"] {
+		t.Fatalf("landed workflow did not offer completion: %+v", values)
+	}
+}
+
 // A pending creation choice still offers workflow selection and is not labeled
 // as manual.
 func TestPendingWorkspaceOffersSelectionNotManual(t *testing.T) {
