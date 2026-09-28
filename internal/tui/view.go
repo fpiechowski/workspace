@@ -90,6 +90,9 @@ func (m *Model) headerIdentityText() (string, string) {
 		}
 		parts = append(parts, name)
 		parts = append(parts, statusBadge(m.snapshot.Status.Workspace.Status))
+		if badge := autonomyStateBadge(m.snapshot.Status.Workspace.Autonomy); badge != "" {
+			parts = append(parts, badge)
+		}
 		if label := m.snapshot.Status.Workspace.PhaseLabel(); label != "" {
 			parts = append(parts, "·", label)
 		}
@@ -217,6 +220,7 @@ var detailSections = map[string]string{
 	"agent": "Agents", "service": "Services", "artifact": "Artifacts", "handoff": "Handoffs",
 	"check": "Checks", "decision": "Decisions", "change_request": "Change requests",
 	"preview": "Preview", "orchestrator": "Orchestrator", "runtime": "Runtime", "issue": "Issues", "dispatcher": "Dispatcher",
+	"autonomy": "Autonomy",
 }
 
 func detailSection(page string) string {

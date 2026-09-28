@@ -1,0 +1,2 @@
+ok  	workspace/internal/tui	0.283s
+tui_exit=0

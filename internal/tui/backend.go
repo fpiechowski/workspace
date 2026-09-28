@@ -121,6 +121,9 @@ func (b CoreBackend) PerformAction(ctx context.Context, selector string, call Ac
 	case "reopen_workspace":
 		_, err := b.Service.ReopenWorkspace(ctx, selector, core.ReopenOptions{Reason: call.Reason, ExpectedRevision: call.ExpectedRevision}, call.Key)
 		return err
+	case "disable_autonomy":
+		_, err := b.Service.DisableAutonomy(ctx, selector, core.AutonomyDisableOptions{Reason: call.Reason, ExpectedRevision: call.ExpectedRevision}, call.Key)
+		return err
 	case "pause":
 		_, err := b.Service.SetPausedGuarded(ctx, selector, true, call.Key, core.MutationGuard{ExpectedRevision: call.ExpectedRevision})
 		return err

@@ -1,0 +1,12 @@
+- command: go test ./internal/tui -count=1
+  exit_code: 0
+  evidence: evidence-i5-tui-test.txt
+- command: gofmt -l ./cmd ./internal
+  exit_code: 0
+  evidence: evidence-i5-gofmt.txt
+- command: go vet ./...
+  exit_code: 0
+  evidence: evidence-i5-vet.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID -u WORKSPACE_ROLE -u WORKSPACE_PARENT_SESSION_ID go test ./... -count=1 -timeout 570s
+  exit_code: 0
+  evidence: evidence-i5-go-test-all.txt

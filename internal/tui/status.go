@@ -11,11 +11,11 @@ func statusBadge(state string) string {
 		return "× " + state
 	case "blocked", "needs_changes":
 		return "! " + state
-	case "accepted", "completed", "ready":
+	case "accepted", "completed", "ready", "delivered":
 		return "✓ " + state
 	case "submitted", "awaiting_review", "pending_review":
 		return "◈ " + state
-	case "idle", "pending", "paused":
+	case "idle", "pending", "paused", "disabled":
 		return "○ " + state
 	case "stopped", "archived", "closed", "removed":
 		return "■ " + state
