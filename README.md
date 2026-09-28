@@ -460,10 +460,11 @@ workspace tui status --workspace ws_ID
 workspace tui hide --workspace ws_ID
 ```
 
-`g` resolves the selected workspace target and opens a picker of attached tmux clients
-on that target's socket, even when only one client is available. Each row shows the
-client TTY and current session. Confirming a row moves that explicit client to the
-verified workspace, window, and pane; `Esc` or `Ctrl+C` cancels without changing tmux.
+`g` resolves the selected workspace target and, when exactly one tmux client is attached
+on that target's socket, jumps immediately with that client to the verified workspace,
+window, and pane. With several clients it opens a picker; each row shows the client TTY
+and current session. Confirming a row moves that explicit client to the verified
+workspace, window, and pane; `Esc` or `Ctrl+C` cancels without changing tmux.
 The TUI remembers the last successfully used client in ignored, project-local
 `.workspace` data scoped by socket, marks it `last used`, and preselects it while it
 remains attached. Outside tmux, the TUI still selects from the target server's attached
@@ -480,7 +481,8 @@ lands on Tasks. `1`–`5` open Tasks, Sessions,
 Worktrees, Results, and More; below 60 columns the tabs shorten to `1 Tasks`,
 `2 Sess`, `3 Trees`, `4 Out`, and `5 More`. Sessions is a plain collection without
 secondary tabs: `f` switches between the current and history views, `Enter` opens the
-session details, and `g` opens the attached-client picker for a verified tmux jump.
+session details, and `g` jumps with the only attached client or opens the attached-client
+picker for a verified tmux jump.
 `Tab`/`Shift+Tab` switches the
 result type on Results only (the active type is named in the helper line).
 `Up`/`Down` or `j`/`k` changes the selection, `Enter` opens an item, `Esc` goes back,
@@ -492,10 +494,11 @@ Documents, so attention and recorded activity are reachable from `5`. `a` opens 
 the operations available for the selection, including creating and fully deleting
 workspaces in the project picker, starting completed-workspace conversation, reopening
 or archiving a completed workspace, and deleting unrelated tasks and inactive sessions
-while ordinary task mutations remain unavailable after completion. `g` always opens the
-attached-client picker and then moves the explicitly selected client to the verified
-tmux client/window/pane, including when the TUI itself runs outside tmux. A successful
-choice is remembered per project and tmux socket. `r`
+while ordinary task mutations remain unavailable after completion. `g` moves an attached
+tmux client to the verified client/window/pane: it jumps immediately with the only
+attached client and otherwise opens the attached-client picker, including when the TUI
+itself runs outside tmux. A successful choice is remembered per project and tmux socket.
+`r`
 refreshes the read without reconcile, and `?` shows scrollable help grouped into
 Navigation, View, Runtime, Actions, and Exit (already reachable at 40×12). `--theme`
 accepts `auto`, `dark`, or `light`; `--no-color` forces textual badges.

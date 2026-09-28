@@ -324,12 +324,12 @@ panes, and the orchestrator has a separate window started from the workspace dir
 Supporting services are a separate record type and do not inherit agent identity.
 
 The TUI's `g` action resolves a fresh core navigation target, lists attached clients on
-that target's socket, and always presents the client picker, including for a single
-client. It stores only the last successfully used client as a project-local UI
-preference under ignored `.workspace` data, with one file per socket; this does not
-modify Workspace domain records or tracked project configuration. The picker marks and
-preselects that client while the same live client remains attached, otherwise it uses a
-deterministic order of current clients. Before switching, the terminal boundary
+that target's socket, and jumps immediately with the only attached client; with several
+clients it presents the picker. It stores only the last successfully used client as a
+project-local UI preference under ignored `.workspace` data, with one file per socket;
+this does not modify Workspace domain records or tracked project configuration. The
+picker marks and preselects that client while the same live client remains attached,
+otherwise it uses a deterministic order of current clients. Before switching, the terminal boundary
 rechecks socket compatibility, target ownership, and the selected client's TTY and
 available process/creation identity, then switches by explicit client TTY and verified
 workspace/window/pane IDs. Cancellation has no tmux effect. A missing or changed client

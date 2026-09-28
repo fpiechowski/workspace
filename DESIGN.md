@@ -162,11 +162,12 @@ workspace loads remain explicit body messages rather than relying on the header 
 
 **Navigation and terminal.** Arrows or `j`/`k` select an entry; `Enter` opens details,
 and `1`–`5` move between Tasks, Sessions, Worktrees, Results, and More. `Tab` changes
-the result type on Results. `g` always opens the attached-client picker for a
-jump-capable selection, even when only one client is attached. Rows identify the
-client's TTY and current session; the last successfully used client is marked and
-preselected while it remains live. The picker is ordered deterministically otherwise.
-Confirming moves only that client to the exact verified workspace, window, and pane.
+the result type on Results. `g` jumps immediately with the only attached client and opens
+the attached-client picker when several are attached for a jump-capable selection. Rows
+identify the client's TTY and current session; the last successfully used client is
+marked and preselected while it remains live. The picker is ordered deterministically
+otherwise. Confirming moves only that client to the exact verified workspace, window, and
+pane.
 `Esc` and `Ctrl+C` cancel without a tmux effect. Starting or resuming remains an
 explicit, confirmed `a` action. Multiple task sessions require choosing a specific
 session. A historical Run retains its exact target and does not automatically redirect
