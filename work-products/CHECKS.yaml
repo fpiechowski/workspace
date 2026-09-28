@@ -1,0 +1,15 @@
+- command: gofmt -l ./cmd ./internal
+  exit_code: 0
+  evidence: work-products/CHECKS.log
+- command: go vet ./...
+  exit_code: 0
+  evidence: work-products/CHECKS.log
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./internal/core -count=1 -timeout 90s
+  exit_code: 0
+  evidence: work-products/CHECKS.log
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./internal/bootstrap ./internal/release ./internal/terminal ./internal/tui ./internal/upgrade -count=1 -timeout 90s
+  exit_code: 0
+  evidence: work-products/CHECKS.log
+- command: grep -rn issue-resolution internal --include='*_test.go'
+  exit_code: 1
+  evidence: work-products/CHECKS.log
