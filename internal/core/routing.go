@@ -16,8 +16,17 @@ func workflowProfile(cfg Config, d *Document, role, fallback string) string {
 		return fallback
 	}
 	key := map[string]string{"orchestrator": "orchestrator", "planner": "planning", "implementer": "implementation", "integrator": "integration", "tester": "live-testing"}[role]
-	if name := cfg.Workflows[d.State.Workflow.ID].Profiles[key]; name != "" {
+	profiles := cfg.Workflows[d.State.Workflow.ID].Profiles
+	if name := profiles[key]; name != "" {
 		return name
+	}
+	// Existing plan-first configurations map no integration profile; the
+	// integrator then uses the implementation profile instead of an unconfigured
+	// fallback name.
+	if role == "integrator" {
+		if name := profiles["implementation"]; name != "" {
+			return name
+		}
 	}
 	return fallback
 }
