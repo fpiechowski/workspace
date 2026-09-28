@@ -1,0 +1,9 @@
+- command: gofmt -l ./cmd ./internal
+  exit_code: 0
+  evidence: evidence-int-gofmt.txt
+- command: go vet ./...
+  exit_code: 0
+  evidence: evidence-int-vet.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID -u WORKSPACE_ROLE -u WORKSPACE_PARENT_SESSION_ID go test ./... -count=1 -timeout 570s
+  exit_code: 0
+  evidence: evidence-int-go-test-all.txt

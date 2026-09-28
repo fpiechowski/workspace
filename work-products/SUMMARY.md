@@ -1,3 +1,29 @@
+# Integration summary — task_01M3MT65B4K2EF1HHXJS7CQK3P
+
+Integrated the accepted autonomous-mode implementation I1–I5.
+
+- Heads merged in recorded order: I1 `8d19bb7`, I2 `cf333fb`, I3 `58b5862`,
+  I4 `5f19643`, I5 `1b8f24b`, on base `aa72616`.
+- Strategy: `git merge --no-ff` for each head. I1–I4 are stacked; I5 branched
+  from I3, so the final merge is a real three-way merge and the expected
+  fast-forward to `1b8f24b` was not possible.
+- Integrated merge HEAD: `84a5f5bbfb55b2504d7789310daf17cf7c5c48ed`, followed by
+  a work-products evidence commit with no product-code change.
+- Conflicts: only two shared work-products evidence files,
+  `work-products/IMPLEMENTATION.md` and `work-products/SUMMARY.md`, both
+  resolved losslessly by preserving the I4 and I5 reports. No product code
+  conflicted and no product decision was needed.
+- Checks on the integrated tree: `gofmt` clean, `go vet ./...` clean,
+  `go test ./... -count=1 -timeout 570s` green (harness `WORKSPACE_*` cleared).
+  Recorded in `work-products/CHECKS-INT.yaml`; the pre-existing known-red
+  terminal pseudo-TTY race test was not run as acceptance.
+- Not landed into `master`; that needs the user's explicit integration-land
+  confirmation.
+
+Full details: `work-products/INTEGRATION.md`.
+
+---
+
 # Integrated summaries (I4 and I5)
 
 Both the I4 and I5 implementation tasks committed a summary to this shared root
