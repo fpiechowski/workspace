@@ -99,25 +99,27 @@ lineage, not task `depends_on` edges or subsequent merges. Legacy records withou
 stored parent are not linked based on coincident handoff revisions.
 
 `a` in the project picker provides workspace creation (title, description, and explicit
-mode choice: named workflow, `Choose later`, or `No workflow (manual orchestration)`) as
+mode choice: a named workflow with `plan-first` preselected, or `No workflow (manual
+orchestration)`) as
 well as permanent deletion of the selected workspace. Deletion is available only after
 entering the full ID and does not require release or archive. It is a full discard: it
 stops the runtime and removes state, all worktrees including uncommitted files, and
 local `workspace/<id>/…` branches. This operation cannot be undone. Workflow selection
-is available only for the `needs_workflow` state; a manual workspace does not later offer
-selection or advance.
+remains available for a legacy `needs_workflow` workspace; a manual workspace does not
+later offer selection or advance.
 
 On the Orchestrator (`o`) and the Runtime page in More, `a` provides
-`Complete this manual workspace` for an active manual workspace. When the state is
-`completed`, it provides `Start / resume orchestrator`,
+`Complete this manual workspace` for an active manual workspace and, after the accepted
+integration has landed, `Complete this workflow workspace` for plan-first. When the state
+is `completed`, it provides `Start / resume orchestrator`,
 `Reopen completed workspace`, and `Archive completed workspace`. The first starts a
 conversation-only Run in the compatible logical Session; it does not create new work.
 Reopen requires a reason and the current revision, preserves accepted history, and
 invalidates derived release/integration/testing state. Archive requires confirmation,
-checks the revision, and preserves all data. A workflow still requires a confirmed
-release, while a completed manual workspace requires an earlier `complete`; in both
-cases there must be no active Sessions or services. Archived workspaces offer no
-conversation or reopen action.
+checks the revision, and preserves all data. A workflow that declares a release gate still
+requires a confirmed release, while a completed manual or plan-first workspace requires an
+earlier `complete`; in both cases there must be no active Sessions or services. Archived
+workspaces offer no conversation or reopen action.
 
 More contains Agents, Services, Decisions, Change requests, Runtime, Needs
 attention, Recent recorded activity, and Documents. Runtime detail renders tmux
@@ -217,9 +219,10 @@ proposal.
 
 Actions are limited to the existing core contract. Available actions include starting or
 resuming the orchestrator, pause, guarded pause-and-interrupt, workspace resume,
-reconcile, workflow selection (only for `needs_workflow`), `complete` for a manual
-workspace, completed-workspace conversation/reopen/archive, task retry, session
-resume/stop/close, and service stop. Runtime provides show and hide for the managed TUI.
+reconcile, workflow selection (for a legacy `needs_workflow` workspace), `complete` for a
+manual or landed plan-first workspace, completed-workspace conversation/reopen/archive,
+task retry, session resume/stop/close, and service stop. Runtime provides show and hide
+for the managed TUI.
 Completed and archived workspaces do not advertise ordinary task/resource deletion or
 retry; completed consultation remains the deliberate exception. The Task and Session
 menus otherwise provide Delete. It requires entering the full ID and records a

@@ -15,11 +15,18 @@ workspace workflow migrate --reason 'Updated workflow requirements' \
 Input updates preserve the old input and WORKSPACE.md under `history/revision_ID/`.
 Workflow migration compares project templates with workspace snapshots, preserves
 changed originals and records before/after hashes in `migration.json`. Previous
-Session prompts are never rendered again or overwritten.
+Session prompts are never rendered again or overwritten. Loading a workspace that still
+references the removed `issue-resolution` workflow migrates it to `plan-first` v2 in place,
+preserving accepted tasks and results; a non-terminal workspace also records the previous
+snapshots and a `migration.json` manifest under `history/<revision_id>/`. That
+auto-migration does not invalidate results.
 
 These operations reset dependent results for re-evaluation, increment task attempts,
 invalidate integration/live-test results and mark existing CRs outdated. They preserve
-artifacts and handoffs. The workspace stays paused; resume when the next steps are clear.
+artifacts and handoffs. A workspace whose accepted integration has already landed cannot
+be revised or retried: the landed work is on the target branch, so retry and input/workflow
+revision are refused until `workspace reopen`. The workspace stays paused; resume when the
+next steps are clear.
 Released or completed work cannot be silently reopened. Use the separate
 `workspace reopen --reason ... --expected-revision ...` mutation after inspecting the
 current status. Reopen preserves the completed task/artifact/handoff history, base

@@ -35,14 +35,13 @@ The tool is especially useful when a task:
 
 ## Product Promise
 
-The user provides a ticket or problem description and chooses one of three explicit
-paths: a named workflow, a deliberate deferral of the choice (`needs_workflow`), or
-manual work without a workflow (`--no-workflow`). Work can be observed in tmux. The
-orchestrator delegates planning, implementation, integration, and testing in a
-workflow; in manual mode it creates explicit tasks and worktrees without phases or
-release. Each result identifies a task, execution, commit, and verification evidence.
-After an interruption, the system reconstructs state from files instead of relying only
-on conversation memory.
+The user provides a ticket or problem description and chooses an explicit creation path:
+a named workflow (defaulting to `plan-first`) or manual work without a workflow
+(`--no-workflow`). Work can be observed in tmux. The orchestrator delegates planning,
+implementation, integration, and testing in a workflow; in manual mode it creates explicit
+tasks and worktrees without phases or release. Each result identifies a task, execution,
+commit, and verification evidence. After an interruption, the system reconstructs state
+from files instead of relying only on conversation memory.
 
 Success means that the user can:
 
@@ -50,8 +49,8 @@ Success means that the user can:
 2. safely delegate work to isolated worktrees;
 3. inspect current state, decisions, artifacts, and execution history;
 4. resume interrupted work without duplicating uncertain operations;
-5. deliberately approve publication and live testing in a workflow and confirm
-   completion of either the workflow or a manual workspace;
+5. deliberately approve the integration landing in a workflow and confirm completion of
+   either the workflow or a manual workspace;
 6. return to a completed workspace for an explicitly authorized follow-up without
    losing accepted history or confusing conversation with new execution.
 
@@ -73,8 +72,10 @@ before accepting a task and, in a workflow, before advancing the phase.
 ### Humans Retain Decisions with External Effects
 
 An agent may prepare a change request and present a diff, but publication depends on
-the policy configured by the user. A workflow ends only after user confirmation of
-deployment or release; a manual workspace closes only through the explicit,
+the policy configured by the user. A plan-first workflow ends only after the user
+confirms landing the accepted integration into the target branch and then confirms
+completion; a custom workflow that declares a release gate ends with release
+confirmation instead. A manual workspace closes only through the explicit,
 user-confirmed `complete` operation. A completed workspace remains conversationally
 inspectable, but new execution and durable task/resource mutations require the explicit
 `workspace reopen` operation with a reason and exact revision; an agent actor must also
@@ -113,9 +114,10 @@ from the concrete operational state.
 The current scope includes:
 
 - a single local Git project and multiple workspaces;
-- three explicit workspace-creation modes: named workflow, deferred choice
-  (`needs_workflow`), and manual orchestration without a workflow (`--no-workflow`);
-- planning and implementation in separate worktrees;
+- two explicit workspace-creation modes: a named workflow (defaulting to `plan-first`)
+  and manual orchestration without a workflow (`--no-workflow`); a legacy workspace still
+  waiting in `needs_workflow` can be resolved with `workflow select`;
+- planning, implementation and integration in separate worktrees;
 - tmux as visible process runtime;
 - agent personas, logical sessions, and the history of specific executions;
 - a durable inbox, handoffs, immutable artifacts, and captured command results;
@@ -125,12 +127,13 @@ The current scope includes:
   through the same durable, idempotent operations as the CLI;
 - client, provider, and model routing through profiles;
 - Codex, Claude, OpenCode, and custom-command adapters;
-- change integration and change-request preparation/publication;
+- change integration and change-request preparation/publication for workflows that
+  declare those gates;
 - controlled resumption, failure reconciliation, archiving, and cleanup;
 - completed-workspace conversation and an auditable, idempotent reopen path for
   explicitly authorized follow-up work;
-- the capability-declared `plan-first` workflow and the extended, selectable
-  `issue-resolution` workflow;
+- the capability-declared `plan-first` workflow: planning, implementation, a mandatory
+  integration stage, and a user-approved local landing gate;
 - manual mode without a workflow: task and worktree delegation, handoffs, checks, and
   acceptance with a fixed limit of 3 parallel workers, without phases, advance, release,
   or conversion to a workflow;
@@ -142,11 +145,14 @@ The current scope includes:
 - installation from the published GitHub Release archives and an explicit
   `workspace upgrade` path that verifies and atomically installs a newer stable release.
 
-Workflow snapshots declare their task roles and resource gates. `plan-first` supports
-planning and implementation only and completes without integration, live testing,
-change requests, or release confirmation. `issue-resolution` declares the extended
-integration, change-request, live-test, and release gates. The CLI rejects a task role
-or mutation that the selected workflow does not declare.
+Workflow snapshots declare their task roles and resource gates. `plan-first` (version 2)
+supports planning, implementation and integration, and ends with a user-approved local
+landing followed by `workspace complete`; it does not declare change requests, live
+testing, or release. The legacy `issue-resolution` workflow was removed; existing
+workspaces that reference it are migrated to `plan-first` on load, and a project
+configuration that still lists it keeps loading with the entry ignored. Custom workflows
+may still declare the extended integration, change-request, live-test, and release gates.
+The CLI rejects a task role or mutation that the selected workflow does not declare.
 
 Task retirement is durable: an orchestrator can mark work `cancelled`,
 `abandoned`, or `superseded` with a reason. Retired tasks remain in history and do not
@@ -189,12 +195,14 @@ Session; resumable idle Sessions remain pending and closed or deleted Sessions a
 rerouted. Agents inspect, acknowledge, and review only their current Session, while the
 user selects a Session explicitly or requests an agent-wide historical view explicitly.
 
-In the project picker, the user can create a workspace by choosing a named workflow,
-deliberately deferring the choice (`needs_workflow`), or creating a manual workspace
-without a workflow. The modes are distinguished by the phase label: `manual` for
-manual orchestration and `-` for deferred selection. A manual workspace is completed by
-the explicit, user-confirmed `complete` operation, after which archive does not require
-a release; a workflow still requires a confirmed release. Alternatively, the user can
+In the project picker, the user can create a workspace with a named workflow (the form
+preselects `plan-first`) or create a manual workspace without a workflow. The modes are
+distinguished by the phase label: `manual` for manual orchestration and the workflow
+phase otherwise; a legacy workspace still waiting in `needs_workflow` shows `-`. A manual
+workspace is completed by the explicit, user-confirmed `complete` operation, after which
+archive does not require a release; a plan-first workflow is landed and then completed the
+same way, while a custom workflow that declares a release gate still requires a confirmed
+release before archive. Alternatively, the user can
 deliberately discard the entire workspace without requiring release/archive. Full
 deletion requires retyping the ID, stops the runtime, and removes state, worktrees,
 uncommitted files, and local workspace branches. Within a completed workspace, the TUI

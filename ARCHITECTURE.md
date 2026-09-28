@@ -127,7 +127,7 @@ have no start, stop, or reconcile side effects.
 | Project | Git repository; configuration for clients, profiles, forge, tracker, and workflow. |
 | Issue | Durable project input with a canonical content digest, local status, revision history, and external source metadata. |
 | Dispatcher | Project-scoped Agent with its own Sessions/Runs and tmux identity; may intake and route Issues but cannot perform Workspace implementation work. |
-| Workspace | Persistent context for one initiative from input to confirmed release (workflow) or confirmed completion (manual mode); completed work can be reopened only through an explicit guarded mutation. |
+| Workspace | Persistent context for one initiative from input to a user-approved integration landing and completion (`plan-first`), a confirmed release (custom workflow), or confirmed completion (manual mode); completed work can be reopened only through an explicit guarded mutation. |
 | Worktree | Isolated checkout and branch for planning, implementation, integration, or testing. |
 | Task | Delegated unit of work with an attempt, dependencies, and acceptance criteria. |
 | Agent | Stable persona definition: role, instructions, prompt, and profile. |
@@ -248,8 +248,12 @@ from valid loopback `--hostname`/`--port` flags in immutable Run argv.
 
 Templates are copied into a workspace when it is created. A later change to the project
 template does not change work in progress. An explicit migration preserves previous
-files, hashes, and history and invalidates dependent results. Details are described in
-[docs/revisions.md](docs/revisions.md).
+files, hashes, and history and invalidates dependent results. Separately, loading a
+workspace that still references the removed `issue-resolution` workflow rewrites it to
+`plan-first` v2 in place, preserving tasks, handoffs, integration, and produced results;
+a non-terminal workspace also stores the previous snapshots and a `migration.json` manifest
+under `history/`.
+Details are described in [docs/revisions.md](docs/revisions.md).
 
 ## Mutations, Concurrency, and Recovery
 
@@ -393,16 +397,23 @@ results, and recovery paths. The CLI enforces transitions, roles, dependencies, 
 acceptance; `WORKFLOW.md` instructs the orchestrator how to compose these operations
 idempotently.
 
-The basic capability-declared `plan-first` workflow leads from planning to
-implementation. The extended `issue-resolution` workflow, retained for compatibility
-and the complete process,
-includes:
+The bundled capability-declared `plan-first` workflow (version 2) leads from planning to
+implementation and then through a mandatory integration stage:
 
 ```text
-planning → plan review → implementation → integration → change requests
-         → live-testing offer → live test or explicit skip
-         → wait for release → confirmed completion
+planning → plan review → implementation → integration
+         ──(integration land, user approved)──▶
+         ──(workspace complete, user confirmed)──▶ completed
 ```
+
+The `integration` phase is left only by `workspace integration land`, which fast-forwards
+the accepted integration HEAD into the target branch after explicit user approval, or by
+`workspace complete` when the integration landed or there is nothing to integrate. Landing
+is local only and never pushes; a dirty, moved, or diverged target is refused without
+changing any ref. A custom workflow may still declare the extended change-request,
+live-test, and release gates; the removed `issue-resolution` workflow was the bundled
+example. Workspaces that still reference `issue-resolution` are migrated to `plan-first`
+on load.
 
 `paused`, `blocked`, and `needs_attention` are operational states independent of the
 phase. Changing input or retrying increments the attempt and invalidates dependent
@@ -415,11 +426,15 @@ compatible active Run of that Session so that Run can submit a replacement resul
 
 `WorkflowConfig.Capabilities` is snapshotted into `Workflow.Capabilities` when a
 workspace selects a workflow. Capability names cover task roles and the integration,
-live-test, change-request, and release resources. Operations check the snapshot and
-return `workflow_capability` with the workflow ID when a requested role or resource is
-undeclared. Legacy snapshots derive deterministic capabilities from their workflow ID:
-`plan-first` has planner/implementer roles and no integration gates, while
-`issue-resolution` has the complete role and resource set.
+landing, live-test, change-request, and release resources. Operations check the snapshot
+and return `workflow_capability` with the workflow ID when a requested role or resource is
+undeclared. A new `plan-first` selection always snapshots the v2 set (including
+`integration` and `landing`) even when the project config still lists the v1 capabilities.
+Snapshots persisted without a capability list fall back to the v1 workflow-id defaults, so
+an in-flight v1 `plan-first` workspace keeps its frozen contract and still completes after
+implementation. A config that declares `landing` must also declare `integration` and
+`tasks.role.integrator`, and may not combine it with `change_request`, `live_test`, or
+`release`.
 
 Handoff acceptance re-reads the producing worktree's HEAD and status. The submitted
 `Dirty` field remains historical evidence, while current cleanliness is authoritative
@@ -430,13 +445,14 @@ reason; these terminal states are excluded from phase gates without erasing hist
 
 ### Manual Mode
 
-A workspace does not have to select a workflow. Creation accepts one of three explicit
-forms: `--workflow NAME` (active workflow), no flag (the `needs_workflow` state waiting
-for a selection), or `--no-workflow` (active manual mode). Combining `--workflow` with
-`--no-workflow` is rejected as `invalid_option`. Manual mode stores `status: active`
-with an empty `workflow`, which distinguishes it from `needs_workflow`; `WORKFLOW.md`
-remains an explicitly marked note about manual orchestration, without a phase or
-workflow-template digest.
+A workspace does not have to select a workflow. Creation accepts two explicit forms:
+`--workflow NAME` (active workflow, defaulting to `plan-first` when the flag is omitted)
+or `--no-workflow` (active manual mode). A legacy workspace may still be in the
+`needs_workflow` state waiting for selection, which `workspace workflow select` resolves.
+Combining `--workflow` with `--no-workflow` is rejected as `invalid_option`. Manual mode
+stores `status: active` with an empty `workflow`, which distinguishes it from
+`needs_workflow`; `WORKFLOW.md` remains an explicitly marked note about manual
+orchestration, without a phase or workflow-template digest.
 
 In manual mode, the orchestrator may create agents, tasks, and worktrees and start
 worker sessions with the same task, worktree, actor, and provenance gates as in a

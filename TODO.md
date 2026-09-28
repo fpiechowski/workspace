@@ -4,6 +4,10 @@ List of planned improvements. Items are ordered by priority.
 
 ## Planned
 
+- [ ] **Stacked integration strategy** — support rebase/cherry-pick ("stack") landing in addition to the current `merge` strategy; it breaks the merge-ancestry invariant and needs its own validation.
+- [ ] **Change-Request-based landing** — express `workspace integration land` as merging an integration Change Request once those become first-class, instead of a local branch fast-forward.
+- [ ] **Project-level integration branch** — allow plan-first to land into a project-level integration branch (including stacked workspaces) instead of the trunk, for cross-workspace coordination.
+- [ ] **Remove the unused extended workflow machine** — the change-request/live-test/release machine now serves only custom configured workflows; evaluate removing it and its commands.
 - [x] **CI build verification** — add a GitHub Actions pipeline that builds the project on pushes to `master` and on pull requests targeting `master`.
 - [x] **`workspace prime` command** — provide the agent with current operational instructions from the running binary.
 - [ ] **TUI as a tmux sidebar** — consider one TUI instance serving all workspaces in a project; consider nested tmux, with one instance acting as the project selector and the other as the workspace selector.

@@ -53,11 +53,11 @@ Create a frozen linked Workspace with either:
 
 ```sh
 workspace create --from-issue issue_ID --operation-key workspace-142
-workspace issue dispatch issue_ID --workflow plan-first --start --operation-key dispatch-142
+workspace issue dispatch issue_ID --start --operation-key dispatch-142
 ```
 
 The Workspace input contains the exact Issue revision and digest selected at creation;
-later refreshes never rewrite it. `dispatch` may also use `--no-workflow`, but workflow
-and manual flags are mutually exclusive. The project-scoped Dispatcher is allowed to
-perform these local operations but cannot implement code, advance Workspace state, or
-mutate the external tracker.
+later refreshes never rewrite it. Omitting `--workflow` selects `plan-first`; `dispatch`
+may also use `--no-workflow`, but workflow and manual flags are mutually exclusive. The
+project-scoped Dispatcher is allowed to perform these local operations but cannot
+implement code, advance Workspace state, or mutate the external tracker.

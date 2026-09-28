@@ -1,0 +1,237 @@
+binary=/tmp/tmp.LZLJAoPVqO/workspace
+== workspace --help ==
+Manage durable agent workflows, personas, sessions, worktrees and their recorded results. Use a command's local help to see its arguments and options.
+
+Usage:
+  workspace [command]
+
+Examples:
+workspace help session start
+
+Commands:
+  agent            Define personas; each can have multiple logical sessions and runs
+  archive          Archive a completed workspace
+  artifact         Inspect preserved work products
+  attach           Attach to the workspace tmux session
+  change-request   Prepare, publish and reconcile change requests
+  check            Capture verification commands and evidence
+  clean            Remove archived worktrees after checking preservation
+  client           Inspect configured client definitions
+  complete         Complete a manual workspace or a landed plan-first workflow after explicit user confirmation
+  create           Create a workspace from an issue description
+  decision         Record answers to workflow questions
+  dispatcher       Manage the project-scoped Dispatcher
+  doctor           Inspect local runtime prerequisites
+  handoff          Preserve results and submit them for orchestrator review
+  help             Help about any command
+  inbox            Read and acknowledge durable messages
+  input            Revise issue input with preserved history
+  integration      Prepare and land the accepted integration
+  issue            Manage durable project Issues and linked Workspaces
+  list             List workspaces
+  menu             Show workflow actions and pending user decisions
+  message          Send durable messages to exact logical Sessions
+  open             Select a workspace and attach to its tmux session
+  pause            pause delegation
+  prime            Print the current binary's bundled agent guidance
+  profile          Inspect configured profile definitions
+  project          Configure a Git project
+  reconcile        Reconcile recorded sessions against tmux panes
+  release          Record deployment/release confirmation
+  reopen           Reopen a completed workspace for explicitly authorized follow-up work
+  resume           resume delegation
+  run              Inspect concrete client and tmux executions
+  serve            Supervise project sessions and durable message delivery
+  server           Inspect or stop the project supervisor
+  service          Run auxiliary processes in worktree panes
+  session          Manage durable logical agent conversations
+  skill            Install the bundled workspace skill in this project
+  start            Launch or converse with the orchestrator in tmux
+  state            Update durable state with revision checking
+  status           Show durable state with logical sessions and run history
+  task             Manage delegated tasks, dependencies and attempts
+  tui              Browse project workspaces and their recorded workflow
+  upgrade          Upgrade the installed workspace executable from the latest stable GitHub Release
+  version          Show workspace version and build metadata
+  workflow         Select a workflow
+  worktree         Manage task checkouts
+
+Options:
+  -h, --help                   help for workspace
+      --json                   Print machine-readable {ok,data} or {ok:false,error} JSON.
+      --non-interactive        Never prompt; return a decision-required error when input is missing.
+      --operation-key string   Idempotency key for a mutation; reusing it with a different payload is rejected.
+      --project string         Project path; defaults to WORKSPACE_PROJECT_DIR or the current directory.
+      --short                  Print a compact human-readable summary instead of the full result.
+      --tmux-socket string     Optional isolated tmux server name.
+      --workspace string       Workspace ID; defaults to WORKSPACE_ID or the workspace inferred from the current directory.
+
+Use "workspace [command] --help" for more information about a command.
+
+== workspace integration --help ==
+Prepare a shared checkout of accepted implementation tasks and, after explicit user approval, land the accepted integration into the target branch.
+
+Usage:
+  workspace integration [command]
+
+Examples:
+workspace integration prepare --tasks task_01,task_02
+workspace integration land --user-confirmed
+
+Commands:
+  land        Land the accepted integration into the target branch after explicit user approval
+  prepare     Create integration worktree and immutable input manifest
+
+Options:
+  -h, --help   help for integration
+
+Global options:
+      --json                   Print machine-readable {ok,data} or {ok:false,error} JSON.
+      --non-interactive        Never prompt; return a decision-required error when input is missing.
+      --operation-key string   Idempotency key for a mutation; reusing it with a different payload is rejected.
+      --project string         Project path; defaults to WORKSPACE_PROJECT_DIR or the current directory.
+      --short                  Print a compact human-readable summary instead of the full result.
+      --tmux-socket string     Optional isolated tmux server name.
+      --workspace string       Workspace ID; defaults to WORKSPACE_ID or the workspace inferred from the current directory.
+
+Use "workspace integration [command] --help" for more information about a command.
+
+== workspace integration prepare --help ==
+Create the integration worktree for accepted implementation tasks. Omit --tasks to include all accepted implementation tasks. With a landing workflow the default base is the current tip of the target branch.
+
+Usage:
+  workspace integration prepare [flags]
+
+Examples:
+workspace integration prepare --target main
+
+Options:
+      --base string     Target base revision.
+  -h, --help            help for prepare
+      --target string   Branch the integration lands into; defaults to the workspace base ref for landing workflows.
+      --tasks strings   Accepted task IDs; repeat or comma-separate. Defaults to all implementation tasks.
+
+Global options:
+      --json                   Print machine-readable {ok,data} or {ok:false,error} JSON.
+      --non-interactive        Never prompt; return a decision-required error when input is missing.
+      --operation-key string   Idempotency key for a mutation; reusing it with a different payload is rejected.
+      --project string         Project path; defaults to WORKSPACE_PROJECT_DIR or the current directory.
+      --short                  Print a compact human-readable summary instead of the full result.
+      --tmux-socket string     Optional isolated tmux server name.
+      --workspace string       Workspace ID; defaults to WORKSPACE_ID or the workspace inferred from the current directory.
+
+== workspace integration land --help ==
+Fast-forward the accepted integration into the target branch after explicit user approval. The workspace must be an active plan-first workflow in the integration phase with an accepted integrator; the target must fast-forward and be a clean checkout when checked out. The merge is local only and never pushes.
+
+Usage:
+  workspace integration land [flags]
+
+Examples:
+workspace integration land --expected-revision 12 --user-confirmed
+
+Options:
+      --expected-revision int   Required current workspace revision.
+  -h, --help                    help for land
+      --target string           Target branch; must match the prepared integration target.
+      --user-confirmed          Attest that the user explicitly approved landing into the target branch when running from an agent session.
+
+Global options:
+      --json                   Print machine-readable {ok,data} or {ok:false,error} JSON.
+      --non-interactive        Never prompt; return a decision-required error when input is missing.
+      --operation-key string   Idempotency key for a mutation; reusing it with a different payload is rejected.
+      --project string         Project path; defaults to WORKSPACE_PROJECT_DIR or the current directory.
+      --short                  Print a compact human-readable summary instead of the full result.
+      --tmux-socket string     Optional isolated tmux server name.
+      --workspace string       Workspace ID; defaults to WORKSPACE_ID or the workspace inferred from the current directory.
+
+== workspace complete --help ==
+Complete an intentionally manual workspace, or a plan-first workflow whose accepted integration has landed (or that has nothing to integrate), after the user explicitly confirms it. The workspace must have no active Runs, services or non-accepted tasks; an extended workflow with release/live-test gates still uses release confirmation instead.
+
+Usage:
+  workspace complete [flags]
+
+Examples:
+workspace complete --reason "Analysis delivered" --user-confirmed
+workspace complete --user-confirmed --expected-revision 12
+
+Options:
+      --expected-revision int   Required current workspace revision.
+  -h, --help                    help for complete
+      --reason string           Reason recorded for the completion.
+      --user-confirmed          Attest the explicit user completion request when running from an agent session.
+
+Global options:
+      --json                   Print machine-readable {ok,data} or {ok:false,error} JSON.
+      --non-interactive        Never prompt; return a decision-required error when input is missing.
+      --operation-key string   Idempotency key for a mutation; reusing it with a different payload is rejected.
+      --project string         Project path; defaults to WORKSPACE_PROJECT_DIR or the current directory.
+      --short                  Print a compact human-readable summary instead of the full result.
+      --tmux-socket string     Optional isolated tmux server name.
+      --workspace string       Workspace ID; defaults to WORKSPACE_ID or the workspace inferred from the current directory.
+
+== workspace create --help ==
+Create a workspace from an issue URL, a saved input file or one inline intent. One input source is required; the input and its source are snapshotted before orchestration begins. Omit --workflow to use plan-first, or pass --no-workflow for explicit manual orchestration.
+
+Usage:
+  workspace create [intent] [flags]
+
+Examples:
+workspace create --issue https://github.com/OWNER/REPO/issues/142 --workflow plan-first
+workspace create "Improve workspace creation" --no-workflow
+
+Arguments:
+  [intent]  Issue or task description supplied inline; do not combine it with --input-file.
+
+Options:
+      --base string         Base Git revision to freeze for the workspace. (default "HEAD")
+      --from-issue string   Existing durable Issue ID; mutually exclusive with intent, --input-file and --issue.
+  -h, --help                help for create
+      --input-file string   File containing the saved issue or task description.
+      --issue string        Issue URL; fetch it from the configured tracker unless intent or --input-file is supplied.
+      --no-workflow         Create an active workspace with no workflow for manual orchestration; cannot be combined with --workflow.
+      --title string        Workspace title shown in selectors and compact output.
+      --workflow string     Configured workflow name; omit it to use plan-first.
+
+Global options:
+      --json                   Print machine-readable {ok,data} or {ok:false,error} JSON.
+      --non-interactive        Never prompt; return a decision-required error when input is missing.
+      --operation-key string   Idempotency key for a mutation; reusing it with a different payload is rejected.
+      --project string         Project path; defaults to WORKSPACE_PROJECT_DIR or the current directory.
+      --short                  Print a compact human-readable summary instead of the full result.
+      --tmux-socket string     Optional isolated tmux server name.
+      --workspace string       Workspace ID; defaults to WORKSPACE_ID or the workspace inferred from the current directory.
+
+== workspace workflow advance --help ==
+Validate the current workflow results and advance exactly one phase. --to can protect against advancing from an unexpected phase; a landing workflow stops in the integration phase until the accepted integration is landed and the workspace completed.
+
+Usage:
+  workspace workflow advance [flags]
+
+Examples:
+workspace workflow advance --to plan_review
+
+Options:
+  -h, --help        help for advance
+      --to string   Expected next phase; fail if the workflow would advance from a different phase.
+
+Global options:
+      --json                   Print machine-readable {ok,data} or {ok:false,error} JSON.
+      --non-interactive        Never prompt; return a decision-required error when input is missing.
+      --operation-key string   Idempotency key for a mutation; reusing it with a different payload is rejected.
+      --project string         Project path; defaults to WORKSPACE_PROJECT_DIR or the current directory.
+      --short                  Print a compact human-readable summary instead of the full result.
+      --tmux-socket string     Optional isolated tmux server name.
+      --workspace string       Workspace ID; defaults to WORKSPACE_ID or the workspace inferred from the current directory.
+
+== assertion ==
+ok  integration land --target
+ok  integration land --expected-revision
+ok  integration land --user-confirmed
+ok  integration prepare --target
+ok  integration prepare --tasks
+ok  complete --reason
+ok  complete --expected-revision
+ok  complete --user-confirmed
+ok  create --no-workflow
+ok  create --workflow
+assert_fail=0

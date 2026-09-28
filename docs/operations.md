@@ -7,8 +7,9 @@ attempt at the work requires a new key.
 
 Workspace mutations include creating resources and tasks, starting/resuming/stopping
 sessions, messages and ACKs, handoffs and their evaluation, workflows, state updates,
-migrations, integration, CRs, decisions, release, `complete` for a manual workspace,
-pause/resume, reconcile, `reopen` for a completed workspace, archive, and clean.
+migrations, integration prepare and `integration land`, CRs, decisions, release,
+`complete` for a manual workspace or a landed plan-first workflow, pause/resume,
+reconcile, `reopen` for a completed workspace, archive, and clean.
 `project init`, `skill install`, and `server stop` write project-scoped receipts.
 Reads, `clean --dry-run`, interactive attach, and the continuously running `serve`
 command are not one-shot mutations that require a receipt.
@@ -44,6 +45,21 @@ the PR is looked up before another publication attempt; the session keeps its re
 identity; worktree removal is reconciled with Git. A busy lock does not mean that the
 previous execution has finished. A historical receipt does not replace a `reconcile`
 command for reading the current runtime state.
+
+## Integration landing
+
+`workspace integration land` is a receipted mutation with a local Git effect, analogous to
+change-request publication. The `--operation-key` digest covers the target and the
+expected revision. The operation records a `pending` landing intent under the key before it
+changes any ref, then commits the `landed` state with the target, the before/after
+commits, and the user-confirmation attestation. A checked-out clean target is fast-forwarded
+with `git merge --ff-only`; an unchecked-out target is compare-and-swap updated with
+`git update-ref refs/heads/<target> <after> <before>`. A retry with the same key, or a new
+key against the same state, finds the target already at the accepted commit and completes
+the record without a second Git effect. A target that moved to anything other than the
+recorded before or after commit is refused with `target_moved`, and a dirty checked-out
+target with `target_checkout_dirty`; no ref changes in either case. Landing never pushes.
+After landing, task retry and input/workflow revision are refused until `workspace reopen`.
 
 Data from an early registry version without a saved response snapshot retains a reference
 to the created resource. Replaying it may show the resource's current state.
@@ -105,7 +121,9 @@ and payload can safely be retried after the directory is removed. It does not re
 archive/release: it stops the runtime, forcibly removes worktrees (including dirty ones)
 and local `workspace/<id>/…` branches, and then removes all state. A revision or target
 change ends in a conflict. Archive from the TUI is non-destructive, has its own revision
-guard, and preserves the existing lifecycle gates. `complete` for a manual workspace is
-a separate idempotent mutation with a revision guard and operation key; archive respects
-the confirmed release for a workflow or an earlier `complete` for manual mode. Reopen
+guard, and preserves the existing lifecycle gates. `complete` for a manual workspace or a
+landed plan-first workflow is a separate idempotent mutation with a revision guard and
+operation key; `integration land` is a plain confirmed action in the integration phase;
+archive respects a confirmed release for a workflow that declares a release gate, or an
+earlier `complete` for a manual or plan-first workspace. Reopen
 has its own revision/reason guard and never silently reuses release evidence.

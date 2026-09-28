@@ -21,10 +21,10 @@ For a new issue or work description:
    project init`. Session execution requires Linux/macOS or the Linux binary in WSL,
    tmux, and configured model profiles. Inspect `profile list` and `client list`.
    Preserve existing configuration and the user's chosen clients/models.
-2. Run `workspace workflow list --json`. Select a clearly matching workflow from
-   the user's input; ask with the available choices if intent is ambiguous. A
-   workspace without `--workflow` starts in `needs_workflow` for interactive selection.
-   Use `--no-workflow` instead when the user asks for manual orchestration: the
+2. Run `workspace workflow list --json`. `plan-first` is the default workflow; omit
+   `--workflow` to select it. Ask the user with the available choices only when a
+   different configured workflow clearly matches, or intent is ambiguous. Use
+   `--no-workflow` instead when the user asks for manual orchestration: the
    workspace is active with no workflow, so do not select one for it.
 3. For a ticket URL, create a durable project Issue first with
    `workspace issue create --issue URL --operation-key <stable-key> --json`.
@@ -33,9 +33,9 @@ For a new issue or work description:
    acceptance criteria and retrieval date. If tracker access is unavailable, ask for the
    description instead of inventing issue contents.
 4. Inspect `workspace issue show <issue-id> --json`, then create a Workspace from the
-   exact frozen revision with `workspace create --from-issue <issue-id> --workflow plan-first
-   --operation-key <stable-key> --json`.
-   Replace `--workflow plan-first` with `--no-workflow` for an explicit manual workspace.
+   exact frozen revision with `workspace create --from-issue <issue-id>
+   --operation-key <stable-key> --json` (omit `--workflow` for the default `plan-first`).
+   Pass `--no-workflow` for an explicit manual workspace.
    For free-form work that is not an Issue, pass the description as the positional intent
    or use `--input-file <file>`. Retain the returned workspace ID; repeat the same
    operation key on transport retry.
@@ -70,11 +70,22 @@ authorization; invoking this skill alone does not authorize external publication
 
 Workers persist outputs in their worktrees and submit explicit files through handoff.
 The orchestrator reviews the plan and implementation artifacts before acceptance.
-The example `plan-first` workflow completes after all implementation tasks are accepted;
-it has no integration, publication, live-testing or release gate. A manual workspace
+The `plan-first` workflow continues after implementation: when all live implementation
+tasks are accepted, prepare an integration worktree, delegate one `integrator` task to
+merge the accepted heads and record every conflict resolution in INTEGRATION.md, then
+present `workspace integration land --expected-revision N --user-confirmed` for the
+user's approval. Landing fast-forwards the target branch locally and never pushes.
+Complete the workspace with `workspace complete --expected-revision N --user-confirmed`
+after landing, or with an explicit `--reason` when there is nothing to integrate. A
+manual workspace
 never selects or advances a workflow; it uses the same task/worktree/handoff flow with
 a fixed limit of three parallel workers and is closed only by the explicit `complete`
 operation.
+
+A workspace created by an older binary under the removed `issue-resolution` workflow is
+migrated to `plan-first` automatically on load, preserving accepted tasks and results. Its
+leftover change-request, live-test, and release history is read-only, and those commands
+now return `workflow_capability`.
 
 After a workspace reaches `completed`, inspect `workspace status` and `workspace menu`
 before acting. `workspace start` or `agent resume orchestrator` is a conversation-only

@@ -9,7 +9,7 @@ import (
 )
 
 func integrationCommands(o *options) *cobra.Command {
-	group := &cobra.Command{Use: "integration", Short: "Prepare a shared checkout of accepted implementation tasks"}
+	group := &cobra.Command{Use: "integration", Short: "Prepare and land the accepted integration"}
 	var opt core.IntegrationOptions
 	prepare := command("prepare", "Create integration worktree and immutable input manifest", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()

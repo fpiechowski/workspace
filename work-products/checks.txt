@@ -7,6 +7,15 @@
 - command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 570s
   exit_code: 0
   evidence: evidence-go-test-all.txt
-- command: WORKSPACE_TMUX_TEST=1 go test -race -count=1 ./internal/core -run 'TestTmux|TestMigrateLegacyWorkflow' -timeout 90s
+- command: python3 work-products/check-doc-links.py
   exit_code: 0
-  evidence: evidence-tmux-core.txt
+  evidence: evidence-doc-links.txt
+- command: diff internal/core/skill/workspace/SKILL.md .agents/skills/workspace/SKILL.md
+  exit_code: 0
+  evidence: evidence-skill-identical.txt
+- command: grep -rn issue-resolution README.md PRODUCT.md ARCHITECTURE.md docs/ internal/core/skill/workspace/SKILL.md .agents/skills/workspace/SKILL.md | grep -viE 'removed|migrat|legacy'
+  exit_code: 0
+  evidence: evidence-grep-issue-resolution.txt
+- command: CGO_ENABLED=0 go build -trimpath -o ./workspace ./cmd/workspace && ./workspace integration land --help && ./workspace complete --help (flag assertions)
+  exit_code: 0
+  evidence: evidence-build-help.txt

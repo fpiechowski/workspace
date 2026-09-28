@@ -201,10 +201,13 @@ Restart the project supervisor after installing a newly built binary so the new
 delivery code is loaded. An OpenCode Session with a valid existing Run endpoint does
 not need to be stopped, recreated, or rebound.
 
-After user-confirmed release, stop remaining sessions and `archive` the workspace. An
-intentionally manual workspace has no release: finish it with the explicit, user-confirmed
+After the accepted integration is landed (`workspace integration land`) and the user
+confirms `workspace complete`, or after user-confirmed release for a custom workflow, stop
+remaining sessions and `archive` the workspace. An intentionally manual workspace has no
+release: finish it with the explicit, user-confirmed
 `workspace complete` operation once no active Sessions or services remain and every
-non-deleted task is accepted, then `archive` it without a release reference.
+non-deleted task is accepted, then `archive` it without a release reference. A completed
+plan-first workspace also archives without a release reference.
 To authorize new work after completion, use `workspace reopen --reason ...
 --expected-revision ...`. Reopen preserves tasks, artifacts, handoffs, and the base
 commit, records the prior document under `history/reopen_ID/`, invalidates derived

@@ -1,9 +1,11 @@
 # workspace
 
 CLI for managing persistent task context, agents, Git worktrees, and tmux.
-The orchestrator implements the simple `plan-first` workflow: planning in a separate
-worktree and delegating implementation to subsequent worktrees. A workspace can also
-run manually without a workflow, using explicit tasks, worktrees, handoffs, and checks.
+The orchestrator implements the `plan-first` workflow: planning in a separate worktree,
+delegating implementation to subsequent worktrees, integrating the accepted results in a
+dedicated worktree, and — after explicit user approval — landing the integration by
+fast-forwarding the target branch. A workspace can also run manually without a workflow,
+using explicit tasks, worktrees, handoffs, and checks.
 
 - **Agent**: a persona with a role, instructions, prompt template, and model profile.
 - **Session**: persistent logical conversation context for a given agent/task/worktree lineage.
@@ -214,9 +216,11 @@ an interactive terminal on both stdin and stdout, it runs a setup wizard:
   an optional reasoning effort (suggested `high`; `none` omits it), and a positive
   concurrency (suggested `3`).
 - It optionally proposes the README `thinker`, `worker`, and `supervisor` profiles with
-  their `plan-first` and `issue-resolution` workflow mappings, and an optional GitHub
-  forge. When roles are declined, workflows are omitted and must be configured before a
-  workflow that references unmapped roles can start.
+  the `plan-first` v2 workflow mapping (`orchestrator`, `planning`, `implementation`,
+  `integration`), and an optional GitHub forge. When roles are declined, workflows are
+  omitted and must be configured before a workflow that references unmapped roles can
+  start. The removed `issue-resolution` workflow is never generated; a configuration that
+  still lists it keeps loading, with that entry ignored.
 - It prints a summary and asks `Write configuration? [y/N]`; only an explicit `y`
   validates the whole candidate with the same rules as a persisted config and writes it
   once under the project lock.
@@ -291,23 +295,20 @@ workflows:
       orchestrator: orchestrator
       planning: thinker
       implementation: worker
-    max_parallel_tasks: 3
-    capabilities: [tasks, phases, tasks.role.planner, tasks.role.implementer, planner_dependency]
-  issue-resolution:
-    profiles:
-      orchestrator: orchestrator
-      planning: thinker
-      implementation: worker
       integration: worker
-      live-testing: worker
     max_parallel_tasks: 3
-    change_requests: integrated
-    capabilities: [tasks, phases, tasks.role.planner, tasks.role.implementer, tasks.role.integrator, tasks.role.tester, planner_dependency, integration, live_test, change_request, release]
+    capabilities: [tasks, phases, tasks.role.planner, tasks.role.implementer, tasks.role.integrator, planner_dependency, integration, landing]
 forge:
   adapter: github
   remote: origin
   publication: ask
 ```
+
+The bundled `plan-first` workflow is version 2. Its capability set is mandatory: a
+configuration that still lists only the v1 `plan-first` capabilities gains the
+integration and landing capabilities, and no configuration can drop them. The legacy
+`issue-resolution` workflow was removed; an existing config entry is validated but
+ignored, and projects that still reference it should migrate to `plan-first`.
 
 Profiles are named routing policies. Each route is one client/provider/model candidate
 with its own concurrency and optional launch budget. The route `id` is a stable name,
@@ -366,18 +367,17 @@ Give the agent a ticket or description and use the `workspace` skill, or run:
 
 ```sh
 workspace create --issue https://github.com/OWNER/REPO/issues/142 \
-  --workflow plan-first --operation-key issue-142
+  --operation-key issue-142
 # First-class Issue intake and durable revision history:
 workspace issue create --issue https://github.com/OWNER/REPO/issues/142 \
   --operation-key intake-142
 workspace issue list
 workspace issue show issue_ID
-workspace issue dispatch issue_ID --workflow plan-first --start \
-  --operation-key dispatch-142
+workspace issue dispatch issue_ID --start --operation-key dispatch-142
 # Create from an existing local Issue revision; the Workspace input is frozen:
 workspace create --from-issue issue_ID --operation-key workspace-142
 # You can also provide the description directly as an argument or through --input-file issue.md.
-workspace create "Improve workspace creation" --workflow plan-first
+workspace create "Improve workspace creation"
 # --input-file can optionally be combined with --issue URL to preserve the source.
 # Manual orchestration without a workflow:
 workspace create "Ad-hoc analysis" --no-workflow
@@ -387,11 +387,12 @@ workspace attach --workspace ws_ID_Z_ODPOWIEDZI
 
 `create` persists the description; `start` launches the supervisor and orchestrator
 without changing the view. `attach` switches to an existing tmux client or attaches
-from outside. Mode selection is explicit: `--workflow NAME` selects a workflow, no flag
-creates the `needs_workflow` state (the orchestrator asks for a choice before
-delegating), and `--no-workflow` creates an active manual workspace — without phases,
-advance, or release, with task delegation, handoffs, checks, and a fixed limit of 3
-parallel workers. `--workflow` and `--no-workflow` cannot be combined, and a manual
+from outside. Mode selection is explicit: `--workflow NAME` selects a workflow, omitting
+the flag selects the bundled `plan-first`, and `--no-workflow` creates an active manual
+workspace — without phases, advance, or release, with task delegation, handoffs, checks,
+and a fixed limit of 3 parallel workers. Omit `--workflow` for the common case; a legacy
+workspace still waiting in `needs_workflow` can be resolved with `workspace workflow
+select plan-first`. `--workflow` and `--no-workflow` cannot be combined, and a manual
 workspace cannot later be converted to a workflow. [Trackers and snapshots](docs/trackers.md).
 
 Issue operations are project-scoped and local. `workspace issue refresh` reads the
@@ -510,12 +511,14 @@ hidden through an auditable tombstone, and core rejects deletion of active or de
 data or records with persisted results. Delete Workspace is a separate, irreversible
 discard: after the full ID is entered, it stops the runtime and removes state,
 worktrees, uncommitted files, and local workspace branches without requiring release or
-archive. Archive preserves history; a workflow still requires a confirmed release,
-while a manual workspace requires an earlier `complete`, and both require no active
+archive. Archive preserves history; a workflow that declares a release gate requires a
+confirmed release, while a completed manual or plan-first workspace requires an earlier
+`complete`; both require no active
 sessions/services. A completed workspace also offers conversation and the guarded
 `Reopen completed workspace` action; reopening records a reason and revision, preserves
 accepted history, and requires derived release/integration evidence to be rebuilt. The
-TUI also provides `Complete this manual workspace` as a confirmed core operation.
+TUI also provides `Complete this manual workspace` and, after landing,
+`Complete this workflow workspace` as confirmed core operations.
 Before downgrading the binary, hide the managed pane with `workspace tui hide`: the
 older launcher does not yet recognize ownership of the new pane.
 For screen and shortcut details, see [docs/tui.md](docs/tui.md).
@@ -576,21 +579,40 @@ work that will not run. Retired tasks remain in history and do not block phase g
 manual mode uses the same tasks, handoffs, and checks without advance.
 [Test evidence](docs/checks.md).
 
-The orchestrator delegates integration to a separate executor after `integration prepare`.
-`change-request prepare/publish/sync` preserve the revision and CR identifier. After
-publication, the menu offers live testing with a separate profile and session in the
-integrated worktree. A test or explicit skip leads to waiting for release. A merge alone
-does not complete the workflow; `release confirm --reference REF` records user
-confirmation. `--user-confirmed` in an orchestrator session means forwarding a response
-actually received from the user, not the model granting consent on its own. Integration,
-change requests, live testing, and `release confirm` are workflow-only operations; in
-manual mode they return `operation_not_applicable`, and manual mode ends with an
-explicit `complete` operation.
+The `plan-first` workflow continues past implementation. After every live implementation
+task is accepted, `workspace workflow advance` enters the `integration` phase. The
+orchestrator runs `workspace integration prepare` (the default base is the current tip of
+the target branch, `--target` selects another branch) and delegates one `integrator` task
+into the prepared worktree. The integrator merges each accepted implementation head with
+`git merge --no-ff`, resolves textual conflicts, runs the project checks, and records
+every resolution in `INTEGRATION.md`; a conflict that needs a product or implementation
+decision becomes a blocked question instead of a guess. Accepting the handoff records the
+integrated HEAD.
 
-Complete a manual workspace with a confirmed operation that does not require a release:
+After that, the user approves the local fast-forward and the orchestrator runs
+`workspace integration land --expected-revision N --user-confirmed`. Landing fast-forwards
+the target (`git merge --ff-only` in a clean checkout, or a compare-and-swap
+`update-ref` otherwise), refuses a dirty, moved, or diverged target, is idempotent under
+its operation key, and never pushes. `workspace complete --expected-revision N
+--user-confirmed` then closes the workflow; a workspace with no live implementer can
+complete with an explicit `--reason` and nothing to integrate.
+
+`change-request prepare/publish/sync`, live testing, and `release confirm` are available
+only to custom workflows that declare those capabilities; the removed `issue-resolution`
+workflow was the bundled example. Without a release gate, a completed workflow is
+archivable without a release reference. `--user-confirmed` in an orchestrator session
+means forwarding a response actually received from the user, not the model granting
+consent on its own. In manual mode all workflow-only operations return
+`operation_not_applicable`, and manual mode ends with an explicit `complete` operation.
+
+Complete a manual workspace, or land and complete a plan-first workflow:
 
 ```sh
 workspace complete --reason "Analysis delivered" --user-confirmed --operation-key complete-1
+workspace archive
+
+workspace integration land --expected-revision 12 --user-confirmed --operation-key land-1
+workspace complete --expected-revision 13 --user-confirmed --operation-key complete-2
 workspace archive
 ```
 
@@ -633,9 +655,21 @@ artifacts, handoffs, the base commit, and prior WORKSPACE.md under
 `history/reopen_ID/`, while invalidating release/integration/live-test state and marking
 change requests outdated. An agent actor must also pass `--user-confirmed`, attesting
 that the user authorized the follow-up. `archive` and `clean --dry-run` remain separate
-from release confirmation; a manual workspace is archived after an earlier `complete`,
-and an archived workspace cannot be reopened.
+from release confirmation; a completed manual or plan-first workspace is archived after an
+earlier `complete`, and an archived workspace cannot be reopened.
 [Runtime, communication, and cleanup](docs/runtime.md).
+
+A workspace created by an older binary under the removed `issue-resolution` workflow is
+migrated to `plan-first` automatically on first load. The migration rewrites the workflow
+id, version, capabilities, and phase (every integration-stage phase becomes `integration`),
+preserves tasks, handoffs, integration, change-request, live-test, and release history,
+supersedes a pending live-testing decision, and — for a non-terminal workspace — stores the
+previous snapshots plus a `migration.json` manifest under `history/<revision_id>/`. It does
+not invalidate accepted
+results and is a no-op on the second load. A v1 `plan-first` snapshot that predates the
+integration stage keeps its frozen contract and completes after implementation;
+`workspace workflow migrate` opts it into v2 explicitly. Completed legacy workspaces
+become archivable without a release.
 
 WORKSPACE.md is the canonical mode and workflow state; in a manual workspace it has an
 empty workflow and the `manual` phase label. `.runtime/index.json` contains a private

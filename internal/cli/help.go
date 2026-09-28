@@ -205,8 +205,8 @@ var commandHelpSpecs = map[string]commandHelp{
 		requiredArgument("name", "Configured workflow name, such as plan-first."),
 	),
 	"workspace workflow advance": h(
-		"Validate the current workflow results and advance exactly one phase. --to can protect against advancing from an unexpected phase.",
-		"workspace workflow advance --to implementation",
+		"Validate the current workflow results and advance exactly one phase. --to can protect against advancing from an unexpected phase; a landing workflow stops in the integration phase until the accepted integration is landed and the workspace completed.",
+		"workspace workflow advance --to plan_review",
 	),
 	"workspace workflow migrate": h(
 		"Apply updated workflow templates while preserving input history and invalidating results affected by the revision.",
