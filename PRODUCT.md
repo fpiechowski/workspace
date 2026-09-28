@@ -222,11 +222,11 @@ The first TUI screen is Tasks: each row combines the task, its state, and the nu
 active executions, sessions, and runs of its current attempt. The primary navigation
 order is Tasks, Sessions, Worktrees, Results, and More. Sessions is a plain collection
 without secondary tabs, with a current/history filter and entry into session details;
-`g` on a jump-capable selection opens a picker of attached tmux clients on the verified
-target socket, and More provides Needs attention and Recent recorded activity among
-other pages. The picker appears even for one client and identifies each by TTY and
-current session. It moves only the confirmed client to the exact verified workspace,
-window, and pane. The TUI remembers the last successful client in ignored, project-local
+`g` on a jump-capable selection moves an attached tmux client to the verified target
+socket: with exactly one attached client it jumps immediately, and with several it opens
+a picker. More provides Needs attention and Recent recorded activity among other pages.
+The picker identifies each client by TTY and current session. Either path moves only the
+confirmed client to the exact verified workspace, window, and pane. The TUI remembers the last successful client in ignored, project-local
 `.workspace` UI data scoped by tmux socket, marks and preselects it while it remains
 attached, and uses a deterministic live-client default otherwise. Opening a task shows
 its related sessions, worktrees, and results and distinguishes process execution from
@@ -251,8 +251,9 @@ The TUI can run manually as a browser or, after an explicit user action, as a ma
 pane next to the orchestrator. The supervisor does not start, restore, or stop the TUI;
 `workspace tui show` and `workspace tui hide` own that lifecycle, while `q` in the pane
 records hide before exiting. During pause and completed, the pane may remain available
-for review until the user closes it. `g` always presents the attached-client picker for
-the selected target's tmux socket, inside or outside tmux. The TUI rechecks the socket,
+for review until the user closes it. `g` jumps immediately with the only attached client
+and otherwise presents the attached-client picker for the selected target's tmux socket,
+inside or outside tmux. The TUI rechecks the socket,
 the target's ownership, and the selected client's live identity before switching; it
 does not attach the caller's terminal or silently choose another client. `Esc` and
 `Ctrl+C` cancel without a tmux effect. A different socket from the TUI's attached server,

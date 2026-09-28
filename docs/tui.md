@@ -64,7 +64,8 @@ to the ID even after sorting. Run completion does not mean task acceptance; task
 session, and process states are distinguished. The primary navigation order is
 `1 Tasks`, `2 Sessions`, `3 Worktrees`, `4 Results`, and `5 More`. Sessions is a plain
 collection without secondary tabs: `f` switches the current/history view, `Enter` opens
-the session details, and `g` opens the attached-client picker for a verified tmux jump.
+the session details, and `g` jumps with the only attached client or opens the
+attached-client picker for a verified tmux jump.
 `b` switches the Tasks tab between **List** and **Board**. Board shows one column per
 task state in the fixed order pending, running, blocked, needs_changes, awaiting_review,
 accepted; unknown states are appended at the end and rendered as neutral text. Cards use
@@ -172,7 +173,7 @@ to go to Tasks, Sessions, Worktrees, Results, and More respectively.
 | `Tab` / `Shift+Tab` | Change the result type on Results (Artifacts, Handoffs, Checks) |
 | `s` | Sort by priority, name, or last execution |
 | `a` | Open available actions for the selection or workspace |
-| `g` | Choose an attached tmux client and jump to a verified target |
+| `g` | Jump to a verified target; choose a client when several are attached |
 | `w` / `o` | Workspace picker / orchestrator page |
 | `r` | Refresh the snapshot and runtime; does not reconcile |
 | `?` | Contextual help |
@@ -252,11 +253,11 @@ instead of a cramped layout. The available themes are `auto`, `dark`, and `light
 when a specific Worktree detail is opened.
 
 `g` resolves the selected entity to a fresh ownership-verified target, then lists the
-attached clients on that target's tmux socket. It always opens a picker, including when
-there is only one client. Each sanitized row identifies the terminal TTY and current
-session, with process/name metadata when available. The user confirms the client to move
-to the exact verified workspace session, window, and pane. `Esc` and `Ctrl+C` cancel
-without changing tmux.
+attached clients on that target's tmux socket. With exactly one attached client it jumps
+immediately with it; with several it opens a picker. Each sanitized row identifies the
+terminal TTY and current session, with process/name metadata when available. The user
+confirms the client to move to the exact verified workspace session, window, and pane.
+`Esc` and `Ctrl+C` cancel without changing tmux.
 
 The TUI stores the last successfully selected client under the project's ignored
 `.workspace/tui/clients` directory, with a separate preference for each socket. The
@@ -267,7 +268,7 @@ If that same live client remains attached, the picker puts it first, marks it li
 the remaining rows use a deterministic order and the first live client is selected.
 
 Before switching, the TUI resolves the target again and refuses to proceed if its
-verified workspace/window/pane changed while the picker was open. The terminal boundary
+verified workspace/window/pane changed before the jump started. The terminal boundary
 rechecks the attached server socket, target ownership, and the chosen client snapshot
 immediately before switching. Client TTY, process ID, and creation time protect against
 TTY reuse where tmux exposes that metadata. A detached or restarted client is reported

@@ -11,9 +11,10 @@ workspace service list
 workspace service stop service_ID
 ```
 
-The TUI `g` action lists attached clients on the selected target's socket and always
-opens a picker, including for one client. A confirmed choice switches that explicit
-client to the fresh ownership-verified workspace/window/pane target. The terminal
+The TUI `g` action lists attached clients on the selected target's socket. With exactly
+one attached client it jumps immediately; with several it opens a picker. A confirmed
+choice switches that explicit client to the fresh ownership-verified
+workspace/window/pane target. The terminal
 boundary rechecks the socket, target, and client identity before switching; it does not
 attach the TUI's caller terminal or silently choose a replacement if the client is
 gone. The last successfully used client is stored as ignored project-local UI data,
