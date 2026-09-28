@@ -2,7 +2,7 @@
 
 ## Commit
 
-Pending commit at report authoring time.
+`8287d04` — `test: decouple workflow tests from legacy name`
 
 ## Changes
 
