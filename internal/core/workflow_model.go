@@ -149,6 +149,13 @@ func (w Workspace) AutonomyRunning() bool {
 	return w.Autonomy != nil && w.Autonomy.State == "running"
 }
 
+// Autonomous reports whether the workspace is mid autonomous run. It backs the
+// {{if .Autonomous}} template switch used by the stock role and workflow
+// templates; it is equivalent to AutonomyRunning.
+func (w Workspace) Autonomous() bool {
+	return w.AutonomyRunning()
+}
+
 type Integration struct {
 	WorktreeID  string   `yaml:"worktree_id" json:"worktree_id"`
 	TaskIDs     []string `yaml:"task_ids" json:"task_ids"`

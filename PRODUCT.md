@@ -81,6 +81,23 @@ inspectable, but new execution and durable task/resource mutations require the e
 `workspace reopen` operation with a reason and exact revision; an agent actor must also
 carry the user's confirmation. Ticket content does not expand the agent's privileges.
 
+### Autonomous Runs Are Auditable and Bounded
+
+A user may create a workspace in autonomous mode, or enable it later from the terminal,
+so the orchestrator resolves the gates that are already orchestrator-level in code — plan
+acceptance, task and integrator result acceptance, phase advance up to integration,
+worker questions, and bounded retry/retire — without waiting for a person. Every such
+decision records a rationale, evidence, subject, and Run provenance atomically with the
+gate it resolves. The run ends with a durable final report: an immutable summary artifact
+and an outcome (`ready_to_land`, `ready_to_complete`, `blocked`, or `failed`) that moves
+the workspace to `autonomy.state=delivered`, and nothing in the run waits for an answer.
+Operations with external, local-branch, lifecycle-terminal, or authorization effects stay
+with the user and are refused in code for agent actors while the run is running:
+integration landing, completion, change-request publication/resolution, release
+confirmation, live-testing answers, reopen, archive/clean/delete, and state edit.
+Autonomy also requires a deliver-capable orchestrator route, and the project Dispatcher
+can never create or enable an autonomous workspace.
+
 ### Retrying Must Not Duplicate Work
 
 Mutations have operation keys and durable receipts. Repeating the same intent returns
@@ -137,6 +154,10 @@ The current scope includes:
 - manual mode without a workflow: task and worktree delegation, handoffs, checks, and
   acceptance with a fixed limit of 3 parallel workers, without phases, advance, release,
   or conversion to a workflow;
+- per-workspace autonomous runs, chosen by the user at creation or enabled later from the
+  terminal, that resolve the orchestrator-level gates with recorded rationales and end in
+  a durable report while external, local-branch, lifecycle, and authorization effects
+  stay with the user;
 - an interactive TUI for browsing the same state, navigating tasks, and running
   explicitly permitted core operations.
 - validated first-run project setup that collects the client adapters, an

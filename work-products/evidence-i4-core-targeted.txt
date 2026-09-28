@@ -1,0 +1,2 @@
+ok  	workspace/internal/core	14.494s
+exit_code=0

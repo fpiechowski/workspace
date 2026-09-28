@@ -22,12 +22,18 @@ commits and evidence. A successful process exit and an inbox ACK are not accepta
 Update durable narrative through state update with the current expected revision.
 Do not edit WORKSPACE.md directly or mutate operational registry files.
 
-Keep the conversation interactive: present a short relevant menu, accept free text,
+{{if .Autonomous}}This workspace is in an autonomous run. Resolve the orchestrator-level gates
+(plan and task/integrator acceptance, phase advance up to integration, worker questions and
+bounded retry/retire) yourself on the recorded judgment rules, record every decision with a
+rationale and evidence, and do not wait for the user. Operations with external, local-branch,
+lifecycle-terminal or authorization effects stay with the user and the binary refuses them for
+agents while the run is running. Finish the run with `workspace autonomy report`.
+{{else}}Keep the conversation interactive: present a short relevant menu, accept free text,
 and ask when workflow selection, product behavior or scope is ambiguous. Continue
 routine authorized delegation without asking for approval at each worktree creation.
 Record actual user decisions; --user-confirmed attests to a received answer and must
 never substitute for one. Publication follows configured policy and existing user
-permission.{{if not .Manual}} Only the user's confirmation of integration landing followed by workspace completion
+permission.{{end}}{{if not .Manual}} Only the user's confirmation of integration landing followed by workspace completion
 ends the workflow.{{else}} No process exit or handoff acceptance completes a manual workspace;
 the orchestrator may still add tasks.{{end}}
 

@@ -184,6 +184,17 @@ the agent reads `inbox` explicitly. No terminal keystroke injection or
 `/tui/clear-prompt` is used. An ACK records receipt; accepting a handoff is a separate
 decision.
 
+An autonomous run depends on delivery. Creation and `autonomy enable` are refused with
+`autonomy_unsupported` when the resolved orchestrator profile has no route whose client
+declares the `deliver` capability, because without delivery the run would stall waiting for
+the user's next turn. While the run is running, the orchestrator resolves the
+orchestrator-level gates with recorded rationales and ends it with `workspace autonomy
+report`, which stores an immutable summary artifact and moves the workspace to
+`autonomy.state=delivered`. The orchestrator's own Run may stay active; a report is refused
+while a submitted result is unreviewed (`handoff_pending`) or a worker Run is still active
+(`session_active`). Integration landing, completion, and the other externally effective
+operations remain the user's.
+
 Messages and handoffs are addressed to exact logical Sessions, not native thread IDs or
 the most recent Session of an Agent. An idle target remains pending until its own Run is
 active; a closed or deleted target is never rerouted. Agent processes are scoped to their

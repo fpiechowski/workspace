@@ -128,6 +128,7 @@ have no start, stop, or reconcile side effects.
 | Issue | Durable project input with a canonical content digest, local status, revision history, and external source metadata. |
 | Dispatcher | Project-scoped Agent with its own Sessions/Runs and tmux identity; may intake and route Issues but cannot perform Workspace implementation work. |
 | Workspace | Persistent context for one initiative from input to a user-approved integration landing and completion (`plan-first`), a confirmed release (custom workflow), or confirmed completion (manual mode); completed work can be reopened only through an explicit guarded mutation. |
+| Autonomy | Per-workspace autonomous run record (`mode`, `state`, provenance, and the final report); a nil record means the workspace follows the interactive contract. |
 | Worktree | Isolated checkout and branch for planning, implementation, integration, or testing. |
 | Task | Delegated unit of work with an attempt, dependencies, and acceptance criteria. |
 | Agent | Stable persona definition: role, instructions, prompt, and profile. |
@@ -234,6 +235,16 @@ and change-request state that depended on the completed cycle.
 `WORKSPACE.md` has validated frontmatter and descriptive content for the next
 orchestrator. It is the source of truth for the mode, workflow phase (when selected),
 tasks, decisions, and accepted results.
+While the workspace is in an autonomous run, `WORKSPACE.md` also carries the `autonomy`
+record (`mode`, `state` running/delivered/disabled, enable/disable provenance, and the final
+`report`). Each orchestrator-level gate resolved under autonomy appends a `Decision` with
+`resolved_by`, `autonomous`, `subject`, `evidence`, and `session_id`/`run_id`; every one of
+those fields is `omitempty`, so an interactive document and its operation receipts are
+byte-compatible with earlier binaries. Strict decoding means an older binary refuses a
+document that contains `autonomy` or the new decision fields; because they are omitted unless
+autonomy is used, that downgrade restriction applies only to autonomous workspaces. Creating
+or enabling autonomy requires a deliver-capable orchestrator route, and a running run ends
+with a receipted `autonomy report` that sets `state=delivered`.
 `.runtime/index.json` is an operational index, not a competing workflow version. Public
 `status --json` has its own explicit schema number. The TUI uses a private
 `WorkspaceSnapshot`; it does not add entities to `index.json`, change the public Status

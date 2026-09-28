@@ -9,7 +9,9 @@ Workspace mutations include creating resources and tasks, starting/resuming/stop
 sessions, messages and ACKs, handoffs and their evaluation, workflows, state updates,
 migrations, integration prepare and `integration land`, CRs, decisions, release,
 `complete` for a manual workspace or a landed plan-first workflow, pause/resume,
-reconcile, `reopen` for a completed workspace, archive, and clean.
+reconcile, `reopen` for a completed workspace, archive, clean, autonomy
+enable/disable/report, and the optional rationale/evidence payload that records an
+autonomous gate decision.
 `project init`, `skill install`, and `server stop` write project-scoped receipts.
 Reads, `clean --dry-run`, interactive attach, and the continuously running `serve`
 command are not one-shot mutations that require a receipt.
@@ -75,6 +77,35 @@ returning state: parent Session links and message/handoff targets are backfilled
 from strong evidence, while ambiguous legacy records retain an empty `ToSession`.
 OpenCode snapshots are normalized by adapter plus empty custom `deliver_argv`; missing
 native Run endpoints are restored only from valid loopback server flags in immutable argv.
+
+## Autonomous runs
+
+`workspace autonomy enable|disable` and `workspace autonomy report` are receipted
+mutations, as is `workspace decision record` for an assumption or a worker-question answer.
+`enable` is terminal-user only (an agent is refused because enabling hands over the user's
+gates); `disable` accepts the user or an orchestrator with `--user-confirmed`; `report` and
+`decision record` are orchestrator-only while the run is running. Each uses its
+`--operation-key` and replays idempotently, and the revision-guarded ones require the exact
+`--expected-revision`.
+
+While a run is running, the orchestrator resolves the orchestrator-level gates (plan
+acceptance, task and integrator result acceptance, phase advance, retry/retire) with an
+optional `--rationale` and `--evidence`. The rationale is mandatory for an agent actor while
+the run is running (otherwise `rationale_required`); the gate and an audit `Decision`
+(`resolved_by=orchestrator`, `autonomous=true`, `subject`, `evidence`, Run provenance)
+commit in the same write-ahead mutation as the change, so a validation error persists
+neither. The rationale is added to the receipt payload only when non-empty, so an interactive
+operation's existing digest and replay are unchanged.
+
+Operations with external, local-branch, lifecycle-terminal, or authorization effects are
+excluded from autonomous resolution. While the run is running, an agent actor receives
+`autonomy_excluded` for them even with `--user-confirmed` (or `publication: allowed`):
+`integration land`, `complete`, `change-request publish`/`resolve`, `release confirm`,
+`decision answer` for live testing, `reopen`, `archive`/`clean`/delete, and `state edit`. The
+terminal user (empty actor) can always perform them, and after `delivered` or `disabled` the
+ordinary attestation contract applies again. The run itself ends with `autonomy report`, which
+validates the outcome against state, stores an immutable summary artifact, appends an
+`autonomous.final_report` decision, and sets `autonomy.state=delivered`.
 
 ## Completed workspaces and reopen
 
