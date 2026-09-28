@@ -1,15 +1,12 @@
-command: gofmt -l ./cmd ./internal
-exit_code: 0
-evidence: evidence-gofmt.txt
-
-command: go vet ./...
-exit_code: 0
-evidence: evidence-vet.txt
-
-command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 570s
-exit_code: 0
-evidence: evidence-go-test-all.txt
-
-command: WORKSPACE_TMUX_TEST=1 go test -race -count=1 ./internal/core -run 'TestTmux|TestMigrateLegacyWorkflow' -timeout 90s
-exit_code: 0
-evidence: evidence-tmux-core.txt
+- command: gofmt -l ./cmd ./internal
+  exit_code: 0
+  evidence: evidence-gofmt.txt
+- command: go vet ./...
+  exit_code: 0
+  evidence: evidence-vet.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 570s
+  exit_code: 0
+  evidence: evidence-go-test-all.txt
+- command: WORKSPACE_TMUX_TEST=1 go test -race -count=1 ./internal/core -run 'TestTmux|TestMigrateLegacyWorkflow' -timeout 90s
+  exit_code: 0
+  evidence: evidence-tmux-core.txt
