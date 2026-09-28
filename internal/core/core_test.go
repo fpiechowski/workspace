@@ -62,17 +62,54 @@ func fixture(t *testing.T) (*Service, string) {
 	if _, err := InitProject(ctx, dir); err != nil {
 		t.Fatal(err)
 	}
+	installExtendedWorkflow(t, dir)
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := &Service{Root: dir, Runtime: &fakeRuntime{panes: map[string]Pane{}}, Executable: exe}
 	configure(t, s, exe)
-	w, err := s.Create(ctx, CreateOptions{Title: "Fix checkout", Input: "A reproducible issue", Workflow: "issue-resolution"})
+	w, err := s.Create(ctx, CreateOptions{Title: "Fix checkout", Input: "A reproducible issue", Workflow: "extended"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s, w.Workspace.ID
+}
+
+func installExtendedWorkflow(t *testing.T, root string) {
+	t.Helper()
+	source, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source = filepath.Join(source, "testdata", "extended")
+	target := filepath.Join(root, ".workspace", "templates", "workflows", "extended")
+	entries, err := os.ReadDir(filepath.Join(source, "prompts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(target, "prompts"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	workflow, err := os.ReadFile(filepath.Join(source, "WORKFLOW.md.tmpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicWrite(filepath.Join(target, "WORKFLOW.md.tmpl"), workflow); err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		prompt, err := os.ReadFile(filepath.Join(source, "prompts", entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := atomicWrite(filepath.Join(target, "prompts", entry.Name()), prompt); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 func configure(t *testing.T, s *Service, exe string) {
 	t.Helper()
@@ -85,6 +122,13 @@ func configure(t *testing.T, s *Service, exe string) {
 	cfg.Defaults.OrchestratorProfile = "frontier"
 	for _, name := range []string{"frontier", "implementation", "live-testing"} {
 		cfg.Profiles[name] = Profile{Routes: []Route{{ID: name + "-a", Client: "test", Provider: "a", Model: "test-model", MaxConcurrency: 8}}}
+	}
+	if cfg.Workflows == nil {
+		cfg.Workflows = map[string]WorkflowConfig{}
+	}
+	cfg.Workflows["extended"] = WorkflowConfig{
+		Profiles:     map[string]string{"orchestrator": "frontier", "planning": "frontier", "implementation": "implementation", "integration": "implementation", "live-testing": "live-testing"},
+		Capabilities: []string{capTasks, capPhases, capPlanner, capImplementer, capIntegrator, capTester, capPlannerDepends, capIntegration, capLiveTest, capChangeRequest, capRelease},
 	}
 	b, _ := yaml.Marshal(cfg)
 	if err := atomicWrite(filepath.Join(s.Root, ".workspace", "config.yaml"), b); err != nil {
@@ -174,19 +218,15 @@ func TestCreateIdempotencyAndWorkflowSelection(t *testing.T) {
 	if a.Workspace.ID != b.Workspace.ID {
 		t.Fatal("duplicate workspace")
 	}
-	if a.Workspace.Workflow != nil || a.Workspace.Status != "needs_workflow" {
-		t.Fatal("implicit workflow selection")
+	if a.Workspace.Workflow == nil || a.Workspace.Workflow.ID != "plan-first" || a.Workspace.Status != "active" {
+		t.Fatal("default workflow was not selected")
 	}
 	opt.Input = "changed"
 	_, err = s.Create(ctx, opt)
 	expectCode(t, err, "operation_conflict")
-	c, err := s.SelectWorkflow(ctx, a.Workspace.ID, "issue-resolution")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c.Workspace.Workflow == nil || c.Workspace.Status != "active" {
-		t.Fatal("workflow not selected")
-	}
+	c, err := s.SelectWorkflow(ctx, a.Workspace.ID, "extended")
+	expectCode(t, err, "workflow_conflict")
+	_ = c
 	_, err = s.Create(ctx, CreateOptions{Source: "https://tracker.example/1"})
 	expectCode(t, err, "tracker_unavailable")
 }
@@ -216,8 +256,8 @@ func TestCreateExplicitManualModeSnapshotsNeutralPrompts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pending.Workspace.Status != "needs_workflow" || pending.Workspace.Workflow != nil || pending.Workspace.Manual() {
-		t.Fatalf("omitted workflow changed meaning: %+v", pending.Workspace)
+	if pending.Workspace.Status != "active" || pending.Workspace.Workflow == nil || pending.Workspace.Workflow.ID != "plan-first" {
+		t.Fatalf("default workflow was not selected: %+v", pending.Workspace)
 	}
 
 	replay, err := s.Create(ctx, CreateOptions{Title: "Manual", Input: "Coordinate manually", NoWorkflow: true, OperationKey: "manual:1"})
@@ -241,7 +281,7 @@ func TestCreateExplicitManualModeSnapshotsNeutralPrompts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(pendingNote), "# Select a workflow") {
+	if !strings.HasPrefix(string(pendingNote), "# Plan-first workflow") {
 		t.Fatalf("pending WORKFLOW.md changed: %s", pendingNote)
 	}
 
@@ -273,7 +313,7 @@ func TestCreateExplicitManualModeSnapshotsNeutralPrompts(t *testing.T) {
 			t.Fatalf("%s neutral prompt missing: %v", name, err)
 		}
 		text := string(prompt)
-		if strings.Contains(text, "plan-first") || strings.Contains(text, "issue-resolution") {
+		if strings.Contains(text, "plan-first") || strings.Contains(text, "extended") {
 			t.Fatalf("%s prompt leaked a workflow name: %s", name, text)
 		}
 		if strings.Contains(text, "planner artifacts") || strings.Contains(text, "mark the workflow complete") {
@@ -495,7 +535,7 @@ func TestRoutingBalancesProvidersAcrossWorkspaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := s.Create(ctx, CreateOptions{Title: "Other", Input: "Another issue", Workflow: "issue-resolution"})
+	other, err := s.Create(ctx, CreateOptions{Title: "Other", Input: "Another issue", Workflow: "extended"})
 	if err != nil {
 		t.Fatal(err)
 	}

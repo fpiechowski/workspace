@@ -19,7 +19,7 @@ func TestExternalWorkspaceStorageAndDiscovery(t *testing.T) {
 	if err := atomicWrite(filepath.Join(s.Root, ".workspace", "config.yaml"), b); err != nil {
 		t.Fatal(err)
 	}
-	v, err := s.Create(ctx, CreateOptions{Input: "External work", Workflow: "issue-resolution"})
+	v, err := s.Create(ctx, CreateOptions{Input: "External work", Workflow: "extended"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestSharedStorageKeepsProjectsIsolated(t *testing.T) {
 		if err := atomicWrite(filepath.Join(s.Root, ".workspace", "config.yaml"), data); err != nil {
 			t.Fatal(err)
 		}
-		v, err := s.Create(ctx, CreateOptions{Input: "Shared storage issue", Workflow: "issue-resolution", OperationKey: "same-key"})
+		v, err := s.Create(ctx, CreateOptions{Input: "Shared storage issue", Workflow: "extended", OperationKey: "same-key"})
 		if err != nil {
 			t.Fatal(err)
 		}

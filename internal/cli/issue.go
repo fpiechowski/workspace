@@ -118,7 +118,7 @@ func issueCommands(o *options) *cobra.Command {
 		return o.emit(v)
 	})
 	dispatchCmd.Args = cobra.ExactArgs(1)
-	dispatchCmd.Flags().StringVar(&dispatch.Workflow, "workflow", "", "Configured workflow; omit to choose later")
+	dispatchCmd.Flags().StringVar(&dispatch.Workflow, "workflow", "", "Configured workflow; defaults to plan-first")
 	dispatchCmd.Flags().BoolVar(&dispatch.NoWorkflow, "no-workflow", false, "Create an active manual Workspace")
 	dispatchCmd.Flags().StringVar(&dispatch.Base, "base", "HEAD", "Base Git revision")
 	dispatchCmd.Flags().StringVar(&dispatch.Title, "title", "", "Workspace title override")

@@ -65,7 +65,7 @@ func TestWorkflowMigrationPreservesSessionPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(s.Root, ".workspace", "templates", "workflows", "issue-resolution", "WORKFLOW.md.tmpl")
+	path := filepath.Join(s.Root, ".workspace", "templates", "workflows", "extended", "WORKFLOW.md.tmpl")
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

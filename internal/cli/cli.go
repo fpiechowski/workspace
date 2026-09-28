@@ -383,7 +383,7 @@ func newRoot(o *options) *cobra.Command {
 	createCmd.Flags().StringVar(&inputFile, "input-file", "", "Saved issue/description file")
 	createCmd.Flags().StringVar(&create.Source, "issue", "", "Issue URL; fetch from configured tracker unless an intent or --input-file is supplied")
 	createCmd.Flags().StringVar(&create.FromIssue, "from-issue", "", "Create from an existing durable Issue ID; mutually exclusive with intent, --input-file and --issue")
-	createCmd.Flags().StringVar(&create.Workflow, "workflow", "", "Workflow name; omit to choose a workflow later")
+	createCmd.Flags().StringVar(&create.Workflow, "workflow", "", "Workflow name; defaults to plan-first")
 	createCmd.Flags().BoolVar(&create.NoWorkflow, "no-workflow", false, "Create an active workspace with no workflow for manual orchestration")
 	createCmd.Flags().StringVar(&create.Base, "base", "HEAD", "Base Git revision")
 	root.AddCommand(createCmd)

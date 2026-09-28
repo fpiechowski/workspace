@@ -26,16 +26,17 @@ func ID(prefix string) string { return prefix + "_" + ulid.Make().String() }
 func nowUTC() time.Time       { return time.Now().UTC() }
 
 type Config struct {
-	WorkspacesDir string                    `yaml:"workspaces_dir,omitempty" json:"workspaces_dir,omitempty"`
-	Tracker       TrackerConfig             `yaml:"tracker,omitempty" json:"tracker,omitempty"`
-	SchemaVersion int                       `yaml:"schema_version" json:"schema_version"`
-	ProjectID     string                    `yaml:"project_id" json:"project_id"`
-	Runtime       string                    `yaml:"runtime" json:"runtime"`
-	Clients       map[string]Client         `yaml:"clients" json:"clients"`
-	Profiles      map[string]Profile        `yaml:"profiles" json:"profiles"`
-	Defaults      DefaultsConfig            `yaml:"defaults,omitempty" json:"defaults,omitempty"`
-	Forge         ForgeConfig               `yaml:"forge,omitempty" json:"forge,omitempty"`
-	Workflows     map[string]WorkflowConfig `yaml:"workflows,omitempty" json:"workflows,omitempty"`
+	WorkspacesDir  string                    `yaml:"workspaces_dir,omitempty" json:"workspaces_dir,omitempty"`
+	Tracker        TrackerConfig             `yaml:"tracker,omitempty" json:"tracker,omitempty"`
+	SchemaVersion  int                       `yaml:"schema_version" json:"schema_version"`
+	ProjectID      string                    `yaml:"project_id" json:"project_id"`
+	Runtime        string                    `yaml:"runtime" json:"runtime"`
+	Clients        map[string]Client         `yaml:"clients" json:"clients"`
+	Profiles       map[string]Profile        `yaml:"profiles" json:"profiles"`
+	Defaults       DefaultsConfig            `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+	Forge          ForgeConfig               `yaml:"forge,omitempty" json:"forge,omitempty"`
+	Workflows      map[string]WorkflowConfig `yaml:"workflows,omitempty" json:"workflows,omitempty"`
+	StaleTemplates []string                  `yaml:"-" json:"stale_templates,omitempty"`
 }
 type DefaultsConfig struct {
 	OrchestratorProfile string `yaml:"orchestrator_profile,omitempty" json:"orchestrator_profile,omitempty"`

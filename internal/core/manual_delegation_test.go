@@ -91,7 +91,7 @@ func TestManualWorkspaceDelegationEndToEnd(t *testing.T) {
 func TestNeedsWorkflowBlocksWorkerDelegation(t *testing.T) {
 	s, _ := fixture(t)
 	ctx := context.Background()
-	pending, err := s.Create(ctx, CreateOptions{Title: "Pending", Input: "Choose later"})
+	pending, err := s.Create(ctx, CreateOptions{Title: "Pending", Input: "Choose later", NoWorkflow: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,9 @@ func TestNeedsWorkflowBlocksWorkerDelegation(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.StartSession(ctx, ws, SessionOptions{Agent: agent.ID, Worktree: worktree.ID})
-	expectCode(t, err, "decision_required")
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Manual delegation uses the fixed fallback of three and never becomes

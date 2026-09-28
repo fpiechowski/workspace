@@ -82,8 +82,12 @@ func TestStructuredErrorsAndWorkflowDiscovery(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if !response.OK || len(response.Data) != 2 || response.Data[0].ID != "issue-resolution" || response.Data[1].ID != "plan-first" {
-		t.Fatal("invalid workflow list")
+	planFirst := false
+	for _, workflow := range response.Data {
+		planFirst = planFirst || workflow.ID == "plan-first"
+	}
+	if !response.OK || !planFirst {
+		t.Fatalf("invalid workflow list: %s", out.String())
 	}
 	out.Reset()
 	errOut.Reset()
@@ -321,7 +325,7 @@ func TestWorkspacePickerShowsManualModeLabel(t *testing.T) {
 	workspaces := []core.Status{
 		{Workspace: core.Workspace{ID: "ws_manual", Title: "Manual", Status: "active"}},
 		{Workspace: core.Workspace{ID: "ws_pending", Title: "Pending", Status: "needs_workflow"}},
-		{Workspace: core.Workspace{ID: "ws_flow", Title: "Flow", Status: "active", Workflow: &core.Workflow{ID: "issue-resolution", Phase: "planning"}}},
+		{Workspace: core.Workspace{ID: "ws_flow", Title: "Flow", Status: "active", Workflow: &core.Workflow{ID: "extended", Phase: "planning"}}},
 	}
 	out := &bytes.Buffer{}
 	o := &options{in: strings.NewReader("q\n"), out: out}

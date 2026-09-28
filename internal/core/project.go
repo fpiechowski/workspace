@@ -84,10 +84,47 @@ func resolveProjectRoot(ctx context.Context, dir string) (string, error) {
 	return filepath.EvalSymlinks(root)
 }
 
-// ensureProjectScaffold installs the bundled templates that are missing and
-// appends the local Git exclude rules. It never replaces existing files, so a
-// customized template or a pre-existing exclude entry is preserved.
-func ensureProjectScaffold(ctx context.Context, root string) error {
+var stockPlanFirstTemplateDigests = map[string]bool{
+	"4569beee09d99f7a6c7fec1ad04006f5d41eac8051d32d05e2d69e0b644770bc": true,
+	"584360edfa6b9a9e5ecc4e3313a0b233f32198dbbbef71d0b037d399306eda9d": true,
+	"ada9a62a3d4c1a725ada2a03f97a63b1110ec0e29d703e2ae97292e43576a8af": true,
+}
+
+var stockOrchestratorPromptDigests = map[string]bool{
+	"9c2f024ae978aa7ac55210a8b7827842d4d57351eaeda922bcb0238ac8b870e2": true,
+	"3c8dba7d97ea130ab30b4b251f33bf481e61e5a1eeb8413ebe7202d12c1ae6dc": true,
+	"851d90f98206ce6e1b73243005dda72c1eb643d506e491405e9cf4621d58eb66": true,
+}
+
+// ensureProjectScaffold installs missing bundled templates and refreshes only
+// known stock plan-first templates. Customized files are preserved and listed.
+func ensureProjectScaffold(ctx context.Context, root string) ([]string, error) {
+	var stale []string
+	for _, item := range []struct {
+		rel string
+		old map[string]bool
+	}{
+		{"workflows/plan-first/WORKFLOW.md.tmpl", stockPlanFirstTemplateDigests},
+		{"workflows/plan-first/prompts/orchestrator.md.tmpl", stockOrchestratorPromptDigests},
+	} {
+		target := filepath.Join(root, ".workspace", "templates", filepath.FromSlash(item.rel))
+		b, err := os.ReadFile(target)
+		if err == nil {
+			if item.old[digest(b)] {
+				embedded, readErr := templates.ReadFile("templates/" + item.rel)
+				if readErr != nil {
+					return nil, readErr
+				}
+				if writeErr := atomicWrite(target, embedded); writeErr != nil {
+					return nil, writeErr
+				}
+			} else {
+				stale = append(stale, item.rel)
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	}
 	if err := fs.WalkDir(templates, "templates", func(path string, e fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -107,25 +144,25 @@ func ensureProjectScaffold(ctx context.Context, root string) error {
 		}
 		return atomicWrite(target, b)
 	}); err != nil {
-		return err
+		return nil, err
 	}
 	ignore, err := git(ctx, root, "rev-parse", "--git-path", "info/exclude")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !filepath.IsAbs(ignore) {
 		ignore = filepath.Join(root, ignore)
 	}
 	b, err := os.ReadFile(ignore)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+		return nil, err
 	}
 	for _, rule := range []string{"/.workspace/ws_*/", "/.workspace/.runtime/", "/.workspace/.creating-*/", "/.workspace/issues/", "/.workspace/dispatcher/", "/work-products/"} {
 		if !strings.Contains("\n"+string(b)+"\n", "\n"+rule+"\n") {
 			b = append(b, []byte("\n"+rule+"\n")...)
 		}
 	}
-	return atomicWrite(ignore, b)
+	return stale, atomicWrite(ignore, b)
 }
 
 func InitProject(ctx context.Context, dir string, keys ...string) (Config, error) {
@@ -202,16 +239,20 @@ func initProjectLocked(ctx context.Context, root string, candidate *Config) (Con
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return Config{}, err
 	}
-	if err := ensureProjectScaffold(ctx, root); err != nil {
+	staleTemplates, err := ensureProjectScaffold(ctx, root)
+	if err != nil {
 		return Config{}, err
 	}
 	if existingConfig {
-		return s.Config()
+		cfg, err := s.Config()
+		cfg.StaleTemplates = staleTemplates
+		return cfg, err
 	}
 	cfg := Config{SchemaVersion: 1, ProjectID: ID("prj"), Runtime: "tmux", Clients: map[string]Client{}, Profiles: map[string]Profile{}}
 	if candidate != nil {
 		cfg = *candidate
 	}
+	cfg.StaleTemplates = staleTemplates
 	b, err := yaml.Marshal(cfg)
 	if err != nil {
 		return Config{}, err
@@ -464,20 +505,17 @@ func workflowAvailable(root string, cfg Config, name string) bool {
 		return true
 	}
 	// Keep the bundled example selectable before the user has added model
-	// profiles. Existing projects may also still contain the legacy template.
-	return name == exampleWorkflow && workflowTemplateExists(root, name) || name == "issue-resolution" && workflowTemplateExists(root, name)
+	// profiles.
+	return name == exampleWorkflow && workflowTemplateExists(root, name)
 }
 
 func WorkflowNames(root string, cfg Config) []string {
-	names := make([]string, 0, len(cfg.Workflows)+2)
+	names := make([]string, 0, len(cfg.Workflows)+1)
 	for name := range cfg.Workflows {
 		names = append(names, name)
 	}
 	if !slices.Contains(names, exampleWorkflow) && workflowTemplateExists(root, exampleWorkflow) {
 		names = append(names, exampleWorkflow)
-	}
-	if !slices.Contains(names, "issue-resolution") && workflowTemplateExists(root, "issue-resolution") {
-		names = append(names, "issue-resolution")
 	}
 	slices.Sort(names)
 	return names
@@ -529,6 +567,9 @@ func (s *Service) createWorkspaceLegacy(ctx context.Context, opt CreateOptions, 
 		return Status{}, err
 	}
 	if opt.Workflow != "" && !workflowAvailable(s.Root, cfg, opt.Workflow) {
+		if opt.Workflow == "issue-resolution" {
+			return Status{}, fail("unknown_workflow", "workflow issue-resolution was removed; use plan-first; available workflow: %s", strings.Join(WorkflowNames(s.Root, cfg), ", "))
+		}
 		return Status{}, fail("unknown_workflow", "available workflow: %s", strings.Join(WorkflowNames(s.Root, cfg), ", "))
 	}
 	dirs, err := s.workspaceDirs()
@@ -559,6 +600,9 @@ func (s *Service) createWorkspaceLegacy(ctx context.Context, opt CreateOptions, 
 		}
 	}
 	request := opt
+	if !opt.NoWorkflow && opt.Workflow == "" {
+		opt.Workflow = exampleWorkflow
+	}
 	if strings.TrimSpace(opt.Input) == "" {
 		fetcher := s.IssueFetcher
 		if fetcher == nil {
@@ -716,10 +760,12 @@ func (s *Service) snapshotTemplates(d *Document, workflow string, manual bool) e
 			return err
 		}
 		d.State.ChangeRequestMode = cfg.Workflows[workflow].ChangeRequests
-		if d.State.ChangeRequestMode == "" && workflow == "issue-resolution" {
-			d.State.ChangeRequestMode = "integrated"
+		workflowPath := "workflows/" + workflow + "/WORKFLOW.md.tmpl"
+		workflowTemplate, err := s.workflowTemplate(workflowPath)
+		if err != nil {
+			return err
 		}
-		w, err = s.render("workflows/"+workflow+"/WORKFLOW.md.tmpl", d.State)
+		w, err = renderTemplate(workflowPath, workflowTemplate, d.State)
 		if err != nil {
 			return err
 		}
@@ -735,20 +781,64 @@ func (s *Service) snapshotTemplates(d *Document, workflow string, manual bool) e
 	if err != nil {
 		return err
 	}
+	if workflow == exampleWorkflow {
+		embeddedEntries, readErr := fs.ReadDir(templates, "templates/workflows/plan-first/prompts")
+		if readErr != nil {
+			return readErr
+		}
+		present := make(map[string]bool, len(entries))
+		for _, entry := range entries {
+			present[entry.Name()] = true
+		}
+		for _, entry := range embeddedEntries {
+			if !present[entry.Name()] {
+				entries = append(entries, entry)
+			}
+		}
+	}
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md.tmpl") {
 			continue
 		}
 		name := strings.TrimSuffix(entry.Name(), ".md.tmpl")
-		b, err := os.ReadFile(filepath.Join(promptDir, "prompts", entry.Name()))
-		if err != nil {
-			return err
+		b, readErr := os.ReadFile(filepath.Join(promptDir, "prompts", entry.Name()))
+		if readErr != nil && workflow == exampleWorkflow {
+			b, readErr = templates.ReadFile("templates/workflows/plan-first/prompts/" + entry.Name())
+		}
+		if readErr != nil {
+			return readErr
 		}
 		if err := atomicWrite(filepath.Join(d.Dir, "prompts", name+".md.tmpl"), b); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Service) workflowTemplate(path string) ([]byte, error) {
+	b, err := os.ReadFile(filepath.Join(s.Root, ".workspace", "templates", filepath.FromSlash(path)))
+	if err == nil {
+		if path == "workflows/plan-first/WORKFLOW.md.tmpl" && stockPlanFirstTemplateDigests[digest(b)] {
+			return templates.ReadFile("templates/" + path)
+		}
+		return b, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	return templates.ReadFile("templates/" + path)
+}
+
+func renderTemplate(name string, b []byte, data any) ([]byte, error) {
+	t, err := template.New(name).Option("missingkey=error").Parse(string(b))
+	if err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	if err := t.Execute(&out, data); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }
 func InferWorkspace(cwd string) (string, error) {
 	dir, err := filepath.Abs(cwd)

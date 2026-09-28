@@ -48,7 +48,7 @@ func TestIssueSnapshotAndCreateReplay(t *testing.T) {
 	ctx := context.Background()
 	fetcher := &fakeIssueFetcher{}
 	s.IssueFetcher = fetcher
-	opt := CreateOptions{Source: "https://tracker.example/issue/142", Workflow: "issue-resolution", OperationKey: "ticket"}
+	opt := CreateOptions{Source: "https://tracker.example/issue/142", Workflow: "extended", OperationKey: "ticket"}
 	v, err := s.Create(ctx, opt)
 	if err != nil {
 		t.Fatal(err)

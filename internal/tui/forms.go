@@ -331,7 +331,7 @@ func createWorkflowChoice(choice string) (string, bool) {
 }
 
 func (m *Model) openCreateWorkspaceForm(names []string) tea.Cmd {
-	m.formTitle, m.formInput, m.formWorkflow = "", "", ""
+	m.formTitle, m.formInput, m.formWorkflow = "", "", "plan-first"
 	options := []huh.Option[string]{
 		huh.NewOption("Choose later", ""),
 		huh.NewOption("No workflow (manual orchestration)", createManualChoice),

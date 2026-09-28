@@ -24,7 +24,7 @@ func TestDeleteWorkspaceDiscardsActiveWorkspaceAndReplaysAfterRemoval(t *testing
 		t.Fatalf("project-scoped receipt did not replay after removal: %v", err)
 	}
 
-	created, err := s.Create(ctx, CreateOptions{Title: "Has work", Input: "Keep task history", Workflow: "issue-resolution"})
+	created, err := s.Create(ctx, CreateOptions{Title: "Has work", Input: "Keep task history", Workflow: "extended"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -166,8 +166,7 @@ func runProjectInitWizard(ctx context.Context, dir string, in io.Reader, out io.
 			cfg.Profiles[spec.name] = core.Profile{ReasoningEffort: spec.effort, Routes: []core.Route{{ID: spec.route, Client: client, Provider: roleProvider, Model: roleModel, MaxConcurrency: count}}}
 		}
 		cfg.Workflows = map[string]core.WorkflowConfig{
-			"plan-first":       {Profiles: map[string]string{"orchestrator": "orchestrator", "planning": "thinker", "implementation": "worker"}, MaxParallelTasks: 3, Capabilities: []string{"tasks", "phases", "tasks.role.planner", "tasks.role.implementer", "planner_dependency"}},
-			"issue-resolution": {Profiles: map[string]string{"orchestrator": "orchestrator", "planning": "thinker", "implementation": "worker", "integration": "worker", "live-testing": "worker"}, MaxParallelTasks: 3, ChangeRequests: "integrated", Capabilities: []string{"tasks", "phases", "tasks.role.planner", "tasks.role.implementer", "tasks.role.integrator", "tasks.role.tester", "planner_dependency", "integration", "live_test", "change_request", "release"}},
+			"plan-first": {Profiles: map[string]string{"orchestrator": "orchestrator", "planning": "thinker", "implementation": "worker", "integration": "worker"}, MaxParallelTasks: 3, Capabilities: []string{"tasks", "phases", "tasks.role.planner", "tasks.role.implementer", "tasks.role.integrator", "planner_dependency", "integration", "landing"}},
 		}
 	}
 	forge, err := p.yesNo("Configure the optional GitHub forge suggestion", false)
