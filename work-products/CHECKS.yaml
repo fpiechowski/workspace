@@ -12,4 +12,4 @@
   evidence: CHECKS.log
 - command: bash -c '! grep -rn issue-resolution internal --include="*_test.go"'
   exit_code: 0
-  evidence: check_01M3KKS6WE2KRN7F9BKQS69BJ6.log
+  evidence: CHECKS.log
