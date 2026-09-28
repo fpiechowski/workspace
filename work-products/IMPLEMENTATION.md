@@ -1,117 +1,133 @@
-# Implementation report — task_01M3KJ6ZS58GEEJX4E4TSS17MR
+# IMPLEMENTATION — single-client auto-jump for the TUI navigation flow
 
-## Commit
+Task: `task_01M3MN4RE4J7NKEJCD45MTSH7S`
+Plan: `art_01M3MMYVEGXFT2WCVEFFXECK1X` (task `task_01M3MKVG69T3XM0DPREVQ1BXPP`)
+Base: `aa72616494937c5c977187ade2fd342d230fac93`
 
-- `ee255be` — `docs: document plan-first v2 integration, landing and legacy migration`
+## Commits
 
-## Changes
+| Commit | Message |
+|---|---|
+| `f6e666e63bad2dc1d7311f0600a551e37a7dd796` | `feat(tui): jump immediately with the only attached tmux client` |
+| `d1bd846e550bf9e437190592206fd7e8319aa66b` | `docs: describe single-client auto-jump navigation` |
 
-### README.md
+Both commits are on the worktree branch
+`workspace/ws_01M3MJZRZ42N2F623G70K60M05/impl-single-client-jump`.
 
-- Intro describes `plan-first` as planning → implementation → mandatory integration →
-  user-approved local landing.
-- `project init` wizard description now lists only the `plan-first` v2 mapping and states
-  that the removed `issue-resolution` workflow is never generated.
-- Configuration example: `plan-first` gains `integration: worker` and the v2 capabilities
-  (`tasks.role.integrator`, `integration`, `landing`); the `issue-resolution` entry is
-  removed and replaced by a mandatory-capability / removal note.
-- Getting Started: remove `--workflow plan-first` from examples to show the new default;
-  `issue dispatch` without `--workflow`; creation modes updated (`needs_workflow` is legacy).
-- Tasks and Results: replaces the extended-flow paragraph with the plan-first integration
-  prepare/integrate/land/complete contract, conflict handling, and a worked CLI example.
-- Archive and TUI wording now use "workflow that declares a release gate" and accept a
-  completed plan-first workspace.
-- New paragraph documents the automatic `issue-resolution` → `plan-first` migration on load.
+## What changed
 
-### PRODUCT.md
+### `internal/tui/navigation_flow.go`
 
-- Creation modes reduced to named workflow (default `plan-first`) and `--no-workflow`;
-  legacy `needs_workflow` is a resolvable state, not a new-creation mode.
-- Product promise / decision principle now describe the user-approved integration landing
-  plus completion instead of release-only closure.
-- Scope and workflow-snapshot paragraph describe plan-first v2 and the removed workflow,
-  the ignored legacy config entry, custom extended workflows, and the archive rule.
+- **T1**: In `handleNavigationClients`, after the zero-client check (l.126) and the
+  generation/target/ref guard (l.133) and before `orderedClients`, a new
+  `len(msg.clients) == 1` branch calls
+  `jumpClientCommand(msg.target, msg.ref, msg.clients[0], msg.afterReconcile,
+  msg.generation, msg.sequence, true, true)`. It does not set `m.form`, `m.formMode`,
+  `m.formClient` or `m.navigationClients`, so no picker opens.
+- **T1**: Inside the existing staleness guard only, when `len(msg.clients) == 1` the
+  notice becomes “The selected workspace target changed before the jump started. Press g
+  to try again.” The multi-client wording is unchanged. No second guard was added.
+- **T2**: `jumpClientCommand` gained a trailing `automatic bool`. Both existing callers
+  (reconcile retry `navigation_flow.go:99`, picker accept `:201`) pass `false`; the new
+  single-client branch passes `true`. When automatic, the in-flight notice is
+  “Jumping the only attached tmux client to the verified workspace pane…” and the
+  `navigation_target_changed` message is “the selected tmux target changed during client
+  discovery; press g to try again”; otherwise both texts are unchanged. Recheck, `Jump`,
+  `SaveLastUsed` and message shapes are untouched.
+- **T3**: `handleNavigationTarget` loads the last-used preference only when
+  `len(clients) > 1` (was `> 0`). The `SaveLastUsed` call on a successful jump is
+  unchanged, so the single client is still recorded and its save failure is still
+  reported by `handleNavigationResult`.
 
-### ARCHITECTURE.md
+### `internal/tui/navigation_flow_test.go`
 
-- Workflow section rewritten to the plan-first v2 phase diagram, landing semantics, and
-  the capability snapshot rules (v2 union, v1 frozen contract, `landing` validation).
-- Manual Mode creation forms updated; Workspace domain row mentions landing/completion.
-- Persisted State/Templates paragraph documents the in-place auto-migration.
+- Extracted `discoverNavigationClients` (resolve → `handleNavigationTarget` → discovery
+  message) and made `openNavigationPicker` reuse it, still asserting the picker opened.
+- Renamed `TestJumpAlwaysShowsClientPickerAndJumpsChosenClient` to
+  `TestMultipleClientsShowPickerAndJumpChosenClient`, dropped the one-client subtest, and
+  test both rows (index 0 and 1) with `flowClients()`; it asserts `prefs.loads == 1`.
+- `TestJumpCancellationAndFailureNeverSavePreference` and
+  `TestPreferenceWriteFailureReportsSuccessfulJumpSeparately` now use `flowClients()`.
+- Added `TestSingleClientJumpsWithoutPicker`, `TestSingleClientTargetChangedDuringDiscovery`,
+  `TestSingleClientGoneOnAutomaticPath`, `TestSingleClientPreferenceSaveFailureReportedSeparately`,
+  `TestSingleClientStaleDiscoveryDoesNotJump` (stale sequence/generation/changed target) and
+  `TestEscDuringAutomaticJumpDropsResult`.
+- Multi-client, zero-client, target-change-while-picker-open, detached-client,
+  stale-response and reconcile-retry tests are unchanged and passing.
 
-### docs/operations.md
+### Contract docs (T5)
 
-- `integration land` added to the receipted-mutation list.
-- New "Integration landing" section documents the pending/landed receipt, the
-  `merge --ff-only` / CAS `update-ref` effect, `target_moved` / `target_checkout_dirty`
-  refusals, idempotent retry, local-only behavior, and the post-landing guards.
-- TUI operations paragraph covers plan-first `complete` and the release-gate archive rule.
+- `README.md` (~446–449 and ~478–482, plus the parallel Sessions line ~466),
+  `PRODUCT.md` (~225–229 and ~254), `docs/runtime.md` (~14–17), `docs/tui.md`
+  (~65–68, the `g` key table row, the Terminal and Managed Pane paragraph ~254–257 and
+  the target-recheck sentence ~269–270).
+- No stale “always / even for one client” wording remains. Verified with
+  `grep -rn "even for one client\|always opens\|always presents\|including for one client\|even when only one client" --include="*.md" .` → no matches.
 
-### docs/revisions.md
+## Decisions and deviations from the plan
 
-- Documents that landed work blocks retry and input/workflow revision until `reopen`.
-- Documents the auto-migration and its history manifest for a non-terminal workspace.
-
-### docs/runtime.md
-
-- Completion/archive wording covers landed plan-first workspaces and the release-gate rule.
-
-### docs/tui.md
-
-- Create form, complete actions, and the action list reflect plan-first selection,
-  `Complete this workflow workspace`, and the release-gate archive rule.
-
-### docs/trackers.md
-
-- Dispatch example drops the explicit `--workflow plan-first` and notes the default.
-
-### internal/core/skill/workspace/SKILL.md and .agents/skills/workspace/SKILL.md
-
-- Default-workflow guidance, the plan-first integration/land/complete flow, and the
-  read-only legacy migration note. The two copies are now byte-identical (the `.agents`
-  copy was a stale installed copy).
-
-### TODO.md
-
-- Records the deferred follow-ups: stacked strategy, CR-based landing, project-level
-  integration branch, and optional removal of the unused extended machine.
-
-### internal/cli/help.go, internal/cli/workflow.go
-
-- `workflow advance` help names the integration stop and uses a real phase example;
-  the `integration` group `Short` mentions landing.
+- **Extended doc scope (deviation)**: the plan’s T5 list did not name `ARCHITECTURE.md`
+  or `DESIGN.md`, but both contained the same stale contract
+  (`ARCHITECTURE.md:316` “always presents the client picker, including for a single
+  client”; `DESIGN.md:165-166` “always opens the attached-client picker … even when only
+  one client is attached”). The acceptance criterion requires that no stale
+  “always/even for one client” wording remains (grep verified) and `AGENTS.md` requires
+  the architecture/design contract to describe current behavior, so both were updated.
+- **`docs/tui.md:269-270`**: changed “changed while the picker was open” to “changed
+  before the jump started”, because the single-client path has no picker.
+- **T3 fallback not used**: the plan offered keeping the load at l.110 as a fallback; the
+  chosen behavior is `len(clients) > 1`, pinned by `TestSingleClientJumpsWithoutPicker`
+  (`prefs.loads == 0`) and the multi-client test (`prefs.loads == 1`).
+- Zero-client notice, multi-client picker behavior (ordering, last-used marker,
+  read-error notice, Esc/Ctrl+C cancel), reconcile retry, and auto-select among several
+  clients are unchanged/out of scope.
 
 ## Acceptance criteria
 
-- `grep -rn issue-resolution` over README/PRODUCT/ARCHITECTURE/docs/skills returns only
-  removal/migration notes (negative check exits 0); documentation links resolve
-  (29 links checked, 0 broken).
-- Help text and docs agree with a freshly built binary's `--help`: every documented flag
-  for `integration prepare`, `integration land`, `complete`, and `create` is present.
-- The two skill copies are byte-identical.
-- TODO.md records the four deferred follow-ups.
-- `go vet ./...` and `go test ./...` pass; `gofmt -l ./cmd ./internal` is empty.
+| Criterion | Status | Evidence |
+|---|---|---|
+| T1 single-client branch, no form | Met | `navigation_flow.go:143-145`; `TestSingleClientJumpsWithoutPicker` asserts `form==nil`, `formMode==""`, `navigationClients==nil` |
+| T1 single-client staleness notice, no second guard | Met | `navigation_flow.go:133-142`; `TestSingleClientStaleDiscoveryDoesNotJump/changed target` |
+| T2 `automatic bool`, texts, other callers false | Met | `navigation_flow.go:99,201,204,213-217,226-231`; `TestSingleClientTargetChangedDuringDiscovery` |
+| T3 load only when `>1`, save unchanged | Met | `navigation_flow.go:111`; `TestSingleClientJumpsWithoutPicker` (`loads==0`, save on success) and multi-client test (`loads==1`) |
+| T4 new tests + helper + renamed/updated existing tests | Met | `navigation_flow_test.go` |
+| T5 docs, no stale wording | Met | docs diff; grep clean |
+| Out of scope unchanged | Met | existing zero/multi/stale/reconcile/detached tests pass |
+| Checks pass and evidence captured | Met (see below) | check receipts |
+| Committed with clear messages | Met | `f6e666e`, `d1bd846` |
 
-## Checks
+## Check results
 
-| Command | Exit | Evidence |
-|---|---:|---|
-| `gofmt -l ./cmd ./internal` | 0 | `evidence-gofmt.txt` |
-| `go vet ./...` | 0 | `evidence-vet.txt` |
-| `env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 570s` | 0 | `evidence-go-test-all.txt` |
-| `python3 work-products/check-doc-links.py` | 0 | `evidence-doc-links.txt` |
-| `diff internal/core/skill/workspace/SKILL.md .agents/skills/workspace/SKILL.md` | 0 | `evidence-skill-identical.txt` |
-| `grep -rn issue-resolution ... \| grep -viE 'removed\|migrat\|legacy'` | 0 | `evidence-grep-issue-resolution.txt` |
-| `CGO_ENABLED=0 go build ... && ./workspace integration land --help && ./workspace complete --help` | 0 | `evidence-build-help.txt` |
+Run via `workspace check run` (receipts under `work-products/checks/`):
 
-## Risks and deviations
+| Command | Exit | Receipt |
+|---|---|---|
+| `gofmt -l internal/tui` (empty) | 0 | `check_01M3MNFZ50HDM3MP552AXF456K` |
+| `go test ./internal/tui -run 'Navigation\|Jump\|Client\|Preference\|Reconcile\|Stale' -v` | 0 | `check_01M3MNG1HM1BD0BKWHJHXWM0H8` |
+| `go vet ./...` | 0 | `check_01M3MNG4S33XD94MYZCY2NAHKS` |
+| `WORKSPACE_TMUX_TEST=1 go test -race ./internal/tui -timeout 90s` | 0 | `check_01M3MNGE76V24JG1KQ1BAW9PQB` |
+| `go test ./...` | 1 (pre-existing) | `check_01M3MNGM4N1G072Z0JG568KHES` |
+| `WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 90s` | 1 (pre-existing) | `check_01M3MNGYY6FAS3APQ3NVD11R1M` |
 
-- The documentation describes behavior implemented by T1–T4; it does not change any Go
-  behavior beyond two help-string corrections.
-- `needs_workflow` is no longer produced by a new `create`, so it is described as a legacy
-  state resolved with `workspace workflow select` rather than a creation mode.
-- The TUI create form still renders a `Choose later` option that core now resolves to
-  `plan-first`; the docs describe the effective mode choice (plan-first preselected or
-  manual). Adjusting the form itself is outside this task's scope.
-- No tmux race suite is required for a documentation change; the full `go test ./...`
-  package set was run instead.
+Raw evidence copies: `work-products/evidence/gofmt.txt`, `tui-focused.txt`,
+`go-vet.txt`, `go-test-all.txt`, `tmux-race.txt`.
+
+**Pre-existing failures (not caused by this change).** `go test ./...` and the full race
+run fail in `internal/cli`, `internal/core` and `internal/terminal` in exactly the same
+way on the base commit `aa72616` with this change stashed:
+`TestCompleteAndArchiveManualWorkspace`, `TestReopenJSONAndHelpContract`,
+`TestIntegrationLandJSON`, the `internal/core` harness
+(`open -test.timeout=...: no such file or directory`), and
+`TestNavigatorRealPTYAndClientSelection` (`pseudo-TTY client did not attach`). The
+changed package `internal/tui` passes the full suite both normally and under
+`-race` with `WORKSPACE_TMUX_TEST=1`.
+
+## Risks
+
+- **Surprise switch**: a user expecting a confirmation step now gets an immediate
+  single-client switch. This is the intended issue behavior; it is mitigated by the
+  explicit in-flight/success notices and the doc update.
+- **TOCTOU**: a second client could attach between `ListClients` and `Jump`; the verified
+  jump still moves only the discovered client, the same guarantee the picker gave.
+- **Text drift**: tests assert substrings (“only attached”, “press g”, “Jump completed”);
+  wording changes must update the tests together.
