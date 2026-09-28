@@ -355,6 +355,11 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		}
 		route, decision, err := s.chooseRoute(cfg, profile)
 		if err != nil {
+			// A resume must never drop a native client thread to dodge a
+			// usage limit; it fails with wait-or-new-session guidance instead.
+			if resumePrior != nil {
+				return resumeRouteLimitedError(profile, err)
+			}
 			return err
 		}
 		client, ok := cfg.Clients[route.Client]

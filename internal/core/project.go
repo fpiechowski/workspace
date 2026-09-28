@@ -31,6 +31,10 @@ type Service struct {
 	Actor                 Actor
 	Forge                 Forge
 	openCodeSessionLister openCodeSessionLister
+	// recoveryLimitSkip defers an orchestrator recovery that failed because
+	// every route is usage-limited until the reported reset. It is in-memory
+	// per workspace; the durable ledger remains the source of truth.
+	recoveryLimitSkip map[string]time.Time
 }
 
 func git(ctx context.Context, dir string, args ...string) (string, error) {

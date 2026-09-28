@@ -162,6 +162,7 @@ func (m *Model) detailContent() string {
 		doc.field("Current run", session.CurrentRunID)
 		doc.field("Last run", session.LastRunID)
 		doc.field("Native thread", session.ClientThreadID)
+		m.renderUsageLimit(doc, session.Route)
 		if relation, ok := sessionRelation(m.snapshot.Relations.Sessions, session.ID); ok {
 			doc.section("Relations")
 			doc.field("Run IDs", strings.Join(relation.RunIDs, ", "))
@@ -189,6 +190,7 @@ func (m *Model) detailContent() string {
 		doc.field("Current", fmt.Sprint(current))
 		doc.field("Provider / model", run.Route.Provider+" / "+run.Route.Model)
 		doc.field("Client", run.Route.Client)
+		m.renderUsageLimit(doc, run.Route)
 		doc.field("Pane / window", run.PaneID+" / "+run.WindowID)
 		if run.Error != "" {
 			doc.section("Error")
@@ -717,6 +719,55 @@ func (m *Model) quickDetails(kind, id string) []string {
 		}
 	}
 	return nil
+}
+
+// routeLimitFor returns the strongest active usage limit matching the route:
+// a hard limit if present, otherwise the pressure record with the latest end.
+func (m *Model) routeLimitFor(route core.Route) (core.RouteLimit, bool) {
+	now := time.Now()
+	var hard, pressure *core.RouteLimit
+	for i := range m.snapshot.Limits {
+		limit := m.snapshot.Limits[i]
+		if !limit.Active(now) || !limit.Matches(route) {
+			continue
+		}
+		if limit.Kind == "usage_pressure" {
+			if pressure == nil || limit.Until.After(pressure.Until) {
+				pressure = &m.snapshot.Limits[i]
+			}
+		} else if hard == nil || limit.Until.After(hard.Until) {
+			hard = &m.snapshot.Limits[i]
+		}
+	}
+	if hard != nil {
+		return *hard, true
+	}
+	if pressure != nil {
+		return *pressure, true
+	}
+	return core.RouteLimit{}, false
+}
+
+// renderUsageLimit adds a read-only usage-limit section when the route matches
+// an active ledger record.
+func (m *Model) renderUsageLimit(doc *detailDoc, route core.Route) {
+	limit, ok := m.routeLimitFor(route)
+	if !ok {
+		return
+	}
+	doc.section("Usage limit")
+	doc.field("Kind", limit.Kind)
+	doc.field("Scope", limit.Scope)
+	doc.field("Until", formatTime(limit.Until))
+	if limit.ResetAt != nil {
+		doc.field("Reset", formatTime(*limit.ResetAt))
+	}
+	if limit.UsedPercent != nil {
+		doc.field("Used percent", fmt.Sprintf("%d%%", *limit.UsedPercent))
+	}
+	if limit.Message != "" {
+		doc.body(limit.Message)
+	}
 }
 
 func safeContent(lines []string) string {

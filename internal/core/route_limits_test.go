@@ -113,7 +113,7 @@ func TestRouteLimitMatchingByScope(t *testing.T) {
 			t.Fatal(err)
 		}
 		for i, r := range []Route{a, sameProvider, otherProvider, otherClient} {
-			if got := rec.matches(r); got != tc.want[i] {
+			if got := rec.Matches(r); got != tc.want[i] {
 				t.Errorf("scope %s route %d: got %v want %v", tc.scope, i, got, tc.want[i])
 			}
 		}

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os/exec"
@@ -233,6 +234,41 @@ func selectedRoute(decision RoutingDecision) (Route, error) {
 		return Route{}, &Error{Code: "route_limited", Message: fmt.Sprintf("all eligible routes in profile %q are usage-limited; earliest reset %s; use workspace profile limit list", decision.Profile, reset), Options: []string{"retry_after=" + reset}}
 	}
 	return Route{}, fail("no_route", "no eligible route in profile %q; use workspace profile explain", decision.Profile)
+}
+
+// routeLimitedReset extracts the reset time carried by a route_limited error.
+func routeLimitedReset(err error) (time.Time, bool) {
+	var ce *Error
+	if !errors.As(err, &ce) || ce.Code != "route_limited" {
+		return time.Time{}, false
+	}
+	for _, option := range ce.Options {
+		value, ok := strings.CutPrefix(option, "retry_after=")
+		if !ok {
+			continue
+		}
+		if reset, parseErr := time.Parse(time.RFC3339, value); parseErr == nil {
+			return reset, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// resumeRouteLimitedError rewrites the generic route_limited selection error
+// for a resume, naming the reset time and the wait-or-new-session options.
+// The resume fails before a successor Run exists, so a native client thread is
+// never silently dropped to switch routes.
+func resumeRouteLimitedError(profile string, err error) error {
+	reset, ok := routeLimitedReset(err)
+	if !ok {
+		return err
+	}
+	formatted := reset.UTC().Format(time.RFC3339)
+	return &Error{
+		Code:    "route_limited",
+		Message: fmt.Sprintf("cannot resume profile %q: its routes are usage-limited until %s; wait until the reset or start a new logical session on another route", profile, formatted),
+		Options: []string{"retry_after=" + formatted, "wait_for_reset", "new_session"},
+	}
 }
 
 func (s *Service) ExplainProfile(ctx context.Context, profile string) (RoutingDecision, error) {

@@ -69,6 +69,18 @@ completed workspace is also not restarted automatically: an explicit `workspace 
 or `agent resume orchestrator` creates a conversation-only Run, while an archived
 workspace is terminal.
 
+Usage limits are durable project records (see the route-limit ledger in
+[ARCHITECTURE.md](../ARCHITECTURE.md)), not supervisor state. When an interrupted
+orchestrator must be resumed but every eligible route is usage-limited, recovery fails
+with `route_limited` carrying `retry_after`. Instead of failing the tick repeatedly, the
+supervisor defers recovery until that reset in memory per workspace, prints the reason
+once, and resumes recovery after the reset or after the record is cleared; the durable
+ledger means a restarted supervisor re-reads the same observation. A resume on a limited
+route still fails `route_limited`: a native-thread resume never switches route or drops
+the client thread, and the error tells the caller to wait for the reset or start a new
+logical session on another route. Other `ResumeAgent` errors keep their previous
+behavior.
+
 `pause` stops new delegation. `pause --interrupt` also stops active panes, preserving
 their worktrees. `resume` permits delegation again; `agent resume NAME` starts the
 chosen persona using its prior assignment. Generic clients receive a fresh bootstrap;

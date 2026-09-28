@@ -63,7 +63,10 @@ func (l RouteLimit) Active(now time.Time) bool {
 	return l.ClearedAt == nil && now.Before(l.Until)
 }
 
-func (l RouteLimit) matches(r Route) bool {
+// Matches reports whether the record applies to a route: a client-scoped
+// record matches every route of the account, a provider-scoped record matches
+// the client and provider, and a route-scoped record also needs the model.
+func (l RouteLimit) Matches(r Route) bool {
 	if l.Client != r.Client {
 		return false
 	}
@@ -323,7 +326,7 @@ func (l routeLimitLedger) match(r Route, now time.Time) routeLimitMatch {
 	sort.Strings(keys)
 	for _, key := range keys {
 		rec := l.Limits[key]
-		if !rec.Active(now) || !rec.matches(r) {
+		if !rec.Active(now) || !rec.Matches(r) {
 			continue
 		}
 		if rec.hard() {
@@ -558,7 +561,7 @@ func (s *Service) ClearRouteLimit(ctx context.Context, selector string, opt Rout
 		cleared := []RouteLimit{}
 		for _, k := range sortedRouteLimitKeys(*l) {
 			rec := l.Limits[k]
-			if !rec.Active(now) || !rec.matches(r) || (opt.Scope != "" && rec.Scope != opt.Scope) {
+			if !rec.Active(now) || !rec.Matches(r) || (opt.Scope != "" && rec.Scope != opt.Scope) {
 				continue
 			}
 			at := now

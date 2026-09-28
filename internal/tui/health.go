@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -61,6 +62,48 @@ func (h serviceHealth) indicator() healthIndicator {
 	default:
 		return healthIndicator{label: "services idle", tone: healthNeutral}
 	}
+}
+
+// routeLimitHealth is derived from the active route-limit records carried by
+// the workspace snapshot. Hard limits make their routes ineligible; usage
+// pressure only ranks them after unpressed routes.
+type routeLimitHealth struct {
+	hard     int
+	pressure int
+}
+
+func aggregateRouteLimitHealth(limits []core.RouteLimit, now time.Time) routeLimitHealth {
+	var out routeLimitHealth
+	for _, limit := range limits {
+		if !limit.Active(now) {
+			continue
+		}
+		if limit.Kind == "usage_pressure" {
+			out.pressure++
+		} else {
+			out.hard++
+		}
+	}
+	return out
+}
+
+func (h routeLimitHealth) indicator() (healthIndicator, bool) {
+	switch {
+	case h.hard > 0:
+		label := fmt.Sprintf("routes %d limited", h.hard)
+		if h.pressure > 0 {
+			label += fmt.Sprintf(" · %d pressured", h.pressure)
+		}
+		return healthIndicator{label: label, tone: healthDanger}, true
+	case h.pressure > 0:
+		return healthIndicator{label: fmt.Sprintf("routes %d pressured", h.pressure), tone: healthNeutral}, true
+	default:
+		return healthIndicator{}, false
+	}
+}
+
+func (m *Model) routeLimitIndicator() (healthIndicator, bool) {
+	return aggregateRouteLimitHealth(m.snapshot.Limits, time.Now()).indicator()
 }
 
 func supervisorKnown(observation core.SupervisorObservation) bool {
@@ -132,6 +175,9 @@ func (m *Model) fullHeaderHealth() string {
 	}
 	services := m.palette.renderHealthIndicator(m.serviceIndicator(), false)
 	health += " " + services
+	if limits, ok := m.routeLimitIndicator(); ok {
+		health += " " + m.palette.renderHealthIndicator(limits, false)
+	}
 	return m.withHeaderRefreshIndicator(health)
 }
 
@@ -144,6 +190,9 @@ func (m *Model) compactHeaderHealth() string {
 	// Keep both semantic markers in the compact header. The service label/count
 	// moves to the reserved status row when the full health segment overflows.
 	health += " " + m.palette.renderHealthIndicator(m.serviceIndicator(), true)
+	if limits, ok := m.routeLimitIndicator(); ok {
+		health += " " + m.palette.renderHealthIndicator(limits, true)
+	}
 	return m.withHeaderRefreshIndicator(health)
 }
 
@@ -170,5 +219,9 @@ func (m *Model) headerServiceOverflow() string {
 	if ansi.StringWidth(fullIdentity)+1+ansi.StringWidth(fullHealth) <= m.width {
 		return ""
 	}
-	return sanitizeLine(m.serviceIndicator().label)
+	parts := []string{sanitizeLine(m.serviceIndicator().label)}
+	if limits, ok := m.routeLimitIndicator(); ok {
+		parts = append(parts, sanitizeLine(limits.label))
+	}
+	return strings.Join(parts, " · ")
 }
