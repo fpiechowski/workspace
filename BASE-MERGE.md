@@ -20,6 +20,10 @@ accepted branch as an ancestor.
   `work-products/t0-tests/` and `work-products/t1-core/`, respectively. These
   are worker artifacts only; no source file was selected or discarded for this
   conflict.
+- The accepted branches also contain `work-products/CHECKS.yaml` and
+  `work-products/checks.yaml`. This checkout is case-insensitive, so the
+  lower-case duplicate was removed after the merge to avoid one physical file
+  representing two tracked paths; the upper-case manifest remains.
 
 No other merge conflicts occurred. The T1 evidence files and the T0/T1
 check-manifest variants were retained.
