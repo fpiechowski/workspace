@@ -1,0 +1,13 @@
+gofmt -l ./cmd ./internal
+exit_code=0
+
+go vet ./...
+exit_code=0
+
+env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test -count=1 ./...
+exit_code=0
+
+env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race -count=1 ./internal/core -run 'Workflow|Integration' -timeout 90s
+exit_code=0
+
+Note: the full WORKSPACE_TMUX_TEST=1 go test -race ./... command is not green on this machine because of the pre-existing internal/terminal TestNavigatorRealPTYAndClientSelection pseudo-TTY failure, reproduced at the frozen base 3708751.
