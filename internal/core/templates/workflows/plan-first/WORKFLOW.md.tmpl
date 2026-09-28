@@ -1,8 +1,8 @@
-# Plan-first example workflow, version 1
+# Plan-first workflow, version 2
 
-Capabilities: `planner` and `implementer` task roles, planning/review/implementation
-phases, and completion. This workflow has no integration, change-request, live-test,
-or release gate. The CLI rejects those roles and operations for a plan-first workspace.
+Capabilities: `planner`, `implementer`, and `integrator` task roles; planning,
+review, implementation, and integration phases; and a user-approved local landing
+gate. Change requests, live testing, and release are not part of this workflow.
 
 This is a deliberately small workflow for turning a task description into a plan
 and then implementing that plan. Read WORKSPACE.md before every decision and use
@@ -27,8 +27,20 @@ writers in the same worktree. Advance to implementing after the task graph is re
 Start ready implementation Tasks in their worktrees. Workers commit their changes,
 write IMPLEMENTATION.md and real check evidence, then submit a handoff. Review and
 accept every successful implementation handoff. When all implementation tasks are
-accepted, advance once more; the workflow becomes completed. There is no integration,
-change-request, live-testing or release gate in this example workflow.
+accepted, advance to integration.
+
+## 4. Integrate and land
+
+Prepare an integration worktree with `workspace integration prepare`. Create one
+integrator Task that merges accepted implementation heads with `git merge --no-ff`,
+resolves textual conflicts, runs project checks, records every resolution in
+INTEGRATION.md, commits, and submits a handoff. If a conflict requires a product or
+implementation change, ask the orchestrator a question and stop instead of guessing.
+
+After the integrator handoff is accepted, review the result and run
+`workspace integration land --expected-revision N --user-confirmed`. Landing is a
+local fast-forward into the target branch and never pushes to a remote. Finally run
+`workspace complete --expected-revision N --user-confirmed`.
 
 On resume, inspect existing tasks, logical sessions, run history, worktrees, handoffs and artifacts before
 creating anything. Use stable operation keys and retry only after preserving partial

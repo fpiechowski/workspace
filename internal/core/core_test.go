@@ -218,19 +218,15 @@ func TestCreateIdempotencyAndWorkflowSelection(t *testing.T) {
 	if a.Workspace.ID != b.Workspace.ID {
 		t.Fatal("duplicate workspace")
 	}
-	if a.Workspace.Workflow != nil || a.Workspace.Status != "needs_workflow" {
-		t.Fatal("implicit workflow selection")
+	if a.Workspace.Workflow == nil || a.Workspace.Workflow.ID != "plan-first" || a.Workspace.Status != "active" {
+		t.Fatal("default workflow was not selected")
 	}
 	opt.Input = "changed"
 	_, err = s.Create(ctx, opt)
 	expectCode(t, err, "operation_conflict")
 	c, err := s.SelectWorkflow(ctx, a.Workspace.ID, "extended")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c.Workspace.Workflow == nil || c.Workspace.Status != "active" {
-		t.Fatal("workflow not selected")
-	}
+	expectCode(t, err, "workflow_conflict")
+	_ = c
 	_, err = s.Create(ctx, CreateOptions{Source: "https://tracker.example/1"})
 	expectCode(t, err, "tracker_unavailable")
 }
@@ -260,8 +256,8 @@ func TestCreateExplicitManualModeSnapshotsNeutralPrompts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pending.Workspace.Status != "needs_workflow" || pending.Workspace.Workflow != nil || pending.Workspace.Manual() {
-		t.Fatalf("omitted workflow changed meaning: %+v", pending.Workspace)
+	if pending.Workspace.Status != "active" || pending.Workspace.Workflow == nil || pending.Workspace.Workflow.ID != "plan-first" {
+		t.Fatalf("default workflow was not selected: %+v", pending.Workspace)
 	}
 
 	replay, err := s.Create(ctx, CreateOptions{Title: "Manual", Input: "Coordinate manually", NoWorkflow: true, OperationKey: "manual:1"})
@@ -285,7 +281,7 @@ func TestCreateExplicitManualModeSnapshotsNeutralPrompts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(pendingNote), "# Select a workflow") {
+	if !strings.HasPrefix(string(pendingNote), "# Plan-first workflow") {
 		t.Fatalf("pending WORKFLOW.md changed: %s", pendingNote)
 	}
 

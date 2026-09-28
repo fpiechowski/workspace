@@ -105,7 +105,7 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace doctor --json",
 	),
 	"workspace create": h(
-		"Create a workspace from an issue URL, a saved input file or one inline intent. One input source is required; the input and its source are snapshotted before orchestration begins. Omit --workflow to choose a workflow later, or pass --no-workflow for explicit manual orchestration.",
+		"Create a workspace from an issue URL, a saved input file or one inline intent. One input source is required; the input and its source are snapshotted before orchestration begins. Omit --workflow to use plan-first, or pass --no-workflow for explicit manual orchestration.",
 		"workspace create --issue https://github.com/OWNER/REPO/issues/142 --workflow plan-first\nworkspace create \"Improve workspace creation\" --no-workflow",
 		optionalArgument("intent", "Issue or task description supplied inline; do not combine it with --input-file."),
 	),
@@ -202,7 +202,7 @@ var commandHelpSpecs = map[string]commandHelp{
 	"workspace workflow select": h(
 		"Select a workflow for a workspace that is waiting for a workflow decision. The selection is recorded with revision and operation metadata.",
 		"workspace workflow select plan-first",
-		requiredArgument("name", "Configured workflow name, such as plan-first or issue-resolution."),
+		requiredArgument("name", "Configured workflow name, such as plan-first."),
 	),
 	"workspace workflow advance": h(
 		"Validate the current workflow results and advance exactly one phase. --to can protect against advancing from an unexpected phase.",
@@ -604,7 +604,7 @@ var flagHelpSpecs = map[string]map[string]string{
 		"title":       "Workspace title shown in selectors and compact output.",
 		"input-file":  "File containing the saved issue or task description.",
 		"issue":       "Issue URL; fetch it from the configured tracker unless intent or --input-file is supplied.",
-		"workflow":    "Configured workflow name; omit it to choose a workflow later.",
+		"workflow":    "Configured workflow name; omit it to use plan-first.",
 		"no-workflow": "Create an active workspace with no workflow for manual orchestration; cannot be combined with --workflow.",
 		"base":        "Base Git revision to freeze for the workspace.",
 		"from-issue":  "Existing durable Issue ID; mutually exclusive with intent, --input-file and --issue.",

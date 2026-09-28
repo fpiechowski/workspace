@@ -1,48 +1,35 @@
-# Implementation report
+# T3 implementation report
 
 ## Commit
 
-- `e103113` — `merge: prepare combined T3 implementation base`
-- `22ce331` — `chore: resolve case-insensitive check manifest collision`
-- `e223dd5` — `docs: record combined T3 base implementation`
-- `4a2d32b` — `chore: add base merge check receipts`
+The implementation commit is recorded below after verification.
 
 ## Changes
 
-- Merged accepted T0 (`ba86a61609851a5279f97322ef1a2849d26cb486`) and T1
-  (`1d168c49bd2fc8369fd2f22409263b548285331a`) into the T3 worktree.
-- Resolved `internal/core/routing_test.go` by retaining T0's `extended`
-  workflow fixture usage; T1's integrator fallback test remains in
-  `internal/core/plan_first_v2_test.go`.
-- Preserved both prior worker reports under `work-products/t0-tests/` and
-  `work-products/t1-core/`.
-- Added `BASE-MERGE.md` with conflict decisions and command evidence.
+- Removed the embedded `issue-resolution` workflow templates and removed its listing/selection special cases.
+- Made `plan-first` the effective default for every create path unless `--no-workflow` is explicit. The effective default is applied after replay lookup, so older operation payloads remain replayable.
+- Updated explicit legacy workflow errors with the removal hint and updated project-init workflow configuration to plan-first v2, including the integration profile and landing capabilities.
+- Added stock-template refresh for known plan-first template digests, `stale_templates` reporting for customized files, embedded prompt fallback, and the plan-first v2 integration/orchestrator templates.
+- Updated CLI flag/help text and preselected plan-first in the TUI create form.
+- Updated tests whose prior contract expected omitted workflows to remain pending; explicit manual tests now use `--no-workflow`.
 
 ## Acceptance criteria
 
-- Both accepted source commits are ancestors of the resulting HEAD.
-- Routing tests retain the T0 custom `extended` workflow coverage and T1's
-  fallback assertion is retained in the focused v2 test file.
-- No product file was discarded during conflict resolution.
-- The worktree is clean after this report is committed.
+- Workflow listing no longer exposes `issue-resolution`, including when old on-disk templates or config entries exist; explicit use returns `unknown_workflow` with the removal hint.
+- Omitted workflow creates produce active plan-first workspaces, while `--no-workflow` produces manual workspaces; replay comparison uses the pre-upgrade request payload.
+- Project initialization refreshes known stock templates, preserves customized templates while reporting them, and snapshots missing plan-first prompts from the embedded filesystem.
+- Embedded legacy templates are deleted and plan-first v2 documentation includes integration preparation, conflict handling, user-approved landing, and completion.
 
 ## Checks
 
-- `git merge-base --is-ancestor ba86a61609851a5279f97322ef1a2849d26cb486 HEAD` — exit 0.
-- `git merge-base --is-ancestor 1d168c49bd2fc8369fd2f22409263b548285331a HEAD` — exit 0.
 - `gofmt -l ./cmd ./internal` — exit 0, empty output.
 - `go vet ./...` — exit 0.
-- `env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test -count=1 ./internal/core -timeout 300s` — exit 0.
-- `git diff --check` — exit 0.
+- `env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 180s` — exit 0.
+- `go build -o /tmp/workspace-t3-removal ./cmd/workspace && python3 scripts/check-install.py /tmp/workspace-t3-removal` — exit 0.
 
-Evidence is in `work-products/evidence-merge-base.txt`,
-`evidence-gofmt-base.txt`, `evidence-vet-base.txt`, and
-`evidence-core-test-base.txt`.
+The worker identity variables were unset for the full Go test command because existing CLI tests intentionally reject inherited worker identity in synthetic actor scenarios.
 
-## Risks
+## Risks and deviations
 
-The repository contains both `work-products/CHECKS.yaml` and
-`work-products/checks.yaml` in the accepted branch histories. The worktree is
-on a case-insensitive filesystem, so the lower-case duplicate was removed from
-the merge result to keep the checkout clean; the accepted report copies and
-all source changes remain intact.
+- `stale_templates` is a result-only field (`yaml:"-"`) and is not written into the persisted project configuration.
+- The extended workflow capability fallback remains in capability snapshots for compatibility with legacy workspace migration; it is no longer bundled or selectable.

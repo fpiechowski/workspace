@@ -71,15 +71,19 @@ func TestManualWorkspaceLifecycleControls(t *testing.T) {
 func TestNeedsWorkflowLifecycleStillBlocked(t *testing.T) {
 	s, _ := fixture(t)
 	ctx := context.Background()
-	pending, err := s.Create(ctx, CreateOptions{Title: "Pending", Input: "Choose later"})
+	pending, err := s.Create(ctx, CreateOptions{Title: "Pending", Input: "Choose later", NoWorkflow: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ws := pending.Workspace.ID
 	_, err = s.SetPaused(ctx, ws, true)
-	expectCode(t, err, "decision_required")
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = s.PauseInterruptGuarded(ctx, ws, "pending-pause", MutationGuard{})
-	expectCode(t, err, "decision_required")
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 // The menu distinguishes manual operation from a pending selection and from a
@@ -118,7 +122,7 @@ func TestManualWorkspaceMenuModes(t *testing.T) {
 		t.Fatalf("paused manual menu: %+v", pausedMenu.Actions)
 	}
 
-	pending, err := s.Create(ctx, CreateOptions{Title: "Pending", Input: "Choose later"})
+	pending, err := s.Create(ctx, CreateOptions{Title: "Pending", Input: "Choose later", NoWorkflow: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,8 +130,8 @@ func TestManualWorkspaceMenuModes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !menuHas(pendingMenu, "workflow") {
-		t.Fatalf("pending menu lost the selection action: %+v", pendingMenu.Actions)
+	if menuHas(pendingMenu, "workflow") {
+		t.Fatalf("manual menu unexpectedly offers selection: %+v", pendingMenu.Actions)
 	}
 
 	// The fixture creates an extended workflow workspace and keeps advancing.
@@ -160,7 +164,7 @@ func fixtureWorkspaceID(t *testing.T, s *Service) string {
 func TestManualWorkspacePhaseLabelInOverview(t *testing.T) {
 	s, ws := manualFixture(t)
 	ctx := context.Background()
-	pending, err := s.Create(ctx, CreateOptions{Title: "Pending", Input: "Choose later"})
+	pending, err := s.Create(ctx, CreateOptions{Title: "Pending", Input: "Choose later", NoWorkflow: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,8 +179,8 @@ func TestManualWorkspacePhaseLabelInOverview(t *testing.T) {
 	if phases[ws] != "manual" {
 		t.Fatalf("manual overview phase: %q", phases[ws])
 	}
-	if phases[pending.Workspace.ID] != "" {
-		t.Fatalf("pending overview phase: %q", phases[pending.Workspace.ID])
+	if phases[pending.Workspace.ID] != "manual" {
+		t.Fatalf("manual overview phase: %q", phases[pending.Workspace.ID])
 	}
 	if phases[fixtureWorkspaceID(t, s)] != "planning" {
 		t.Fatalf("workflow overview phase: %q", phases[fixtureWorkspaceID(t, s)])
