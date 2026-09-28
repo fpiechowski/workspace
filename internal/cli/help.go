@@ -154,6 +154,10 @@ var commandHelpSpecs = map[string]commandHelp{
 		"Make an autonomous workspace interactive again and record the reason. The user may always disable it; an orchestrator agent must attest the user's request with --user-confirmed. The exact current revision is required.",
 		"workspace autonomy disable --reason \"User resumed interactive control\" --expected-revision 4\nworkspace autonomy disable --reason \"User resumed interactive control\" --expected-revision 4 --user-confirmed",
 	),
+	"workspace autonomy report": h(
+		"Deliver the orchestrator's durable final report and end the autonomous run. The outcome is validated against the state: ready_to_land needs an accepted, unchanged integration; ready_to_complete needs every live task accepted and a manual workspace or nothing left to integrate; blocked/failed need a pending list. The summary is stored as an immutable artifact, the run becomes delivered and an autonomous.final_report decision is appended. The report replays idempotently under one operation key.",
+		"workspace autonomy report --summary-file work-products/SUMMARY.md --outcome ready_to_land --expected-revision 12 --operation-key autonomy:report:1",
+	),
 	"workspace dispatcher": h(
 		"Manage the singleton project-scoped Dispatcher. It handles project Issue intake and routing only; Workspace Orchestrators own execution.",
 		"workspace dispatcher status\nworkspace dispatcher start --profile dispatcher",
@@ -659,6 +663,14 @@ var flagHelpSpecs = map[string]map[string]string{
 		"reason":            "Why autonomous mode is being disabled.",
 		"expected-revision": "Exact current workspace revision required before disabling.",
 		"user-confirmed":    "Agent attestation that the user requested disabling autonomy.",
+	},
+	"workspace autonomy report": {
+		"outcome":           "ready_to_land, ready_to_complete, blocked or failed.",
+		"recommendation":    "One-paragraph recommendation shown to the user.",
+		"summary-file":      "Markdown summary stored as an immutable report artifact.",
+		"artifact":          "Additional report artifact to preserve; repeat or comma-separate.",
+		"pending":           "Pending item for a blocked/failed report; repeat or comma-separate.",
+		"expected-revision": "Exact current workspace revision required before delivery.",
 	},
 	"workspace dispatcher start": {
 		"profile": "Explicit Dispatcher profile override; otherwise use defaults.dispatcher_profile, then defaults.orchestrator_profile.",

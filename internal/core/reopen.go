@@ -35,6 +35,9 @@ func (s *Service) ReopenWorkspace(ctx context.Context, selector string, opt Reop
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := s.rejectAutonomousAttestation(d, "reopen"); err != nil {
+			return err
+		}
 		switch d.State.Status {
 		case "completed":
 			// Continue below.

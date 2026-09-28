@@ -195,6 +195,9 @@ func (s *Service) PublishChangeRequest(ctx context.Context, selector, id string,
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := s.rejectAutonomousAttestation(d, "change-request publish"); err != nil {
+			return err
+		}
 		if err := rejectNewWorkspaceWork(d, "publishing change requests"); err != nil {
 			return err
 		}
@@ -353,6 +356,9 @@ func (s *Service) ResolveChangeRequest(ctx context.Context, selector, id, action
 	var out ChangeRequest
 	err := mutate(s, ctx, selector, keys, []any{"change-request.resolve", id, action, reference, reason, userConfirmed}, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		if err := s.rejectAutonomousAttestation(d, "change-request resolve"); err != nil {
 			return err
 		}
 		if err := rejectNewWorkspaceWork(d, "resolving change requests"); err != nil {

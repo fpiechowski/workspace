@@ -147,6 +147,55 @@ func TestAutonomyCLICreateStatusEnableDisable(t *testing.T) {
 	}
 }
 
+func TestAutonomyCLIReportDeliversAndReplays(t *testing.T) {
+	for _, key := range []string{"WORKSPACE_AGENT_ID", "WORKSPACE_SESSION_ID", "WORKSPACE_RUN_ID", "WORKSPACE_ROLE", "WORKSPACE_PARENT_SESSION_ID", "WORKSPACE_ID", "WORKSPACE_SCOPE"} {
+		t.Setenv(key, "")
+	}
+	project := autonomyProject(t, true)
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"--json", "--project", project, "create", "--no-workflow", "--autonomous", "autonomy report"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("autonomous create failed: %d %s", code, errOut.String())
+	}
+	var created struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	ws := created.Data.Workspace.ID
+	revision := created.Data.Workspace.Revision
+	summary := filepath.Join(t.TempDir(), "SUMMARY.md")
+	if err := os.WriteFile(summary, []byte("# Autonomous summary\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{
+		"--json", "--project", project, "autonomy", "report", "--workspace", ws,
+		"--outcome", "blocked", "--pending", "worker question unanswered",
+		"--summary-file", summary, "--expected-revision", strconv.Itoa(revision), "--operation-key", "report:cli",
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Execute(args, nil, &out, &errOut); code != 0 {
+		t.Fatalf("autonomy report failed: %d %s", code, out.String())
+	}
+	var reported struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &reported); err != nil {
+		t.Fatal(err)
+	}
+	if reported.Data.Workspace.Autonomy == nil || reported.Data.Workspace.Autonomy.State != "delivered" || reported.Data.Workspace.Autonomy.Report == nil {
+		t.Fatalf("report response: %s", out.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Execute(args, nil, &out, &errOut); code != 0 {
+		t.Fatalf("autonomy report replay failed: %d %s", code, out.String())
+	}
+}
+
 func TestAutonomyCLIUnsupportedWithoutDelivery(t *testing.T) {
 	project := autonomyProject(t, false)
 	var out, errOut bytes.Buffer

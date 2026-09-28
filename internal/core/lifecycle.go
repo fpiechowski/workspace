@@ -68,6 +68,9 @@ func (s *Service) archive(ctx context.Context, selector string, expectedRevision
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := s.rejectAutonomousAttestation(d, "archive"); err != nil {
+			return err
+		}
 		if expectedRevision != 0 && d.State.Revision != expectedRevision {
 			return fail("revision_conflict", "workspace changed while archiving was being confirmed")
 		}
@@ -225,6 +228,11 @@ func (s *Service) Clean(ctx context.Context, selector string, dryRun, backup boo
 	err := s.With(ctx, selector, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
+		}
+		if !dryRun {
+			if err := s.rejectAutonomousAttestation(d, "clean"); err != nil {
+				return err
+			}
 		}
 		for _, w := range d.Registry.Worktrees {
 			if w.State == "removed" {

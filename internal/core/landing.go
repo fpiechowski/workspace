@@ -85,6 +85,9 @@ func (s *Service) landIntegration(ctx context.Context, selector string, opt Land
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := s.rejectAutonomousAttestation(d, "integration land"); err != nil {
+			return err
+		}
 		if err := rejectNewWorkspaceWork(d, "landing integration"); err != nil {
 			return err
 		}

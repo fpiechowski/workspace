@@ -482,6 +482,9 @@ func (s *Service) AnswerDecision(ctx context.Context, selector string, opt Decis
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := s.rejectAutonomousAttestation(d, "decision answer"); err != nil {
+			return err
+		}
 		if err := rejectNewWorkspaceWork(d, "answering decisions"); err != nil {
 			return err
 		}
@@ -563,6 +566,9 @@ func (s *Service) ConfirmRelease(ctx context.Context, selector, reference string
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
+		if err := s.rejectAutonomousAttestation(d, "release confirm"); err != nil {
+			return err
+		}
 		if (s.Actor.AgentID != "" || s.Actor.SessionID != "" || s.Actor.RunID != "") && !userConfirmed {
 			return fail("user_decision_required", "record the user's explicit confirmation with --user-confirmed")
 		}
@@ -624,6 +630,13 @@ func (s *Service) ConfirmRelease(ctx context.Context, selector, reference string
 	return out, err
 }
 
+// autonomyReportMenuAction is the terminal action while an autonomous run is
+// running: the orchestrator delivers the final report instead of landing or
+// completing, both of which stay reserved for the user.
+func autonomyReportMenuAction(d *Document) MenuAction {
+	return MenuAction{"report", "Deliver the autonomous final report", fmt.Sprintf("autonomy report --summary-file <path> --outcome %s --expected-revision %d", autonomySuggestedOutcome(d), d.State.Revision)}
+}
+
 // landingMenuActions suggests the next landing decision for an integration
 // phase: prepare, then the user-approved land, then complete.
 func landingMenuActions(d *Document) []MenuAction {
@@ -679,7 +692,16 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 				out.Actions = append(out.Actions, MenuAction{"resume", "Resume delegation", "resume"})
 			default:
 				out.Actions = append(out.Actions, MenuAction{"pause", "Pause delegation", "pause"})
-				out.Actions = append(out.Actions, MenuAction{"complete", "Complete this manual workspace", "complete --user-confirmed"})
+				if d.State.AutonomyRunning() {
+					if autonomyWorkAccepted(d) {
+						out.Actions = append(out.Actions, autonomyReportMenuAction(d))
+					}
+				} else {
+					out.Actions = append(out.Actions, MenuAction{"complete", "Complete this manual workspace", "complete --user-confirmed"})
+					if d.State.Autonomy != nil && d.State.Autonomy.State == "delivered" {
+						out.Actions = append(out.Actions, MenuAction{"report", "Review the delivered autonomous report", "status"})
+					}
+				}
 			}
 			return nil
 		}
@@ -707,7 +729,14 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 		} else if out.Phase == "awaiting_release" {
 			out.Actions = append(out.Actions, MenuAction{"release", "Confirm deployment or release", "release confirm --reference <reference>"})
 		} else if workflowHasCapability(d, capLanding) && out.Phase == integrationPhase(d) {
-			out.Actions = append(out.Actions, landingMenuActions(d)...)
+			if d.State.AutonomyRunning() {
+				out.Actions = append(out.Actions, autonomyReportMenuAction(d))
+			} else {
+				if d.State.Autonomy != nil && d.State.Autonomy.State == "delivered" {
+					out.Actions = append(out.Actions, MenuAction{"report", "Review the delivered autonomous report", "status"})
+				}
+				out.Actions = append(out.Actions, landingMenuActions(d)...)
+			}
 		} else {
 			out.Actions = append(out.Actions, MenuAction{"advance", "Check requirements and advance workflow", "workflow advance"})
 		}
