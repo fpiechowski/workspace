@@ -1,0 +1,65 @@
+?   	workspace/cmd/workspace	[no test files]
+ok  	workspace/internal/bootstrap	1.393s
+?   	workspace/internal/buildinfo	[no test files]
+ok  	workspace/internal/cli	4.707s
+panic: test timed out after 1m30s
+	running tests:
+		TestServicesAreSeparateAndPreventCleanup (0s)
+
+goroutine 3288 [running]:
+testing.(*M).startAlarm.func1()
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2484 +0x605
+created by time.goFunc
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/time/sleep.go:215 +0x45
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0xc000102c40, {0xf8a862, 0x28}, 0xfb3718)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1859 +0x91e
+testing.runTests.func1(0xc000102c40)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2279 +0x86
+testing.tRunner(0xc000102c40, 0xc000235ae0)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1792 +0x226
+testing.runTests(0xc00016c078, {0x15b81e0, 0xf3, 0xf3}, {0x4?, 0x0?, 0x15bb6c0?})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2277 +0x96d
+testing.(*M).Run(0xc00012a8c0)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2142 +0xeeb
+main.main()
+	_testmain.go:529 +0x165
+
+goroutine 3344 [syscall]:
+syscall.Syscall(0xd9, 0x5, 0xc00048a000, 0x2000)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/syscall/syscall_linux.go:73 +0x2b
+syscall.Getdents(0x5, {0xc00048a000, 0x2000, 0xc00048a000?})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/syscall/zsyscall_linux_amd64.go:479 +0x5a
+syscall.ReadDirent(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/syscall/syscall_linux.go:1006
+internal/poll.ignoringEINTRIO(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_unix.go:745
+internal/poll.(*FD).ReadDirent(0xc000188480, {0xc00048a000, 0x2000, 0x2000})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_unixjs.go:58 +0x314
+os.(*File).readdir(0xc00007c000, 0xffffffffffffffff, 0x1)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/dir_unix.go:78 +0x45b
+os.(*File).ReadDir(0xc00007c000, 0xffffffffffffffff)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/dir.go:101 +0x3f
+os.ReadDir({0xc00015a140, 0x91})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/dir.go:125 +0xfc
+workspace/internal/core.installExtendedWorkflow(0xc0000b7500, {0xc00015e780, 0x3b})
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3MJ9K4D8A0EV47SJ0TSPJH9/worktrees/impl-i4/internal/core/core_test.go:87 +0x34a
+workspace/internal/core.fixture(0xc0000b7500)
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3MJ9K4D8A0EV47SJ0TSPJH9/worktrees/impl-i4/internal/core/core_test.go:65 +0x4e5
+workspace/internal/core.TestServicesAreSeparateAndPreventCleanup(0xc0000b7500)
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3MJ9K4D8A0EV47SJ0TSPJH9/worktrees/impl-i4/internal/core/service_test.go:10 +0x3f
+testing.tRunner(0xc0000b7500, 0xfb3718)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1792 +0x226
+created by testing.(*T).Run in goroutine 1
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1851 +0x8f3
+FAIL	workspace/internal/core	90.016s
+?   	workspace/internal/release	[no test files]
+--- FAIL: TestNavigatorRealPTYAndClientSelection (5.67s)
+    navigation_integration_test.go:72: pseudo-TTY client did not attach
+FAIL
+FAIL	workspace/internal/terminal	5.685s
+ok  	workspace/internal/tui	6.334s
+ok  	workspace/internal/upgrade	1.275s
+FAIL
+exit_code=1

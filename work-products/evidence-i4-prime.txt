@@ -1,0 +1,6 @@
+35:   Add `--autonomous` (user-invoked only) to start an unattended run; it requires a
+66:present the actual choices to the user and record their answer. In a running autonomous
+69:and `--evidence` and end with `workspace autonomy report`. Never answer an excluded
+73:autonomy enable|disable` (`enable` is terminal-user only) and deliver it with `workspace
+74:autonomy report --summary-file <path> --outcome ready_to_land|ready_to_complete|blocked|failed`.
+exit_code=0

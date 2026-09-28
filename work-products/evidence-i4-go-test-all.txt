@@ -1,0 +1,10 @@
+?   	workspace/cmd/workspace	[no test files]
+ok  	workspace/internal/bootstrap	0.307s
+?   	workspace/internal/buildinfo	[no test files]
+ok  	workspace/internal/cli	4.564s
+ok  	workspace/internal/core	142.327s
+?   	workspace/internal/release	[no test files]
+ok  	workspace/internal/terminal	0.004s
+ok  	workspace/internal/tui	0.296s
+ok  	workspace/internal/upgrade	0.245s
+exit_code=0

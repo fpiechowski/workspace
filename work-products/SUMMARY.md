@@ -1,27 +1,39 @@
-# Summary — task_01M3MJYRHCY7FP8RBR2G95MCV6 (I3: Safety boundary enforcement, final report, menu)
+# I4 — Orchestrator guidance and documentation
 
-Implemented PLAN.md §3.5, §4 and §5-I3: the code-level safety boundary, the
-receipted final autonomy report and the menu switch.
+Status: implemented and committed (`c718ed1`).
 
-- `rejectAutonomousAttestation` makes `integration land`, `complete`,
-  `decision answer`, `release confirm`, `change-request publish/resolve`,
-  `reopen`, `archive`, non-dry-run `clean`, workspace/task/session `delete` and
-  `state edit` return `autonomy_excluded` for an agent actor while the run is
-  running, even with `--user-confirmed` or `forge.publication: allowed`. The
-  terminal user is never excluded and the ordinary contract returns after
-  `delivered`/`disabled`.
-- `workspace autonomy report --outcome --summary-file [--artifact] [--pending]`
-  validates the outcome against state (`integration_changed`, `handoff_pending`,
-  `session_active`, `pending_required`, `invalid_outcome`), stores an immutable
-  summary artifact atomically, sets `delivered`, appends an
-  `autonomous.final_report` decision and replays idempotently.
-- `menu --json` shows `autonomy report` while running in integration or when a
-  manual workspace's work is accepted, and the report plus `land`/`complete`
-  after delivery.
-- End-to-end tests cover the autonomous plan-first flow to `ready_to_land`
-  (agent land/complete refused, user land + complete succeeding), the manual flow
-  to `ready_to_complete`, the boundary table and the menu.
+## What changed
 
-Commit `48eab2b`. Checks (`work-products/CHECKS-I3.yaml`): gofmt clean,
-`go vet ./...`, the targeted core run, the CLI autonomy run and the full
-`go test ./...` all pass. Docs and the orchestrator guidance notice stay in I4.
+- **Binary-owned autonomous notice.** `autonomyRunNotice` (`internal/core/autonomy.go`)
+  is appended to an orchestrator Run prompt while `autonomy.state=running`
+  (`internal/core/session.go`). It carries the §3.3 judgment rules and the §4
+  user-reserved boundary, so it survives stale or customized project templates.
+- **Templates.** `orchestrator.AGENTS.md.tmpl` gains an `{{if .Autonomous}}`
+  branch (interactive text becomes the `{{else}}`); the plan-first and manual
+  `WORKFLOW.md.tmpl` / `prompts/orchestrator.md.tmpl` gain short autonomy notes.
+  `Workspace.Autonomous()` and `promptData.Autonomous` back the switch, and
+  `create --autonomous` now sets the record before templates are snapshotted.
+- **Stale detection.** The previous stock plan-first workflow and orchestrator
+  prompt digests are added to the stale lists in `internal/core/project.go`.
+- **Skill.** The bundled `SKILL.md` (and its identical `.agents` copy) document
+  `--autonomous`, the `decision_required` autonomous clause, and the
+  `workspace autonomy enable|disable|report` commands. `workspace prime` prints
+  them.
+- **Docs.** `PRODUCT.md` (principle + scope), `README.md` (flag, commands,
+  report), `ARCHITECTURE.md` (Domain Model + persisted state), `docs/operations.md`
+  (mutations, `autonomy_excluded`, rationale receipts), `docs/runtime.md`
+  (delivery precondition, run end).
+
+## Verification
+
+- gofmt clean, `go vet ./...` clean, `go test ./... -count=1` green.
+- `go test ./internal/core -run 'Session|Skill|Template|Autonomy' -count=1` green.
+- `WORKSPACE_TMUX_TEST=1 go test -race ./internal/core -run
+  'Session|Skill|Template|Autonomy' -timeout 120s` green (22.5s, no data race).
+- Doc link check: `checked=29 broken=0`.
+- New tests: `internal/core/autonomy_prompt_test.go`.
+
+The exact ``WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 90s`` is red on
+this machine for pre-existing reasons (terminal pseudo-TTY test fails at
+unmodified HEAD `58b5862`; the core race binary exceeds 90s here). See
+`work-products/IMPLEMENTATION.md` and `work-products/CHECKS-I4.yaml`.
