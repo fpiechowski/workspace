@@ -195,6 +195,17 @@ default, local workspaces also live in `.workspace/ws_*`, but `workspaces_dir` m
 to an external directory. Local Git rules ignore runtime data and work products without
 hiding configuration or templates.
 
+A fresh project is initialized from an in-memory candidate. `ValidateConfig` applies the
+same client-normalization, route/profile-reference, workflow-mapping, and argv rules as a
+persisted `Service.Config`, so an invalid candidate fails before any file is written. The
+candidate is then written once under the project lock together with templates and Git
+exclude rules; an existing valid `.workspace/config.yaml` is returned byte-for-byte and
+never replaced, and a keyed replay records its finalized candidate in the operation
+digest. The interactive `project init` wizard lives in `internal/cli/` and only builds
+the candidate; non-terminal and scripted invocations use the same boundary with the
+minimal generated configuration. Generated client launch and resume argv contain no
+approval-bypass flags.
+
 In each workspace:
 
 ```text

@@ -257,6 +257,25 @@ func newRoot(o *options) *cobra.Command {
 				return err
 			}
 		}
+		// Existing projects retain the exact persisted configuration and use the
+		// legacy repair path. Scripted invocations also always use that path.
+		if o.json || o.short || o.nonInteractive || o.key != "" || !terminalIO(o.in, o.out) {
+			cfg, err := core.InitProject(c.Context(), dir, o.key)
+			if err != nil {
+				return err
+			}
+			return o.emit(cfg)
+		}
+		if _, err := core.DiscoverProject(dir); err != nil {
+			cfg, wizardErr := runProjectInitWizard(c.Context(), dir, o.in, o.errOut)
+			if errors.Is(wizardErr, errInitCancelled) {
+				return nil
+			}
+			if wizardErr != nil {
+				return wizardErr
+			}
+			return o.emit(cfg)
+		}
 		cfg, err := core.InitProject(c.Context(), dir, o.key)
 		if err != nil {
 			return err

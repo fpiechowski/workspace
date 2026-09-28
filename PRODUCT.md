@@ -136,6 +136,9 @@ The current scope includes:
   or conversion to a workflow;
 - an interactive TUI for browsing the same state, navigating tasks, and running
   explicitly permitted core operations.
+- validated first-run project setup that collects the client adapters, an
+  account-specific orchestrator route, and optional role profiles and workflows before
+  writing the configuration once, and never enables client permission bypasses.
 - installation from the published GitHub Release archives and an explicit
   `workspace upgrade` path that verifies and atomically installs a newer stable release.
 
@@ -161,6 +164,16 @@ worktrees, results, and runtime, then jump to a verified tmux pane. The TUI uses
 same core queries and operations as the CLI; every mutation has confirmation and a
 guard for the current revision, attempt, or RunID. It does not add actions for sending
 messages, acknowledging the inbox, or automatically accepting results.
+
+`workspace project init` prepares the project. On a fresh project with a terminal it
+runs an interactive setup: it lists the detected client adapters, requires
+account-specific orchestrator provider and model identifiers, optionally proposes the
+README role profiles, workflow mappings, and a GitHub forge, and writes nothing until
+the final confirmation. Non-terminal and scripted runs skip the prompts and write the
+minimal generated configuration. Re-initialization never rewrites existing
+configuration, and generated launch and resume commands never include approval-bypass
+flags; a user who wants auto-approval adds it deliberately.
+
 Native OpenCode delivery is visible in the active parent TUI: the Run-scoped loopback
 server selects the current session, appends the marker-bearing workspace prompt, and
 submits it through the active TUI control API. Delivery is confirmed against the

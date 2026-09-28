@@ -76,34 +76,18 @@ func DiscoverProject(start string) (string, error) {
 	}
 	return "", fail("project_not_found", "run workspace project init inside a Git project")
 }
-func InitProject(ctx context.Context, dir string, keys ...string) (Config, error) {
+func resolveProjectRoot(ctx context.Context, dir string) (string, error) {
 	root, err := git(ctx, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return Config{}, err
+		return "", err
 	}
-	root, err = filepath.EvalSymlinks(root)
-	if err != nil {
-		return Config{}, err
-	}
-	if key := mutationKey(keys); key != "" {
-		return projectEffect(ctx, root, key, "project.init", func() (Config, error) { return InitProject(ctx, root) })
-	}
-	unlock, err := lockProject(ctx, root)
-	if err != nil {
-		return Config{}, err
-	}
-	defer unlock()
-	s := &Service{Root: root}
-	path := filepath.Join(root, ".workspace", "config.yaml")
-	existingConfig := false
-	if _, err := os.Stat(path); err == nil {
-		if _, err := s.Config(); err != nil {
-			return Config{}, err
-		}
-		existingConfig = true
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return Config{}, err
-	}
+	return filepath.EvalSymlinks(root)
+}
+
+// ensureProjectScaffold installs the bundled templates that are missing and
+// appends the local Git exclude rules. It never replaces existing files, so a
+// customized template or a pre-existing exclude entry is preserved.
+func ensureProjectScaffold(ctx context.Context, root string) error {
 	if err := fs.WalkDir(templates, "templates", func(path string, e fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -123,32 +107,112 @@ func InitProject(ctx context.Context, dir string, keys ...string) (Config, error
 		}
 		return atomicWrite(target, b)
 	}); err != nil {
-		return Config{}, err
+		return err
 	}
 	ignore, err := git(ctx, root, "rev-parse", "--git-path", "info/exclude")
 	if err != nil {
-		return Config{}, err
+		return err
 	}
 	if !filepath.IsAbs(ignore) {
 		ignore = filepath.Join(root, ignore)
 	}
 	b, err := os.ReadFile(ignore)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return Config{}, err
+		return err
 	}
 	for _, rule := range []string{"/.workspace/ws_*/", "/.workspace/.runtime/", "/.workspace/.creating-*/", "/.workspace/issues/", "/.workspace/dispatcher/", "/work-products/"} {
 		if !strings.Contains("\n"+string(b)+"\n", "\n"+rule+"\n") {
 			b = append(b, []byte("\n"+rule+"\n")...)
 		}
 	}
-	if err := atomicWrite(ignore, b); err != nil {
+	return atomicWrite(ignore, b)
+}
+
+func InitProject(ctx context.Context, dir string, keys ...string) (Config, error) {
+	root, err := resolveProjectRoot(ctx, dir)
+	if err != nil {
+		return Config{}, err
+	}
+	if key := mutationKey(keys); key != "" {
+		return projectEffect(ctx, root, key, "project.init", func() (Config, error) { return InitProject(ctx, root) })
+	}
+	return initProjectLocked(ctx, root, nil)
+}
+
+// InitFreshProject initializes a fresh project from a proposed configuration.
+// The candidate is validated with the same rules as Service.Config and the
+// generated fields (schema_version, runtime and project_id) are filled in when
+// omitted. An invalid candidate fails before any file is written. When a config
+// already exists it is preserved and returned unchanged, so a concurrent or
+// replayed initialization never replaces user configuration.
+func InitFreshProject(ctx context.Context, dir string, candidate Config, keys ...string) (Config, error) {
+	materialized, err := freshConfig(candidate)
+	if err != nil {
+		return Config{}, err
+	}
+	root, err := resolveProjectRoot(ctx, dir)
+	if err != nil {
+		return Config{}, err
+	}
+	if key := mutationKey(keys); key != "" {
+		return projectEffect(ctx, root, key, []any{"project.init.fresh", candidate}, func() (Config, error) {
+			return initProjectLocked(ctx, root, &materialized)
+		})
+	}
+	return initProjectLocked(ctx, root, &materialized)
+}
+
+func freshConfig(candidate Config) (Config, error) {
+	if candidate.SchemaVersion == 0 {
+		candidate.SchemaVersion = 1
+	}
+	if candidate.Runtime == "" {
+		candidate.Runtime = "tmux"
+	}
+	if candidate.ProjectID == "" {
+		candidate.ProjectID = ID("prj")
+	}
+	if candidate.Clients == nil {
+		candidate.Clients = map[string]Client{}
+	}
+	if candidate.Profiles == nil {
+		candidate.Profiles = map[string]Profile{}
+	}
+	return ValidateConfig(candidate)
+}
+
+// initProjectLocked holds the project lock, repairs missing templates and
+// exclude rules and installs the configuration. The candidate, when present,
+// must already be materialized and validated. An existing configuration is
+// always preserved byte-for-byte.
+func initProjectLocked(ctx context.Context, root string, candidate *Config) (Config, error) {
+	unlock, err := lockProject(ctx, root)
+	if err != nil {
+		return Config{}, err
+	}
+	defer unlock()
+	s := &Service{Root: root}
+	path := filepath.Join(root, ".workspace", "config.yaml")
+	existingConfig := false
+	if _, err := os.Stat(path); err == nil {
+		if _, err := s.Config(); err != nil {
+			return Config{}, err
+		}
+		existingConfig = true
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Config{}, err
+	}
+	if err := ensureProjectScaffold(ctx, root); err != nil {
 		return Config{}, err
 	}
 	if existingConfig {
 		return s.Config()
 	}
 	cfg := Config{SchemaVersion: 1, ProjectID: ID("prj"), Runtime: "tmux", Clients: map[string]Client{}, Profiles: map[string]Profile{}}
-	b, err = yaml.Marshal(cfg)
+	if candidate != nil {
+		cfg = *candidate
+	}
+	b, err := yaml.Marshal(cfg)
 	if err != nil {
 		return Config{}, err
 	}
@@ -163,6 +227,14 @@ func (s *Service) Config() (Config, error) {
 	if err := strictYAML(b, &cfg); err != nil {
 		return cfg, fail("invalid_config", "%v", err)
 	}
+	return ValidateConfig(cfg)
+}
+
+// ValidateConfig applies the same rules as Service.Config to an in-memory
+// configuration: client normalization, route and profile references, workflow
+// mappings and tracker/argv checks. It returns the normalized configuration and
+// never writes to disk.
+func ValidateConfig(cfg Config) (Config, error) {
 	if cfg.SchemaVersion != 1 || cfg.ProjectID == "" || cfg.Runtime != "tmux" {
 		return cfg, fail("invalid_config", "expected schema_version: 1, project_id and runtime: tmux")
 	}
@@ -176,11 +248,11 @@ func (s *Service) Config() (Config, error) {
 		return cfg, fail("invalid_config", "unsupported tracker adapter")
 	}
 	for name, client := range cfg.Clients {
-		client, err = normalizeClient(client)
+		normalized, err := normalizeClient(client)
 		if err != nil {
 			return cfg, fail("invalid_config", "client %q: %v", name, err)
 		}
-		cfg.Clients[name] = client
+		cfg.Clients[name] = normalized
 	}
 	for name, p := range cfg.Profiles {
 		if p.Strategy != "" && p.Strategy != "provider-balanced" {
