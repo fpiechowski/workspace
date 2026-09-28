@@ -1,20 +1,21 @@
-# Summary — task_01M3KJ6ZS58GEEJX4E4TSS17MR (Documentation, skill, backlog)
+# Summary — task_01M3MJYR3CFG2SYPQ3Q4A39YS1 (I1: Autonomy state, creation, enable/disable, status)
 
-Updated the contract documentation, both bundled skill copies, and the backlog for the
-plan-first v2 workflow, the removal of `issue-resolution`, and the auto-migration.
+Implemented the per-workspace autonomy state and its lifecycle entry points per
+PLAN.md §3.1-3.2 and §5-I1.
 
-- README/PRODUCT/ARCHITECTURE now describe the plan-first v2 phase order
-  (`planning → plan_review → implementing → integration → completed`), the user-approved
-  local `integration land` gate, conflict handling, `complete` for plan-first, the
-  release-gate-only archive rule, the removed workflow, and the on-load migration.
-- docs/operations.md documents `integration land` as a receipted mutation with its local
-  git fast-forward/CAS effect; docs/revisions.md documents that landed work blocks
-  revision/retry; runtime/tui/trackers wording updated.
-- Both `internal/core/skill/workspace/SKILL.md` and `.agents/skills/workspace/SKILL.md`
-  are now byte-identical and describe the integration/land/complete flow.
-- TODO.md records the four deferred follow-ups (stacked strategy, CR-based landing,
-  project-level integration branch, optional removal of the extended machine).
+- `Workspace.Autonomy` plus `Autonomy`/`AutonomyReport` types (all omitempty) and
+  the audit `Decision` fields; non-autonomous documents and receipts serialize
+  byte-compatibly.
+- `workspace create --autonomous` (plan-first and `--no-workflow`) and
+  `workspace issue dispatch --autonomous`, with a `deliver`-capability
+  precondition and a Dispatcher `forbidden` refusal before the actor clear.
+- `workspace autonomy enable` (terminal user only) and `autonomy disable`
+  (user or attesting orchestrator), both revision-guarded, receipted and
+  recorded as `autonomy.enabled`/`autonomy.disabled` decisions.
+- `reopen` clears autonomy while the history copy retains it; status/JSON and the
+  workspace document expose autonomy. TUI create form passes `Autonomous`.
 
-Commit `ee255be`. Checks: gofmt clean, `go vet ./...` and `go test ./...` pass, all
-documentation links resolve, the skill copies match, and no stale `issue-resolution`
-reference remains outside removal/migration notes.
+Commit `3af359c`. Checks (`work-products/CHECKS.yaml`): gofmt clean,
+`go vet ./...`, targeted `go test ./internal/core -run 'Autonomy'` and
+`go test ./internal/cli -run 'Autonom'`, and the full `go test ./...` all pass.
+Docs and report/menu/boundary stay in the I2-I4 scope.
