@@ -118,11 +118,7 @@ func (s *Service) StartDispatcher(ctx context.Context, profileOverride, operatio
 		if strings.TrimSpace(profileOverride) != "" || chosenProfile == "" {
 			chosenProfile = profile
 		}
-		route, err := s.chooseRoute(cfg, chosenProfile)
-		if err != nil {
-			return err
-		}
-		decision, err := s.assessRoutes(cfg, chosenProfile)
+		route, decision, err := s.chooseRoute(cfg, chosenProfile)
 		if err != nil {
 			return err
 		}

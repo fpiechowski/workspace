@@ -521,6 +521,7 @@ func newRoot(o *options) *cobra.Command {
 			})
 			explain.Args = cobra.ExactArgs(1)
 			group.AddCommand(explain)
+			group.AddCommand(routeLimitCommands(o))
 		}
 		root.AddCommand(group)
 	}
