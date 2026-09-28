@@ -371,7 +371,7 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, key strin
 			case "implementer":
 				d.State.Workflow.Phase = "implementing"
 			case "integrator":
-				d.State.Workflow.Phase = "integrating"
+				d.State.Workflow.Phase = integrationPhase(d)
 			case "tester":
 				d.State.Workflow.Phase = "live_testing"
 			}

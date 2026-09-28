@@ -305,9 +305,22 @@ func ValidateConfig(cfg Config) (Config, error) {
 		if w.ChangeRequests != "" && w.ChangeRequests != "integrated" && w.ChangeRequests != "per-task" {
 			return cfg, fail("invalid_config", "change_requests must be integrated or per-task")
 		}
+		has := map[string]bool{}
 		for _, capability := range w.Capabilities {
 			if !knownWorkflowCapability(capability) {
 				return cfg, fail("invalid_config", "workflow %s declares unknown capability %q", name, capability)
+			}
+			has[capability] = true
+		}
+		if has[capLanding] {
+			if !has[capIntegration] {
+				return cfg, fail("invalid_config", "workflow %s declares landing without integration", name)
+			}
+			if !has[capIntegrator] {
+				return cfg, fail("invalid_config", "workflow %s declares landing without tasks.role.integrator", name)
+			}
+			if has[capChangeRequest] || has[capLiveTest] || has[capRelease] {
+				return cfg, fail("invalid_config", "workflow %s declares landing together with change_request, live_test or release", name)
 			}
 		}
 		for role, profile := range w.Profiles {
@@ -319,6 +332,12 @@ func ValidateConfig(cfg Config) (Config, error) {
 			}
 		}
 	}
+	// issue-resolution was removed as a bundled workflow. An existing project
+	// config may still list it: validate the entry as before (so a bad profile
+	// reference is still reported) and then drop it from the normalized
+	// configuration so listing, selection, routing and capability lookup can
+	// no longer observe it. The config file on disk is never rewritten.
+	delete(cfg.Workflows, "issue-resolution")
 	return cfg, nil
 }
 func (s *Service) workspaceDirs() ([]string, error) {

@@ -9,17 +9,22 @@ import (
 )
 
 func TestWorkflowProfilesAndParallelLimit(t *testing.T) {
-	s, id := fixture(t)
+	s, _ := fixture(t)
 	ctx := context.Background()
 	cfg, err := s.Config()
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.Workflows = map[string]WorkflowConfig{"issue-resolution": {Profiles: map[string]string{"planning": "live-testing", "orchestrator": "implementation"}, MaxParallelTasks: 1}}
+	cfg.Workflows = map[string]WorkflowConfig{"plan-first": {Profiles: map[string]string{"planning": "live-testing", "orchestrator": "implementation"}, MaxParallelTasks: 1}}
 	b, _ := yaml.Marshal(cfg)
 	if err := atomicWrite(filepath.Join(s.Root, ".workspace", "config.yaml"), b); err != nil {
 		t.Fatal(err)
 	}
+	created, err := s.Create(ctx, CreateOptions{Title: "Plan-first profiles", Input: "Profile routing", Workflow: "plan-first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := created.Workspace.ID
 	a, w := worker(t, s, id, "one")
 	if a.Profile != "live-testing" {
 		t.Fatal("agent ignores workflow profile")
@@ -55,7 +60,7 @@ func TestOrchestratorUsesGlobalDefaultAndWorkflowOverride(t *testing.T) {
 	}
 	cfg.Defaults.OrchestratorProfile = "live-testing"
 	cfg.Workflows = map[string]WorkflowConfig{
-		"issue-resolution": {
+		"plan-first": {
 			Profiles: map[string]string{"orchestrator": "implementation"},
 		},
 	}
@@ -79,7 +84,7 @@ func TestOrchestratorUsesGlobalDefaultAndWorkflowOverride(t *testing.T) {
 		t.Fatalf("global orchestrator profile not used: got %q", orch.Profile)
 	}
 
-	withWorkflow, err := s.Create(ctx, CreateOptions{Title: "With workflow", Input: "Use override", Workflow: "issue-resolution"})
+	withWorkflow, err := s.Create(ctx, CreateOptions{Title: "With workflow", Input: "Use override", Workflow: "plan-first"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -424,8 +424,8 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace integration prepare --tasks task_01,task_02",
 	),
 	"workspace integration prepare": h(
-		"Create the integration worktree for accepted implementation tasks. Omit --tasks to include all accepted implementation tasks.",
-		"workspace integration prepare --base main",
+		"Create the integration worktree for accepted implementation tasks. Omit --tasks to include all accepted implementation tasks. With a landing workflow the default base is the current tip of the target branch.",
+		"workspace integration prepare --target main",
 	),
 	"workspace decision": h(
 		"Refresh pending workflow questions and record explicit user answers.",
@@ -694,7 +694,7 @@ var flagHelpSpecs = map[string]map[string]string{
 	},
 	"workspace handoff accept":      {"reason-file": "Review feedback file."},
 	"workspace handoff reject":      {"reason-file": "Review feedback file; required when rejecting."},
-	"workspace integration prepare": {"tasks": "Accepted task IDs; repeat or comma-separate. Defaults to all implementation tasks.", "base": "Target base revision."},
+	"workspace integration prepare": {"tasks": "Accepted task IDs; repeat or comma-separate. Defaults to all implementation tasks.", "base": "Target base revision.", "target": "Branch the integration lands into; defaults to the workspace base ref for landing workflows."},
 	"workspace decision answer": {
 		"answer":            "Selected option or answer text (required).",
 		"reason":            "User's explanation for the answer.",

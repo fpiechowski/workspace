@@ -25,6 +25,7 @@ func integrationCommands(o *options) *cobra.Command {
 	})
 	prepare.Flags().StringSliceVar(&opt.Tasks, "tasks", nil, "Accepted task IDs; defaults to all implementation tasks")
 	prepare.Flags().StringVar(&opt.Base, "base", "", "Target base revision")
+	prepare.Flags().StringVar(&opt.Target, "target", "", "Branch to land the integration into; defaults to the workspace base ref")
 	group.AddCommand(prepare)
 	return group
 }
