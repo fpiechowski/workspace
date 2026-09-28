@@ -107,44 +107,101 @@ func (s *Service) openCodeHistory(ctx context.Context, endpoint, thread string) 
 	return data, nil
 }
 
+// openCodeSessionStatus is the decoded /session/status entry for one thread.
+// The installed OpenCode 1.18.33 SDK types the retry variant as
+// {type, attempt, message, next}; unknown fields are ignored and the accepted
+// type set is unchanged.
+type openCodeSessionStatus struct {
+	Type    string
+	Attempt int
+	Message string
+	Next    int64
+}
+
 // decodeOpenCodeSessionStatus accepts the V1 status map only for the exact
 // bound session. Other entries are irrelevant to this Run and are ignored;
 // malformed or unknown data for the bound entry is not an observation.
-func decodeOpenCodeSessionStatus(data []byte, thread string) (string, error) {
+func decodeOpenCodeSessionStatus(data []byte, thread string) (openCodeSessionStatus, error) {
 	var entries map[string]json.RawMessage
 	if err := json.Unmarshal(data, &entries); err != nil {
-		return "", fmt.Errorf("invalid OpenCode session status: %w", err)
+		return openCodeSessionStatus{}, fmt.Errorf("invalid OpenCode session status: %w", err)
 	}
 	payload, ok := entries[thread]
 	if !ok {
-		return "", fmt.Errorf("OpenCode session status has no entry for %s", thread)
+		return openCodeSessionStatus{}, fmt.Errorf("OpenCode session status has no entry for %s", thread)
 	}
 	var status struct {
-		Type string `json:"type"`
+		Type    string `json:"type"`
+		Attempt int    `json:"attempt"`
+		Message string `json:"message"`
+		Next    int64  `json:"next"`
 	}
 	if err := json.Unmarshal(payload, &status); err != nil {
-		return "", fmt.Errorf("invalid OpenCode status for %s: %w", thread, err)
+		return openCodeSessionStatus{}, fmt.Errorf("invalid OpenCode status for %s: %w", thread, err)
 	}
 	switch status.Type {
 	case "idle", "busy", "retry":
-		return status.Type, nil
+		return openCodeSessionStatus{Type: status.Type, Attempt: status.Attempt, Message: status.Message, Next: status.Next}, nil
 	default:
-		return "", fmt.Errorf("unknown OpenCode status %q for %s", status.Type, thread)
+		return openCodeSessionStatus{}, fmt.Errorf("unknown OpenCode status %q for %s", status.Type, thread)
 	}
 }
 
-func (s *Service) openCodeSessionStatus(ctx context.Context, endpoint, thread string) (string, error) {
+func (s *Service) openCodeSessionStatus(ctx context.Context, endpoint, thread string) (openCodeSessionStatus, error) {
 	if strings.TrimSpace(thread) == "" {
-		return "", fmt.Errorf("OpenCode session thread is empty")
+		return openCodeSessionStatus{}, fmt.Errorf("OpenCode session thread is empty")
 	}
 	data, status, err := s.openCodeHTTP(ctx, endpoint, http.MethodGet, "/session/status", nil)
 	if err != nil {
-		return "", err
+		return openCodeSessionStatus{}, err
 	}
 	if status < 200 || status >= 300 {
-		return "", fmt.Errorf("OpenCode session status returned HTTP %d", status)
+		return openCodeSessionStatus{}, fmt.Errorf("OpenCode session status returned HTTP %d", status)
 	}
 	return decodeOpenCodeSessionStatus(data, thread)
+}
+
+// openCodeLimitKeywords is the small, tested classifier for retry messages.
+// More specific quota phrases come first so "insufficient_quota" is classified
+// as quota_exhausted rather than merely rate_limited.
+var openCodeLimitKeywords = []struct{ needle, kind string }{
+	{"insufficient_quota", "quota_exhausted"},
+	{"resource_exhausted", "quota_exhausted"},
+	{"quota", "quota_exhausted"},
+	{"usage limit", "quota_exhausted"},
+	{"429", "rate_limited"},
+	{"rate limit", "rate_limited"},
+}
+
+// classifyOpenCodeRetryMessage reports the limit kind for a retry message.
+// Non-limit retries (overload, network) return false and record nothing.
+func classifyOpenCodeRetryMessage(message string) (string, bool) {
+	lower := strings.ToLower(message)
+	for _, keyword := range openCodeLimitKeywords {
+		if strings.Contains(lower, keyword.needle) {
+			return keyword.kind, true
+		}
+	}
+	return "", false
+}
+
+// openCodeRetryLimitObservation maps a classified retry status to a
+// provider-scoped observation. Next is an epoch-millisecond bound; when it is
+// in the future it becomes the reset lower bound, otherwise the ledger applies
+// the default backoff.
+func openCodeRetryLimitObservation(status openCodeSessionStatus, now time.Time) (RouteLimitObservation, bool) {
+	kind, ok := classifyOpenCodeRetryMessage(status.Message)
+	if !ok {
+		return RouteLimitObservation{}, false
+	}
+	obs := RouteLimitObservation{Kind: kind, Source: "opencode_retry", Message: status.Message}
+	if status.Next > 0 {
+		next := time.UnixMilli(status.Next).UTC()
+		if next.After(now) {
+			obs.ResetAt = &next
+		}
+	}
+	return obs, true
 }
 
 type openCodeMutationError struct {

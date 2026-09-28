@@ -152,6 +152,78 @@ launch/resume/deliver/observe/interrupt. Other adapters derive capabilities from
 configured operations. Generic launch remains useful with explicit inbox polling;
 automatic wakeup requires a delivery-capable adapter.
 
+## Usage-limit sources
+
+Workspace never reads provider HTTP headers. It records the limit signals the clients
+themselves expose into the project route-limit ledger (`.workspace/route-limits.json`),
+shown by `workspace profile explain` and `workspace profile limit list`. In the default
+`avoid` mode a matching active record excludes the route from selection; recording is
+advisory and never interrupts a running Run.
+
+| Adapter | Automatic source | Recorded scope | Signals |
+|---|---|---|---|
+| codex | app-server bridge: `account/rateLimits/updated`, one-shot `account/rateLimits/read`, and `usageLimitExceeded` / `httpConnectionFailed{429}` turn errors | `client` | `quota_exhausted`, `rate_limited`, and soft `usage_pressure` |
+| opencode | supervisor `GET /session/status` retry entry (`message` keyword classifier, `next` as a reset lower bound) | `provider` | `rate_limited`, `quota_exhausted` |
+| claude | none; an optional user-configured hook/wrapper may call `workspace profile limit report` | caller-chosen (`client` by default) | manual, report |
+| command | none; the wrapper may call `workspace profile limit report` | caller-chosen (`provider` by default) | manual, report |
+
+Codex: the bridge merges `account/rateLimits/updated` with the most recent
+`account/rateLimits/read`. A `rateLimitReachedType` or a window with
+`usedPercent >= 100` records a client-scoped hard limit at the window's `resetsAt`; a
+lower window is recorded as soft `usage_pressure` and never excludes the route on its
+own. `usageLimitExceeded` records a hard limit and, when no reset is known yet, asks the
+app-server once via `account/rateLimits/read`. `httpConnectionFailed` with
+`httpStatusCode: 429` records `rate_limited` with the default backoff. `serverOverloaded`
+and the other error variants are not limit signals. The shapes follow
+`codex app-server generate-json-schema` for codex-cli 0.141.0.
+
+OpenCode: the supervisor decodes the full retry entry `{type, attempt, message, next}`
+(verified against the OpenCode 1.18.33 SDK types) and still accepts only
+`idle`/`busy`/`retry`; unknown fields are ignored. A retry whose `message` matches the
+case-insensitive classifier (`429`, `rate limit`, `quota`, `usage limit`,
+`insufficient_quota`, `resource_exhausted`) records a provider-scoped limit after the
+existing Run/thread/endpoint re-check, using `next` (epoch milliseconds) as the reset
+lower bound when it is in the future. Overload and network retries record nothing, and a
+stale Run observation is a no-op.
+
+### User-configured Claude Code reporting (unverified)
+
+Claude Code exposes no structured limit channel that Workspace reads, so its routes are
+limited only by `workspace profile limit set`/`clear` unless the user configures a
+wrapper. A user-configured hook can call the run-scoped report command:
+
+```sh
+# .claude/hooks/report-limit.sh — invoked by a Claude Code hook.
+# The hook payload field names for Claude Code 2.1.284 are NOT verified here.
+payload="$(cat)"
+case "$payload" in
+  *"usage limit"*|*"rate limit"*|*429*)
+    workspace profile limit report --kind quota_exhausted --message "claude hook"
+    ;;
+esac
+```
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": ".claude/hooks/report-limit.sh" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`workspace profile limit report` requires the `WORKSPACE_RUN_ID` and `WORKSPACE_ID`
+environment that Workspace sets inside a Run, so the hook must run in the agent process.
+The Claude Code hook event names, matcher syntax and the payload field that carries the
+client message are **unverified** for the installed version; treat this recipe as a
+starting point. Workspace does not install or ship any hook.
+
 On WSL, use a Linux-writable Codex runtime directory. A runtime shared with Windows
 can fail SQLite initialization; configure the client environment deliberately rather
 than reusing a live Windows database. `scripts/check-codex-handshake.py` verifies the
