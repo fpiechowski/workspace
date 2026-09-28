@@ -1,113 +1,123 @@
-# Implementation report — task_01M3MJYRHCY7FP8RBR2G95MCV6 (I3: Safety boundary enforcement, final report, menu)
+# Implementation report — task_01M3MJYS3TAP3E9057R289DR1G (I5: TUI support)
 
 ## Commit
 
-- `48eab2b` — `feat: enforce the autonomy safety boundary and final report`
+- `eca7ab5` — `feat(tui): surface autonomous runs and guarded disable`
 
 ## Changes
 
-### Code-level safety boundary (`internal/core/autonomy.go`)
+### Create form (already in I1; verified here)
 
-- `rejectAutonomousAttestation(d, op)` returns `autonomy_excluded` when
-  `Autonomy.State == running` and the actor is an agent, regardless of any
-  attestation flag. `requireUserNotAutonomous(d, op)` composes it with
-  `requireUser` for the operations that were already terminal-only.
-- The check is wired into every excluded operation from PLAN §4:
-  - `internal/core/landing.go` — `integration land` (before the
-    `--user-confirmed` and capability checks, so a publication/permission flag
-    cannot bypass it);
-  - `internal/core/completion.go` — `complete` (covers manual and landing);
-  - `internal/core/workflow.go` — `decision answer` and `release confirm`;
-  - `internal/core/change_request.go` — `change-request publish` (before the
-    `forge.publication: allowed` branch, per A1 the run stays local-only) and
-    `change-request resolve`;
-  - `internal/core/reopen.go` — `reopen` (before the status switch);
-  - `internal/core/lifecycle.go` — `archive` and non-dry-run `clean`;
-  - `internal/core/deletion.go` — workspace/task/session deletion (the two
-    `mutate` authorizers now use `requireUserNotAutonomous`);
-  - `internal/core/state.go` — `state edit` (authorizer uses
-    `requireUserNotAutonomous`).
-- After `delivered`/`disabled` the guard is inert, so the ordinary attestation
-  contract applies again.
+- `openCreateWorkspaceForm` offers the `Autonomous run` confirm next to the
+  workflow selector, and `createOptions` maps `ActionCall.Autonomous` into
+  `CreateOptions.Autonomous` together with either a named workflow or the
+  explicit `No workflow (manual orchestration)` choice. No change was needed in
+  I5; `TestCreateFormAutonomyCompatibleWithBothWorkflowChoices` now pins both
+  combinations.
 
-### Final report (`internal/core/autonomy.go`)
+### Autonomy badge (`internal/tui/autonomy.go`, `internal/tui/view.go`, `internal/tui/status.go`)
 
-- `AutonomyReportOptions` and `ReportAutonomy` (orchestrator-only, running-only,
-  revision-guarded, receipted). It refuses while a result is submitted but
-  unreviewed (`handoff_pending`) or a worker Run is active (`session_active`; the
-  orchestrator's own Run is allowed), then validates the outcome against state:
-  - `ready_to_land` requires an active landing workflow in the integration
-    phase, an accepted integrator and `validateIntegration` (so an integration
-    changed after acceptance returns `integration_changed`);
-  - `ready_to_complete` requires every live task accepted and either a manual
-    workspace or a landed/nothing-to-integrate landing workflow;
-  - `blocked`/`failed` require a non-empty pending list (`pending_required`);
-  - any other value returns `invalid_outcome`.
-- The `--summary-file` plus optional `--artifact` sources are read once,
-  recorded as `Artifact` entries with digest/size/run provenance, and written
-  atomically with the document through `Document.PendingFiles`. The report is
-  set on `Autonomy.Report`, `Autonomy.State` becomes `delivered`, an
-  `autonomous.final_report` decision is appended (evidence = artifact IDs) and
-  the narrative gets an `## Autonomous report` line. Replays idempotently under
-  the operation key.
+- New `autonomyStateBadge` returns `● autonomous running`, `✓ autonomous delivered`
+  or `○ autonomous disabled` (plain text, empty for an interactive workspace) and
+  `(*Model).autonomyBadge` applies the semantic color (accent / success /
+  neutral). Both render the state word in `--no-color` mode.
+- `headerIdentityText` appends the badge after the workspace status, so every
+  workspace route shows it. `statusBadge` recognizes the `delivered` and
+  `disabled` states used by the report and attention rows.
 
-### Menu (`internal/core/workflow.go`)
+### Report view and Needs attention (`internal/tui/autonomy.go`, `routes.go`, `update.go`, `detail.go`)
 
-- New `autonomyReportMenuAction` and `autonomySuggestedOutcome`. While running,
-  the integration phase and a finished manual workspace show `report` (command
-  `autonomy report --summary-file <path> --outcome …`) instead of `land` /
-  `complete`. After delivery the menu shows the report entry plus the existing
-  user actions.
+- New `autonomyContent` detail page renders the mode, source, enabled revision
+  and time, disabled reason, and, once delivered, the final report (outcome,
+  recommendation, phase, integration head, artifact IDs, pending commands).
+- A delivered report is a Needs-attention entry (`Autonomous run delivered:
+  <outcome>`, priority with decisions) whose `Enter` opens the report view. More
+  lists `Autonomy` whenever an autonomy record exists, so the view stays
+  reachable after the attention row is gone. The `autonomy` route is wired into
+  `detailContent`, `detailSections` and `isDetailPage`.
 
-### CLI / help
+### ResolvedBy marker (`internal/tui/routes.go`, `internal/tui/detail.go`)
 
-- `workspace autonomy report --outcome --recommendation --summary-file
-  --artifact --pending --expected-revision` in `internal/cli/autonomy.go`, with
-  `workspace autonomy report` help and flag descriptions.
+- Decisions collection rows append `· by <resolver>` and, when the decision is
+  autonomous, `(autonomous)`.
+- Decision detail adds `Resolved by`, `Autonomous`, `Subject`, an `Evidence`
+  section, and the Run / decider provenance timestamps.
+
+### Guarded disable action (`internal/tui/forms.go`, `backend.go`, `pending.go`)
+
+- `availableActions` offers `Disable autonomous run` from the Orchestrator,
+  Runtime and Autonomy pages while an autonomy record exists and is not
+  `disabled` (and the workspace is not closed). The action opens the required
+  reason form and then a confirmation.
+- `beginAction` records the exact current workspace revision
+  (`ExpectedRevision`) and the per-action `tui_<ULID>` key, and the backend
+  dispatches `Service.DisableAutonomy` with the reason and revision guard. The
+  TUI service actor is empty (user), so no `--user-confirmed` attestation is
+  needed for the user's own terminal action.
+- Added the caption, description, warning severity and `Disabling autonomy`
+  status verb for the action.
+
+### Documentation (`docs/tui.md`)
+
+- The create-form paragraph documents the `Autonomous run` toggle.
+- A new `## Autonomous runs` section documents the badge and its `--no-color`
+  form, the More/report view, the Needs-attention entry, the guarded disable
+  action (`tui_<ULID>` key and revision guard), and that the TUI does not offer
+  `autonomy enable` (A4) or auto-accept results and decisions.
 
 ## Tests
 
-- `internal/core/autonomy_boundary_test.go`: table-driven coverage of every
-  excluded operation (agent → `autonomy_excluded`, terminal user not excluded),
-  publication `allowed` precedence, workspace deletion, and the boundary being
-  released after delivery.
-- `internal/core/autonomy_e2e_test.go`: full autonomous plan-first flow
-  (create → planner accept → advance → implementer accept → prepare → integrator
-  accept → advance → `ready_to_land`), menu while running and after delivery,
-  agent land/complete refusal while running, agent land without attestation
-  after delivery, then user land + complete; the manual flow ending
-  `ready_to_complete`; and report outcome validation
-  (`integration_changed`, `handoff_pending`, `pending_required`,
-  `invalid_outcome`, blocked delivery).
-- `internal/cli/autonomy_test.go`: `autonomy report` delivers and replays.
+- New `internal/tui/autonomy_test.go`:
+  - `TestAutonomyBadgeStatesColorAndNoColor` — every state names itself in color
+    and `--no-color`, and no escape is emitted without color; interactive shows
+    nothing.
+  - `TestAutonomyBadgeRendersInWorkspaceHeader` — the header shows the badge.
+  - `TestDeliveredReportAppearsInAttentionAndOpensReportView` — the delivered
+    report is a Needs-attention row that opens the report view with its outcome,
+    recommendation, artifact and pending command.
+  - `TestMoreExposesAutonomyOnlyWhenEnabled` — More lists the view only for an
+    autonomous workspace.
+  - `TestDisableAutonomyActionUsesRevisionGuardAndTuiKey` — the action is offered
+    for running/delivered, carries revision 7 and a `tui_` key, and is absent
+    when disabled.
+  - `TestDisableAutonomyReasonKeepsGuardedRequest` — the confirmation keeps the
+    same key, revision and reason.
+  - `TestTUIDoesNotOfferAutonomyEnableOrResultAcceptance` — no enable or
+    accept/handoff action on the Orchestrator, Runtime or Autonomy pages.
+  - `TestAutonomyDecisionShowsResolvedByAndEvidence` — the collection and detail
+    surface the resolver, autonomy marker, subject and evidence.
+  - `TestCreateFormAutonomyCompatibleWithBothWorkflowChoices` — autonomy reaches
+    `CreateOptions` for a named workflow and for the manual choice.
 
 ## Acceptance criteria
 
-- Every excluded operation returns `autonomy_excluded` for an agent while
-  running, even with `--user-confirmed` or `publication: allowed`; the terminal
-  user is not excluded and the boundary is released after delivery.
-- `autonomy report` validates the outcome against state, stores an immutable
-  summary artifact, sets `delivered`, appends `autonomous.final_report` and
-  replays idempotently.
-- `menu --json` shows `report` while running in integration or when manual work
-  is done, and shows `land`/`complete` after delivery.
-- The end-to-end plan-first and manual tests pass.
+- The create form passes `Autonomous` and is compatible with both workflow
+  choices.
+- The badge renders running/delivered/disabled in color and `--no-color` modes.
+- Disable from the TUI uses the current revision guard and a `tui_<ULID>` key.
+- No TUI action auto-accepts results or enables autonomy on an existing
+  workspace; enable is not offered in v1 (A4).
+- `go test ./internal/tui -count=1`, gofmt, `go vet ./...` and `go test ./...`
+  pass; `docs/tui.md` documents the new UI.
 
 ## Checks
 
-See `work-products/CHECKS-I3.yaml`. All commands exited 0: gofmt clean,
-`go vet ./...`, `go test ./internal/core -run 'Autonomy|Landing|Complete|Reopen'`,
-`go test ./internal/cli -run 'Autonom'`, and the full `go test ./... -count=1`.
+The exact commands, exit codes and evidence files are in
+`work-products/CHECKS-I5.yaml`. All exited 0: `go test ./internal/tui -count=1`,
+`gofmt -l ./cmd ./internal` (empty), `go vet ./...`, and
+`go test ./... -count=1 -timeout 570s`.
 
 ## Risks and deviations
 
-- Documentation (`README`, `PRODUCT`, `ARCHITECTURE`, `docs/*`) belongs to I4 per
-  PLAN §5; this task changes only CLI help.
-- `ReportAutonomy` permits the terminal user as well as the orchestrator agent
-  (the user always retains authority); it is refused for non-orchestrator agents
-  by `requireOrchestrator`.
-- The `clean` exclusion applies only to non-dry-run cleanup; the read-only
-  `clean --dry-run` inspection stays available.
-- Report artifact source paths are read relative to the process working
-  directory; the bytes are copied into the workspace and verified by digest, so
-  the source path is only used once.
+- The harness environment exports `WORKSPACE_AGENT_ID`, `WORKSPACE_SESSION_ID`,
+  `WORKSPACE_RUN_ID` and `WORKSPACE_ROLE`. These make the pre-existing
+  `TestWorkerProcess` fixture and the CLI actor tests behave as an agent and
+  fail; the failures reproduce unchanged at the base commit `58b5862` without
+  this task's changes. The full-suite evidence therefore clears exactly those
+  variables (`env -u …`), matching the I3 checks file and the maintainer
+  environment. Targeted `go test ./internal/tui` passes with or without them.
+- The TUI never offers `autonomy enable`; enabling stays a terminal-only
+  `workspace autonomy enable` decision (A4).
+- The autonomy badge in the workspace header is plain text because `header()`
+  sanitizes the identity segment; the colored badge is rendered on the Autonomy
+  detail page (`autonomyBadge`).
