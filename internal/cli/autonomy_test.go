@@ -155,3 +155,30 @@ func TestAutonomyCLIUnsupportedWithoutDelivery(t *testing.T) {
 		t.Fatalf("autonomous create without delivery: code=%d output=%s", code, out.String())
 	}
 }
+
+func TestAutonomyCLIDecisionRecordIsOrchestratorOnly(t *testing.T) {
+	for _, key := range []string{"WORKSPACE_AGENT_ID", "WORKSPACE_SESSION_ID", "WORKSPACE_RUN_ID", "WORKSPACE_ROLE", "WORKSPACE_PARENT_SESSION_ID", "WORKSPACE_ID", "WORKSPACE_SCOPE"} {
+		t.Setenv(key, "")
+	}
+	project := autonomyProject(t, true)
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"--json", "--project", project, "create", "--no-workflow", "interactive"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("interactive create failed: %d %s", code, errOut.String())
+	}
+	var created struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errOut.Reset()
+	code := Execute([]string{
+		"--json", "--project", project, "decision", "record", "--workspace", created.Data.Workspace.ID,
+		"--kind", "autonomous.assumption", "--subject", "task:task_01", "--rationale", "chose the minimal scope",
+	}, nil, &out, &errOut)
+	if code != 1 || !bytes.Contains(out.Bytes(), []byte(`"code":"forbidden"`)) {
+		t.Fatalf("terminal-user decision record: code=%d output=%s", code, out.String())
+	}
+}

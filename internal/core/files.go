@@ -232,7 +232,17 @@ func saveDocument(d *Document) error {
 	return flushDocument(d)
 }
 
+// flushDocumentTestHook is set only by tests to inject a persistence failure
+// and verify that a failed mutation commits neither the gate change nor its
+// audit decision.
+var flushDocumentTestHook func(*Document) error
+
 func flushDocument(d *Document) error {
+	if flushDocumentTestHook != nil {
+		if err := flushDocumentTestHook(d); err != nil {
+			return err
+		}
+	}
 	before := d.Registry.WorkspaceDigest
 	for key, op := range d.Registry.Operations {
 		if op.Revision == 0 {

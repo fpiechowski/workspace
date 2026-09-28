@@ -79,6 +79,23 @@ func decisionCommands(o *options) *cobra.Command {
 	f.IntVar(&opt.ExpectedRevision, "expected-revision", 0, "Revision of the pending decision")
 	f.BoolVar(&opt.UserConfirmed, "user-confirmed", false, "Orchestrator attests this answer was explicitly supplied by the user")
 	group.AddCommand(answer)
+	var record core.DecisionRecordOptions
+	recordCmd := command("record", "Record an autonomous assumption or worker-question answer", func(c *cobra.Command, _ []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.RecordDecision(c.Context(), id, record, o.key)
+		if err != nil {
+			return err
+		}
+		return o.emit(v)
+	})
+	recordCmd.Flags().StringVar(&record.Kind, "kind", "autonomous.assumption", "Decision kind: autonomous.assumption or autonomous.question_answer")
+	recordCmd.Flags().StringVar(&record.Subject, "subject", "", "Decision subject, such as task:task_01, handoff:handoff_01 or phase:plan_review")
+	recordCmd.Flags().StringVar(&record.Reason, "rationale", "", "Recorded rationale for the decision")
+	recordCmd.Flags().StringSliceVar(&record.Evidence, "evidence", nil, "Artifact IDs, check IDs or commits supporting the decision")
+	group.AddCommand(recordCmd)
 	return group
 }
 func releaseCommands(o *options) *cobra.Command {
@@ -105,6 +122,8 @@ func stateCommands(o *options) *cobra.Command {
 	group := &cobra.Command{Use: "state", Short: "Update durable state with revision checking"}
 	var file string
 	var expected int
+	var updateRationale string
+	var updateEvidence []string
 	update := command("update", "Apply a typed YAML/JSON patch", func(c *cobra.Command, _ []string) error {
 		b, err := os.ReadFile(file)
 		if err != nil {
@@ -118,7 +137,7 @@ func stateCommands(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		v, err := s.UpdateState(c.Context(), id, expected, patch, o.key)
+		v, err := s.UpdateStateAudited(c.Context(), id, expected, patch, updateRationale, updateEvidence, o.key)
 		if err != nil {
 			return err
 		}
@@ -126,6 +145,8 @@ func stateCommands(o *options) *cobra.Command {
 	})
 	update.Flags().StringVar(&file, "patch-file", "", "title, body, status, phase patch")
 	update.Flags().IntVar(&expected, "expected-revision", 0, "Required current workspace revision")
+	update.Flags().StringVar(&updateRationale, "rationale", "", "Autonomous-run rationale for a phase-changing patch")
+	update.Flags().StringSliceVar(&updateEvidence, "evidence", nil, "Audit evidence for the autonomous decision; repeat or comma-separate")
 	group.AddCommand(update)
 	var editedFile string
 	var editExpected int

@@ -468,18 +468,22 @@ func newRoot(o *options) *cobra.Command {
 	selectCmd.Args = cobra.ExactArgs(1)
 	workflow.AddCommand(selectCmd)
 	var phase string
+	var advanceRationale string
+	var advanceEvidence []string
 	advance := command("advance", "Validate current results and advance one workflow phase", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err
 		}
-		v, err := s.AdvanceWorkflow(c.Context(), id, phase, o.key)
+		v, err := s.AdvanceWorkflowAudited(c.Context(), id, phase, advanceRationale, advanceEvidence, o.key)
 		if err != nil {
 			return err
 		}
 		return o.emit(v)
 	})
 	advance.Flags().StringVar(&phase, "to", "", "Expected next phase")
+	advance.Flags().StringVar(&advanceRationale, "rationale", "", "Autonomous-run rationale for advancing the workflow")
+	advance.Flags().StringSliceVar(&advanceEvidence, "evidence", nil, "Audit evidence for the autonomous decision; repeat or comma-separate")
 	workflow.AddCommand(advance)
 	workflow.AddCommand(revisionCommand(o, true))
 	root.AddCommand(workflow)

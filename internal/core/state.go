@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 )
 
 type StatePatch struct {
@@ -20,8 +21,19 @@ func ParseStatePatch(b []byte) (StatePatch, error) {
 	return p, err
 }
 func (s *Service) UpdateState(ctx context.Context, selector string, expected int, patch StatePatch, keys ...string) (Status, error) {
+	return s.UpdateStateAudited(ctx, selector, expected, patch, "", nil, keys...)
+}
+
+// UpdateStateAudited is UpdateState with the rationale and evidence an
+// autonomous orchestrator must attach to a phase-changing patch while the run
+// is running.
+func (s *Service) UpdateStateAudited(ctx context.Context, selector string, expected int, patch StatePatch, rationale string, evidence []string, keys ...string) (Status, error) {
 	var out Status
-	err := mutate(s, ctx, selector, keys, []any{"state.update", expected, patch}, &out, s.requireOrchestrator, func(d *Document) error {
+	request := any([]any{"state.update", expected, patch})
+	if strings.TrimSpace(rationale) != "" || len(evidence) > 0 {
+		request = []any{"state.update", expected, patch, rationale, evidence}
+	}
+	err := mutate(s, ctx, selector, keys, request, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
 		}
@@ -46,9 +58,13 @@ func (s *Service) UpdateState(ctx context.Context, selector string, expected int
 			}
 		}
 		if patch.Phase != nil {
+			if err := s.requireGateRationale(d, rationale); err != nil {
+				return err
+			}
 			if err := advance(ctx, d, *patch.Phase); err != nil {
 				return err
 			}
+			s.appendGateDecision(d, "autonomous.phase_advance", "phase:"+*patch.Phase, rationale, evidence)
 		}
 		if err := saveDocument(d); err != nil {
 			return err

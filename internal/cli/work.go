@@ -46,12 +46,14 @@ func taskCommands(o *options) *cobra.Command {
 		return o.emit(v.Workspace.Tasks)
 	}))
 	var reason string
+	var retryRationale string
+	var retryEvidence []string
 	retry := command("retry <task>", "Start a fresh attempt, invalidating dependent results", func(c *cobra.Command, args []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err
 		}
-		v, err := s.RetryTask(c.Context(), id, args[0], reason, o.key)
+		v, err := s.RetryTaskAudited(c.Context(), id, args[0], reason, retryRationale, retryEvidence, o.key, core.MutationGuard{})
 		if err != nil {
 			return err
 		}
@@ -59,6 +61,8 @@ func taskCommands(o *options) *cobra.Command {
 	})
 	retry.Args = cobra.ExactArgs(1)
 	retry.Flags().StringVar(&reason, "reason", "Retry requested", "Reason for new attempt")
+	retry.Flags().StringVar(&retryRationale, "rationale", "", "Autonomous-run rationale for retrying the task")
+	retry.Flags().StringSliceVar(&retryEvidence, "evidence", nil, "Audit evidence for the autonomous decision; repeat or comma-separate")
 	group.AddCommand(retry)
 	for _, retirement := range []struct{ command, state string }{
 		{command: "cancel", state: "cancelled"},
@@ -67,12 +71,14 @@ func taskCommands(o *options) *cobra.Command {
 	} {
 		commandName, state := retirement.command, retirement.state
 		var retirementReason string
+		var retirementRationale string
+		var retirementEvidence []string
 		retire := command(commandName+" <task>", "Retire a task without creating a new attempt", func(c *cobra.Command, args []string) error {
 			s, id, err := o.scope()
 			if err != nil {
 				return err
 			}
-			v, err := s.RetireTask(c.Context(), id, args[0], state, retirementReason, o.key, core.MutationGuard{})
+			v, err := s.RetireTaskAudited(c.Context(), id, args[0], state, retirementReason, retirementRationale, retirementEvidence, o.key, core.MutationGuard{})
 			if err != nil {
 				return err
 			}
@@ -80,6 +86,8 @@ func taskCommands(o *options) *cobra.Command {
 		})
 		retire.Args = cobra.ExactArgs(1)
 		retire.Flags().StringVar(&retirementReason, "reason", "", "Reason for retiring the task")
+		retire.Flags().StringVar(&retirementRationale, "rationale", "", "Autonomous-run rationale for retiring the task")
+		retire.Flags().StringSliceVar(&retirementEvidence, "evidence", nil, "Audit evidence for the autonomous decision; repeat or comma-separate")
 		switch commandName {
 		case "cancel":
 			retire.Aliases = []string{"cancelled"}
@@ -242,6 +250,8 @@ func handoffCommands(o *options) *cobra.Command {
 	for _, verb := range []string{"accept", "reject"} {
 		verb := verb
 		var file string
+		var rationale string
+		var evidence []string
 		c := command(verb+" <handoff>", "Review a handoff separately from inbox acknowledgement", func(c *cobra.Command, args []string) error {
 			feedback := ""
 			if file != "" {
@@ -255,7 +265,7 @@ func handoffCommands(o *options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			v, err := s.ReviewHandoff(c.Context(), id, args[0], verb == "accept", feedback, o.key)
+			v, err := s.ReviewHandoffAudited(c.Context(), id, args[0], verb == "accept", feedback, rationale, evidence, o.key)
 			if err != nil {
 				return err
 			}
@@ -263,6 +273,8 @@ func handoffCommands(o *options) *cobra.Command {
 		})
 		c.Args = cobra.ExactArgs(1)
 		c.Flags().StringVar(&file, "reason-file", "", "Review feedback (required to reject)")
+		c.Flags().StringVar(&rationale, "rationale", "", "Autonomous-run rationale for accepting or rejecting the result")
+		c.Flags().StringSliceVar(&evidence, "evidence", nil, "Audit evidence for the autonomous decision; repeat or comma-separate")
 		group.AddCommand(c)
 	}
 	return group

@@ -215,6 +215,12 @@ func taskReady(d *Document, t *Task) error {
 // intentionally separate from RetryTask: retry creates a new attempt, while
 // retirement preserves the current attempt and its explanation in history.
 func (s *Service) RetireTask(ctx context.Context, selector, id, state, reason, key string, guard MutationGuard) (Task, error) {
+	return s.RetireTaskAudited(ctx, selector, id, state, reason, "", nil, key, guard)
+}
+
+// RetireTaskAudited is RetireTask with the rationale and evidence an autonomous
+// orchestrator must attach while the run is running.
+func (s *Service) RetireTaskAudited(ctx context.Context, selector, id, state, reason, rationale string, evidence []string, key string, guard MutationGuard) (Task, error) {
 	var out Task
 	if state != "cancelled" && state != "abandoned" && state != "superseded" {
 		return out, fail("invalid_task_state", "retirement state must be cancelled, abandoned or superseded")
@@ -224,10 +230,15 @@ func (s *Service) RetireTask(ctx context.Context, selector, id, state, reason, k
 	}
 	request := struct {
 		Task, State, Reason string
+		Rationale           string   `json:"rationale,omitempty"`
+		Evidence            []string `json:"evidence,omitempty"`
 		Guard               MutationGuard
-	}{id, state, reason, guard}
+	}{id, state, reason, rationale, evidence, guard}
 	err := mutate(s, ctx, selector, []string{key}, request, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		if err := s.requireGateRationale(d, rationale); err != nil {
 			return err
 		}
 		if err := rejectNewWorkspaceWork(d, "retiring tasks"); err != nil {
@@ -257,6 +268,7 @@ func (s *Service) RetireTask(ctx context.Context, selector, id, state, reason, k
 		// evidence remains addressable as history.
 		t.State, t.Reason = state, reason
 		out = *t
+		s.appendGateDecision(d, "autonomous.retire", "task:"+t.ID, rationale, evidence)
 		return saveDocument(d)
 	})
 	return out, err
@@ -275,23 +287,36 @@ func (s *Service) SupersedeTask(ctx context.Context, selector, id, reason, key s
 }
 
 func (s *Service) RetryTask(ctx context.Context, selector, id, reason, key string) (Task, error) {
-	return s.retryTask(ctx, selector, id, reason, key, MutationGuard{})
+	return s.retryTask(ctx, selector, id, reason, "", nil, key, MutationGuard{})
+}
+
+// RetryTaskAudited is RetryTask with the rationale and evidence an autonomous
+// orchestrator must attach while the run is running. An autonomous run allows at
+// most one retry per task per run.
+func (s *Service) RetryTaskAudited(ctx context.Context, selector, id, reason, rationale string, evidence []string, key string, guard MutationGuard) (Task, error) {
+	return s.retryTask(ctx, selector, id, reason, rationale, evidence, key, guard)
 }
 
 // RetryTaskGuarded includes the visible revision and attempt in the operation
 // digest and validates them under the same project lock as the retry.
 func (s *Service) RetryTaskGuarded(ctx context.Context, selector, id, reason, key string, guard MutationGuard) (Task, error) {
-	return s.retryTask(ctx, selector, id, reason, key, guard)
+	return s.retryTask(ctx, selector, id, reason, "", nil, key, guard)
 }
 
-func (s *Service) retryTask(ctx context.Context, selector, id, reason, key string, guard MutationGuard) (Task, error) {
+func (s *Service) retryTask(ctx context.Context, selector, id, reason, rationale string, evidence []string, key string, guard MutationGuard) (Task, error) {
 	var out Task
-	var request any = struct{ Task, Reason string }{id, reason}
+	var request any = struct {
+		Task, Reason string
+		Rationale    string   `json:"rationale,omitempty"`
+		Evidence     []string `json:"evidence,omitempty"`
+	}{id, reason, rationale, evidence}
 	if !guard.empty() {
 		request = struct {
 			Task, Reason string
+			Rationale    string   `json:"rationale,omitempty"`
+			Evidence     []string `json:"evidence,omitempty"`
 			Guard        MutationGuard
-		}{id, reason, guard}
+		}{id, reason, rationale, evidence, guard}
 	}
 	err := s.With(ctx, selector, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
@@ -327,6 +352,12 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, key strin
 		}
 		if guard.ExpectedAttempt != 0 && t.Attempt != guard.ExpectedAttempt {
 			return fail("target_changed", "task %s moved from attempt %d to %d", id, guard.ExpectedAttempt, t.Attempt)
+		}
+		if err := s.requireGateRationale(d, rationale); err != nil {
+			return err
+		}
+		if err := s.requireAutonomyBound(d, "autonomous.retry", "task:"+t.ID, 1, "retry"); err != nil {
+			return err
 		}
 		if err := rejectNewWorkspaceWork(d, "retrying tasks"); err != nil {
 			return err
@@ -396,6 +427,7 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, key strin
 				d.State.ChangeRequests[i].State = "outdated"
 			}
 		}
+		s.appendGateDecision(d, "autonomous.retry", "task:"+t.ID, rationale, evidence)
 		d.remember(key, request, t.ID)
 		out = *t
 		return saveResource(d, key, out)

@@ -434,15 +434,33 @@ func advance(ctx context.Context, d *Document, target string) error {
 	return nil
 }
 func (s *Service) AdvanceWorkflow(ctx context.Context, selector, target, key string) (Status, error) {
+	return s.AdvanceWorkflowAudited(ctx, selector, target, "", nil, key)
+}
+
+// AdvanceWorkflowAudited is AdvanceWorkflow with the rationale and evidence an
+// autonomous orchestrator must attach while the run is running.
+func (s *Service) AdvanceWorkflowAudited(ctx context.Context, selector, target, rationale string, evidence []string, key string) (Status, error) {
 	var out Status
-	req := struct{ Action, Target string }{"workflow.advance", target}
+	req := struct {
+		Action, Target string
+		Rationale      string   `json:"rationale,omitempty"`
+		Evidence       []string `json:"evidence,omitempty"`
+	}{Action: "workflow.advance", Target: target, Rationale: rationale, Evidence: evidence}
 	err := mutate(s, ctx, selector, []string{key}, req, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
+			return err
+		}
+		if err := s.requireGateRationale(d, rationale); err != nil {
 			return err
 		}
 		if err := advance(ctx, d, target); err != nil {
 			return err
 		}
+		phase := ""
+		if d.State.Workflow != nil {
+			phase = d.State.Workflow.Phase
+		}
+		s.appendGateDecision(d, "autonomous.phase_advance", "phase:"+phase, rationale, evidence)
 		if err := saveDocument(d); err != nil {
 			return err
 		}
