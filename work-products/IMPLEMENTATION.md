@@ -4,6 +4,8 @@
 
 - `e103113` — `merge: prepare combined T3 implementation base`
 - `22ce331` — `chore: resolve case-insensitive check manifest collision`
+- `e223dd5` — `docs: record combined T3 base implementation`
+- `4a2d32b` — `chore: add base merge check receipts`
 
 ## Changes
 
