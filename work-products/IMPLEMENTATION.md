@@ -1,35 +1,47 @@
-# T3 implementation report
+# Implementation report — task_01M3KJ6ZDVJF6R62YRRJDQP5KC
 
 ## Commit
 
-`f7d34d7` — `feat: remove legacy workflow and default plan-first`
+- `8414095` — `feat(core): migrate legacy workflows on load`
 
 ## Changes
 
-- Removed the embedded `issue-resolution` workflow templates and removed its listing/selection special cases.
-- Made `plan-first` the effective default for every create path unless `--no-workflow` is explicit. The effective default is applied after replay lookup, so older operation payloads remain replayable.
-- Updated explicit legacy workflow errors with the removal hint and updated project-init workflow configuration to plan-first v2, including the integration profile and landing capabilities.
-- Added stock-template refresh for known plan-first template digests, `stale_templates` reporting for customized files, embedded prompt fallback, and the plan-first v2 integration/orchestrator templates.
-- Updated CLI flag/help text and preselected plan-first in the TUI create form.
-- Updated tests whose prior contract expected omitted workflows to remain pending; explicit manual tests now use `--no-workflow`.
+- `internal/core/workflow_migration.go`: added idempotent `issue-resolution` to
+  `plan-first` migration. It maps legacy phases, installs the v2 capabilities,
+  preserves task/integration/history state, defaults integration target and
+  strategy, supersedes pending live-testing decisions, and stages the old
+  snapshots plus a migration manifest through `PendingFiles`. Active workspaces
+  receive plan-first snapshots using project templates with embedded fallback;
+  completed and archived workspaces only receive the state rewrite.
+- `internal/core/files.go`: invokes the migration during document load and saves
+  it through the existing write-ahead recovery path.
+- `internal/core/workflow_migration_test.go`: covers direct legacy fixture
+  migration, state preservation, history staging, decision supersession, and
+  second-load idempotence.
 
 ## Acceptance criteria
 
-- Workflow listing no longer exposes `issue-resolution`, including when old on-disk templates or config entries exist; explicit use returns `unknown_workflow` with the removal hint.
-- Omitted workflow creates produce active plan-first workspaces, while `--no-workflow` produces manual workspaces; replay comparison uses the pre-upgrade request payload.
-- Project initialization refreshes known stock templates, preserves customized templates while reporting them, and snapshots missing plan-first prompts from the embedded filesystem.
-- Embedded legacy templates are deleted and plan-first v2 documentation includes integration preparation, conflict handling, user-approved landing, and completion.
+- Legacy workflow state is rewritten to plan-first v2 and mapped to the
+  integration phase where required.
+- Integration defaults, preserved history, cleared change-request mode, and
+  superseded live-testing decisions are covered.
+- Snapshot/history writes use `PendingFiles`, so existing `pending.json`
+  recovery remains applicable; template failures do not prevent state rewrite.
+- The second migration call is a no-op.
 
 ## Checks
 
-- `gofmt -l ./cmd ./internal` — exit 0, empty output.
-- `go vet ./...` — exit 0.
-- `env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 180s` — exit 0.
-- `go build -o /tmp/workspace-t3-removal ./cmd/workspace && python3 scripts/check-install.py /tmp/workspace-t3-removal` — exit 0.
-
-The worker identity variables were unset for the full Go test command because existing CLI tests intentionally reject inherited worker identity in synthetic actor scenarios.
+| Command | Exit | Evidence |
+|---|---:|---|
+| `gofmt -l ./cmd ./internal` | 0 | `evidence-gofmt.txt` |
+| `go vet ./...` | 0 | `evidence-vet.txt` |
+| `env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 570s` | 0 | `evidence-go-test-all.txt` |
+| `WORKSPACE_TMUX_TEST=1 go test -race ./internal/core -timeout 90s` | 0 | `evidence-tmux-core.txt` |
+| `go test ./internal/core -run TestMigrateLegacyWorkflowRewritesStateAndSnapshotsHistory -count=1` | 0 | terminal check |
 
 ## Risks and deviations
 
-- `stale_templates` is a result-only field (`yaml:"-"`) and is not written into the persisted project configuration.
-- The extended workflow capability fallback remains in capability snapshots for compatibility with legacy workspace migration; it is no longer bundled or selectable.
+- The migration deliberately leaves completed and archived workspaces without
+  snapshot/history file changes, as required by the terminal-state rule.
+- The full repository test command was run with worker identity variables unset,
+  matching the repository's existing CLI test requirement.
