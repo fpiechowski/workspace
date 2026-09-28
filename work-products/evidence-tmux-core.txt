@@ -1,3 +1,1 @@
-open -test.timeout=1m30s: no such file or directory
-FAIL	workspace/internal/core	5.882s
-FAIL
+ok  	workspace/internal/core	35.665s
