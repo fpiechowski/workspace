@@ -18,6 +18,7 @@ import (
 
 	"workspace/internal/buildinfo"
 	"workspace/internal/core"
+	"workspace/internal/tui"
 )
 
 func TestProfileListIncludesReasoningEffort(t *testing.T) {
@@ -1004,5 +1005,209 @@ func TestIntegrationLandJSON(t *testing.T) {
 		if !strings.Contains(helpOut.String(), want) {
 			t.Errorf("integration land help lacks %q:\n%s", want, helpOut.String())
 		}
+	}
+}
+
+// initLinkedCLIProject prepares a Git project whose default configuration can
+// launch the orchestrator, so the completion/evaluation flow can be exercised.
+func initLinkedCLIProject(t *testing.T) (string, *core.Service) {
+	t.Helper()
+	project := t.TempDir()
+	cliGit(t, project, "init")
+	cliCommit(t, project, "initial")
+	if _, err := core.InitProject(context.Background(), project); err != nil {
+		t.Fatal(err)
+	}
+	s := &core.Service{Root: project, Runtime: &cliFakeRuntime{}, Executable: os.Args[0]}
+	cfg, err := s.Config()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Clients = map[string]core.Client{"test": {Adapter: "command", LaunchArgv: []string{os.Args[0], "{prompt}"}}}
+	cfg.Profiles = map[string]core.Profile{}
+	cfg.Defaults.OrchestratorProfile = "frontier"
+	cfg.Profiles["frontier"] = core.Profile{Routes: []core.Route{{ID: "frontier-a", Client: "test", Provider: "a", Model: "test-model", MaxConcurrency: 8}}}
+	config, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".workspace", "config.yaml"), config, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return project, s
+}
+
+// The CLI JSON of issue-evaluation record equals workspace status --json, and
+// the same operation key replays the committed result.
+func TestIssueEvaluationRecordJSONMatchesStatusAndReplays(t *testing.T) {
+	project := t.TempDir()
+	cliGit(t, project, "init")
+	cliCommit(t, project, "initial")
+	if _, err := core.InitProject(context.Background(), project); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if code := Execute([]string{"--json", "--project", project, "issue", "create", "Deliver the linked feature", "--title", "Linked feature"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("issue create failed: %d %s", code, errOut.String())
+	}
+	var createdIssue struct {
+		OK   bool       `json:"ok"`
+		Data core.Issue `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &createdIssue); err != nil {
+		t.Fatal(err)
+	}
+	if !createdIssue.OK || createdIssue.Data.ID == "" {
+		t.Fatalf("issue create response: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Execute([]string{"--json", "--project", project, "create", "--from-issue", createdIssue.Data.ID, "--no-workflow", "--operation-key", "link:1"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("linked create failed: %d %s", code, errOut.String())
+	}
+	var created struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if !created.OK || created.Data.Workspace.Input.IssueID != createdIssue.Data.ID {
+		t.Fatalf("linked create response: %s", out.String())
+	}
+	ws := created.Data.Workspace.ID
+	revision := created.Data.Workspace.Revision
+
+	out.Reset()
+	errOut.Reset()
+	if code := Execute([]string{
+		"--json", "--project", project, "complete", "--workspace", ws,
+		"--reason", "delivered", "--expected-revision", strconv.Itoa(revision),
+		"--no-issue-evaluation-start", "--operation-key", "complete:eval-cli",
+	}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("complete failed: %d %s", code, errOut.String())
+	}
+	var completed struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &completed); err != nil {
+		t.Fatal(err)
+	}
+	if eval := completed.Data.Workspace.IssueEvaluation; eval == nil || eval.State != "pending" {
+		t.Fatalf("suppressed launch did not leave a pending evaluation: %s", out.String())
+	}
+	revision = completed.Data.Workspace.Revision
+
+	recordArgs := []string{
+		"--json", "--project", project, "issue-evaluation", "record", "--workspace", ws,
+		"--outcome", "delivered", "--reason", "Every criterion has evidence",
+		"--expected-revision", strconv.Itoa(revision), "--operation-key", "issue-evaluation:cli",
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := Execute(recordArgs, nil, &out, &errOut); code != 0 {
+		t.Fatalf("issue-evaluation record failed: %d %s", code, errOut.String())
+	}
+	var recorded struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &recorded); err != nil {
+		t.Fatal(err)
+	}
+	if eval := recorded.Data.Workspace.IssueEvaluation; eval == nil || eval.State != "recorded" || eval.Outcome != "delivered" {
+		t.Fatalf("record response: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Execute([]string{"--json", "--project", project, "status", "--workspace", ws}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("status failed: %d %s", code, errOut.String())
+	}
+	var status struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(recorded.Data, status.Data) {
+		t.Fatalf("record JSON differs from status JSON:\nrecord=%s\nstatus=%s", out.String(), out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Execute(recordArgs, nil, &out, &errOut); code != 0 {
+		t.Fatalf("issue-evaluation record replay failed: %d %s", code, errOut.String())
+	}
+	var replayed struct {
+		OK   bool        `json:"ok"`
+		Data core.Status `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &replayed); err != nil {
+		t.Fatal(err)
+	}
+	if !replayed.OK || !reflect.DeepEqual(replayed.Data, recorded.Data) {
+		t.Fatalf("issue-evaluation replay did not return the committed result: %s", out.String())
+	}
+}
+
+// The TUI complete_workspace action goes through CoreBackend and triggers the
+// same automatic linked-Issue evaluation launch as the CLI. A replay of the
+// action key does not start a second Run.
+func TestTUICompleteWorkspaceLaunchesEvaluation(t *testing.T) {
+	_, s := initLinkedCLIProject(t)
+	ctx := context.Background()
+	issue, err := s.IntakeIssue(ctx, core.IssueCreateOptions{Title: "Linked TUI", Body: "Deliver the TUI flow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.CreateFromIssue(ctx, issue.ID, core.CreateOptions{NoWorkflow: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws := created.Workspace.ID
+	call := tui.ActionCall{Action: "complete_workspace", Reason: "tui completion", ExpectedRevision: created.Workspace.Revision, Key: "tui-complete-eval"}
+	backend := tui.CoreBackend{Service: s}
+	if err := backend.PerformAction(ctx, ws, call); err != nil {
+		t.Fatalf("tui complete_workspace failed: %v", err)
+	}
+
+	countRuns := func() int {
+		t.Helper()
+		status, err := s.Status(ctx, ws)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status.Workspace.Status != "completed" {
+			t.Fatalf("workspace status: %s", status.Workspace.Status)
+		}
+		if eval := status.Workspace.IssueEvaluation; eval == nil || eval.State != "pending" {
+			t.Fatalf("evaluation after tui completion: %+v", eval)
+		}
+		count := 0
+		for _, session := range status.Sessions {
+			if !session.Active() || session.AgentSnapshot.Role != "orchestrator" {
+				continue
+			}
+			for _, run := range status.Runs {
+				if run.ID == session.CurrentRunID && run.ConversationOnly {
+					count++
+				}
+			}
+		}
+		return count
+	}
+	if runs := countRuns(); runs != 1 {
+		t.Fatalf("tui completion started %d conversation-only Runs, want one", runs)
+	}
+	if err := backend.PerformAction(ctx, ws, call); err != nil {
+		t.Fatalf("tui complete_workspace replay failed: %v", err)
+	}
+	if runs := countRuns(); runs != 1 {
+		t.Fatalf("tui completion replay started another Run: %d", runs)
 	}
 }

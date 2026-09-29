@@ -583,12 +583,13 @@ func newRoot(o *options) *cobra.Command {
 	var completeReason string
 	var completeConfirmed bool
 	var completeExpected int
+	var completeNoEvaluationLaunch bool
 	complete := command("complete", "Complete a manual workspace or a landed plan-first workflow after explicit user confirmation", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()
 		if err != nil {
 			return err
 		}
-		v, err := s.CompleteWorkspace(c.Context(), id, core.CompleteOptions{Reason: completeReason, UserConfirmed: completeConfirmed, ExpectedRevision: completeExpected}, o.key)
+		v, err := s.CompleteWorkspace(c.Context(), id, core.CompleteOptions{Reason: completeReason, UserConfirmed: completeConfirmed, ExpectedRevision: completeExpected, NoEvaluationLaunch: completeNoEvaluationLaunch}, o.key)
 		if err != nil {
 			return err
 		}
@@ -597,7 +598,26 @@ func newRoot(o *options) *cobra.Command {
 	complete.Flags().StringVar(&completeReason, "reason", "", "Reason recorded for the completion")
 	complete.Flags().BoolVar(&completeConfirmed, "user-confirmed", false, "Attest that the user explicitly requested completion when running from an agent session")
 	complete.Flags().IntVar(&completeExpected, "expected-revision", 0, "Required current workspace revision")
+	complete.Flags().BoolVar(&completeNoEvaluationLaunch, "no-issue-evaluation-start", false, "Do not start the orchestrator to evaluate a linked Issue; leave the evaluation pending")
 	root.AddCommand(complete)
+	issueEvaluation := &cobra.Command{Use: "issue-evaluation", Short: "Record the completed workspace's linked Issue evaluation"}
+	var evaluation core.IssueEvaluationOptions
+	recordEvaluation := command("record", "Record whether the completed workspace delivered its linked Issue", func(c *cobra.Command, _ []string) error {
+		s, id, err := o.scope()
+		if err != nil {
+			return err
+		}
+		v, err := s.RecordIssueEvaluation(c.Context(), id, evaluation, o.key)
+		if err != nil {
+			return err
+		}
+		return o.emit(v)
+	})
+	recordEvaluation.Flags().StringVar(&evaluation.Outcome, "outcome", "", "delivered | not_delivered")
+	recordEvaluation.Flags().StringVar(&evaluation.Reason, "reason", "", "Per-criterion evidence for the outcome")
+	recordEvaluation.Flags().IntVar(&evaluation.ExpectedRevision, "expected-revision", 0, "Required current workspace revision")
+	issueEvaluation.AddCommand(recordEvaluation)
+	root.AddCommand(issueEvaluation)
 	var reopenReason string
 	var reopenConfirmed bool
 	var reopenExpected int

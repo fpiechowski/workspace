@@ -655,11 +655,32 @@ func landingMenuActions(d *Document) []MenuAction {
 	}
 }
 
+// issueEvaluationMenuActions exposes the pending linked-Issue evaluation of a
+// completed Workspace. The action replays safely: the record operation is
+// revision-guarded and idempotent under its operation key.
+func issueEvaluationMenuActions(d *Document) []MenuAction {
+	eval := d.State.IssueEvaluation
+	if eval == nil || eval.State != "pending" {
+		return nil
+	}
+	return []MenuAction{{"issue_evaluation", "Evaluate linked Issue delivery", fmt.Sprintf("issue-evaluation record --outcome <delivered|not_delivered> --reason <reason> --expected-revision %d", d.State.Revision)}}
+}
+
+// completedConversationLabel names the launch failure in the completed-workspace
+// conversation action so the user sees why no evaluation Run is active.
+func completedConversationLabel(d *Document) string {
+	if eval := d.State.IssueEvaluation; eval != nil && eval.State == "pending" && eval.LaunchError != "" {
+		return "Start orchestrator to evaluate linked Issue"
+	}
+	return "Start or resume conversation"
+}
+
 type MenuAction struct {
 	ID      string `json:"id" yaml:"id"`
 	Label   string `json:"label" yaml:"label"`
 	Command string `json:"command" yaml:"command"`
 }
+
 type Menu struct {
 	Revision        int          `json:"revision" yaml:"revision"`
 	Phase           string       `json:"phase" yaml:"phase"`
@@ -683,7 +704,8 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 			out.Phase = "manual"
 			switch d.State.Status {
 			case "completed":
-				out.Actions = append(out.Actions, MenuAction{"conversation", "Start or resume conversation", "start"})
+				out.Actions = append(out.Actions, MenuAction{"conversation", completedConversationLabel(d), "start"})
+				out.Actions = append(out.Actions, issueEvaluationMenuActions(d)...)
 				out.Actions = append(out.Actions, MenuAction{"reopen", "Reopen completed workspace", "reopen --reason <reason> --expected-revision <revision>"})
 				out.Actions = append(out.Actions, MenuAction{"archive", "Archive this workspace", "archive"})
 			case "archived":
@@ -707,7 +729,8 @@ func (s *Service) Menu(ctx context.Context, selector string) (Menu, error) {
 		}
 		out.Phase = d.State.Workflow.Phase
 		if d.State.Status == "completed" {
-			out.Actions = append(out.Actions, MenuAction{"conversation", "Start or resume conversation", "start"})
+			out.Actions = append(out.Actions, MenuAction{"conversation", completedConversationLabel(d), "start"})
+			out.Actions = append(out.Actions, issueEvaluationMenuActions(d)...)
 			out.Actions = append(out.Actions, MenuAction{"reopen", "Reopen completed workspace", "reopen --reason <reason> --expected-revision <revision>"})
 			out.Actions = append(out.Actions, MenuAction{"archive", "Archive this workspace", "archive"})
 			return nil

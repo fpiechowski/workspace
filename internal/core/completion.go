@@ -8,11 +8,14 @@ import (
 
 // CompleteOptions carries the explicit user attestation and the optimistic
 // revision guard for completing a manual workspace or a landed plan-first
-// workflow.
+// workflow. NoEvaluationLaunch suppresses the post-commit evaluation launch so
+// tests and users can complete a linked workspace without starting the
+// orchestrator; the evaluation stays pending and workspace start retries it.
 type CompleteOptions struct {
-	Reason           string
-	UserConfirmed    bool
-	ExpectedRevision int
+	Reason             string
+	UserConfirmed      bool
+	ExpectedRevision   int
+	NoEvaluationLaunch bool
 }
 
 // CompleteWorkspace is the dedicated terminal operation for an intentionally
@@ -48,6 +51,73 @@ func (s *Service) CompleteWorkspace(ctx context.Context, selector string, opt Co
 			return s.completeLanding(ctx, d, opt, &out)
 		}
 		return fail("operation_not_applicable", "workspace completion is only available for an intentionally manual workspace or a landed plan-first workflow")
+	})
+	if err != nil {
+		return out, err
+	}
+	s.launchIssueEvaluation(ctx, selector, opt, &out)
+	return out, nil
+}
+
+// launchIssueEvaluation performs the best-effort post-commit launch of the
+// conversation-only orchestrator Run that evaluates the linked Issue. The
+// committed completion is never rolled back: a launch failure only records
+// issue_evaluation.launch_error so status and menu can surface the recovery.
+func (s *Service) launchIssueEvaluation(ctx context.Context, selector string, opt CompleteOptions, out *Status) {
+	if opt.NoEvaluationLaunch {
+		return
+	}
+	eval := out.Workspace.IssueEvaluation
+	if eval == nil || eval.State != "pending" {
+		return
+	}
+	if launchErr := s.startIssueEvaluationRun(ctx, selector, eval); launchErr != nil {
+		updated, recordErr := s.recordIssueEvaluationLaunchError(ctx, selector, eval.ID, launchErr)
+		if recordErr == nil {
+			*out = updated
+		}
+	}
+}
+
+// startIssueEvaluationRun is idempotent: it skips the launch when the
+// orchestrator already has an active Session (an earlier launch, a user
+// conversation, or a replay of the completion) and otherwise starts the
+// evaluation Run under the stable "issue-evaluation:<ieval id>" operation key.
+func (s *Service) startIssueEvaluationRun(ctx context.Context, selector string, eval *IssueEvaluation) error {
+	active := false
+	if err := s.With(ctx, selector, func(d *Document) error {
+		for _, session := range d.Registry.Sessions {
+			if session.AgentID == d.State.OrchestratorAgentID && session.Active() {
+				active = true
+				break
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if active {
+		return nil
+	}
+	_, err := s.StartOrchestrator(ctx, selector, "issue-evaluation:"+eval.ID)
+	return err
+}
+
+// recordIssueEvaluationLaunchError stores the launch failure on the still
+// pending evaluation. It is a small independent mutation because the
+// completion itself has already committed and must not be undone.
+func (s *Service) recordIssueEvaluationLaunchError(ctx context.Context, selector, evalID string, launchErr error) (Status, error) {
+	var out Status
+	err := s.With(ctx, selector, func(d *Document) error {
+		eval := d.State.IssueEvaluation
+		if eval != nil && eval.ID == evalID && eval.State == "pending" {
+			eval.LaunchError = launchErr.Error()
+			if err := saveDocument(d); err != nil {
+				return err
+			}
+		}
+		out = d.Status()
+		return nil
 	})
 	return out, err
 }
