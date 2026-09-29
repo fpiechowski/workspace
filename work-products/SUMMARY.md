@@ -1,51 +1,41 @@
-# Summary — T1: Named IDs core (slugs, reservation ledger, core adoption)
+# SUMMARY — T2: Named IDs CLI flags, TUI display, documentation
 
-Outcome: implemented and committed. Commit `aeee481` on
-`workspace/ws_01M3PC44DNG1RA29ME3PKPGYSJ/impl-core` (base `673bb65`).
+Outcome: success. Implemented PLAN.md task T2 on top of the accepted T1 core work.
 
-## What was done
+- Commit: `7b5963373e3cfe9f652e0014f88c9f515e5e027f`.
+- Worktree: `worktrees/impl-cli-docs-rebased`.
+- Base: `673bb6514fad11f29c87b880d1307d30e0e5d532`; T1 head: `41fa124`.
 
-- Added `internal/core/slug.go`: slug grammar, NFKD + ASCII folding (Polish
-  diacritics, ß/æ/ø/ł/œ/þ/đ…), hyphenation, 40-char base cap, hyphen-boundary
-  truncation, reserved-shape detection and `parseExplicitID`.
-- Added `internal/core/idreserve.go`: a never-released, `O_EXCL` reservation
-  ledger at `<storage>/.runtime/ids/<kind>/<slug>` plus an allocator that mints
-  `base`, `base-2`, … deterministically and reuses a keyed operation's own
-  reservation after a crash.
-- Wired slug IDs into workspace creation (plus orchestrator), `CreateAgent`,
-  `StartSession` new-logical sessions, `CreateTaskWithID`, and the project
-  Dispatcher agent/session.
-- Added `CreateOptions.ID`, `AgentOptions.ID`, `SessionOptions.ID` and
-  `CreateTaskWithID`; explicit IDs accept an optional prefix, return
-  `invalid_id`/`id_exists`, and join the idempotency payload only when set.
-- `findAgent`/`findTask` now resolve an exact ID before a name; a workspace
-  rename collision maps to `id_exists`.
-- Legacy ULID IDs and the migrated `sess_<hex>` alias keep working unchanged;
-  no persisted reference is rewritten.
-- Added `internal/core/slug_test.go` with normalization, reserved-shape,
-  collision, concurrency, explicit-ID, keyed-retry, legacy-compatibility and
-  tmux slug-workspace identity/recovery/stop-isolation tests.
-- Adjusted one bootstrap test fixture (`internal/bootstrap/context_test.go`) so
-  its "foreign workspace" case stays meaningful now that the same title in two
-  projects yields the same slug.
+## Delivered
+
+- `--id` flags on `workspace create`, `issue dispatch`, `agent create`,
+  `task create --spec-file`, and `session start`, wired to the T1 options. Explicit IDs
+  surface `invalid_id`/`id_exists` with a non-zero exit.
+- `workspace open` exact-ID precedence: an ID match wins over a title match and is never
+  reported as ambiguous.
+- Selector help text and `help.go` examples now use slug-shaped IDs and mention slug or
+  legacy IDs.
+- TUI shows full, untruncated slug IDs for workspace, agent, session, and task rows;
+  Run IDs keep the compact form.
+- Docs updated: `ARCHITECTURE.md` (format, per-storage-root uniqueness, never-released
+  reservation ledger, legacy compatibility, persisted-state tree), `README.md` (ID note
+  and `--id` examples), `docs/operations.md` (`--id` in the payload, keyed retry, errors),
+  `docs/runtime.md` (tmux name `workspace-<workspace-id>`).
 
 ## Checks
 
-- `gofmt -l internal/`: clean.
-- `go vet ./...`: pass.
-- `go test ./... -timeout 600s`: pass.
-- Targeted `-race` new core tests: pass.
-- `WORKSPACE_TMUX_TEST=1 go test ./internal/core/ -run TestTmuxSlugWorkspaceIdentity`: pass.
-- `WORKSPACE_TMUX_TEST=1 go test -race ./internal/core/ -timeout 300s`: pass (246 s).
+- `gofmt -l internal/ cmd/` clean; `go vet ./...` clean.
+- `go test ./... -count=1 -timeout 600s` passes (exit 0).
+- Targeted `-race` CLI/TUI tests pass; `python3 work-products/check-doc-links.py` reports
+  `checked=30 broken=0`.
+- Evidence files: `evidence-named-ids-cli-gofmt.txt`, `-vet.txt`, `-go-test-all.txt`,
+  `-targeted-race.txt`, `-doc-links.txt`, `-help.txt`; manifest
+  `CHECKS-named-ids-cli.yaml`.
 
-Known environment limitation: the exact `WORKSPACE_TMUX_TEST=1 go test -race
-./... -timeout 90s` command times out on `internal/core` in this sandbox, and
-`TestNavigatorRealPTYAndClientSelection` (`internal/terminal`) cannot attach a
-pseudo-TTY under WSL. Neither is caused by this change; details and evidence are
-in `IMPLEMENTATION.md` and `evidence-named-ids-race-tmux-timeout.txt`.
+## Risks / limitations
 
-## Handoff
-
-All products are in `work-products/`: `IMPLEMENTATION.md`,
-`CHECKS-named-ids.yaml` and `evidence-named-ids-*.txt`. T2 (`cli-docs-named-ids`)
-still owns the CLI flags, TUI display and documentation.
+- A live CLI-level `session start --id` test is omitted because it needs the supervisor and
+  a real client; the flag forwarding is trivial and T1 covers `SessionOptions.ID`.
+- `IssueDispatchOptions.ID` is a small `omitempty` core addition needed to carry `--id`
+  through `issue dispatch`, keeping existing dispatch receipts byte-compatible.
+- The tmux suite was not run (no runtime/tmux code touched); it is optional for T2.
