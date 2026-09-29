@@ -1,147 +1,58 @@
-# IMPLEMENTATION — T3: automatic Issue-evaluation launch, CLI command and menu
+# IMPLEMENTATION — T4: documentation contract for automatic Issue evaluation
 
-Task: `task_01M3P9EKSWW97RC87SW2EA875V`
-Plan: `art_01M3P7H0BN7BZGZBK0YRK8YDXD/PLAN.md` (§4.2 post-commit launch, §4.4 CLI,
-§4.6 status/menu visibility)
-Worktree: `impl-launch` · Base: `3031ccd` (includes T1 `87bc342` and T2 `7dbd583`)
-Commit: `046b33b`
+Task: `task_01M3P9EWCRRSBEK0XH8F9Y83D9`
+Plan: `art_01M3P7H0BN7BZGZBK0YRK8YDXD/PLAN.md` (§4.8 Documentation contract updates)
+Worktree: `impl-docs` · Base: `5d7d489` (includes T1 `87bc342`, T2 `7dbd583`,
+T3 `046b33b`/`5d7d489`)
+Commit: `e2c28da` (`docs: describe automatic linked Issue evaluation on completion`)
 
-Scope: the post-completion orchestrator launch, its launch-error record, the
-workspace-scoped CLI command and the menu visibility. The Issue-evaluation domain
-(T1) and the prompt notice (T2) are consumed as-is. Documentation (T4) and the
-optional TUI Issue-detail field (T5) are out of scope.
+Scope: the documentation contract for the automatic linked-Issue evaluation
+implemented by T1–T3. No production code or tests changed. T2 already owns the
+prompt notice, the orchestrator/workflow templates and the skill text; this task
+adds the `docs/` and top-level contract documents plus the Dispatcher
+instruction.
 
 ## Changes
 
-### 1. Post-commit evaluation launch (`internal/core/completion.go`, §4.2)
-- `CompleteOptions` gains `NoEvaluationLaunch bool`. It only suppresses the
-  side effect; the pending evaluation is always still recorded by T1.
-- `CompleteWorkspace` runs the whole `mutate` as before and, only after a
-  successful commit, calls `launchIssueEvaluation`. The committed completion is
-  never rolled back by a launch failure.
-- `launchIssueEvaluation` returns early when `NoEvaluationLaunch` is set, when
-  there is no pending `issue_evaluation`, or when the orchestrator already has an
-  active Session. Otherwise `startIssueEvaluationRun` starts the conversation-only
-  Run under the stable key `issue-evaluation:<ieval id>`.
-- `startIssueEvaluationRun` is idempotent: a completion replay (or a user
-  conversation already in progress) finds the active orchestrator Session and does
-  nothing, so no second Run is created. When nothing is active it delegates to
-  `StartOrchestrator`, which resumes an existing logical orchestrator Session or
-  starts a new one.
-- `recordIssueEvaluationLaunchError` is a small separate `With` mutation that sets
-  `issue_evaluation.launch_error` on the still pending evaluation and returns the
-  refreshed `Status`; the caller publishes that refreshed status instead of the
-  commit result.
-
-### 2. Menu visibility (`internal/core/workflow.go`, §4.6)
-- `issueEvaluationMenuActions` adds
-  `{"issue_evaluation", "Evaluate linked Issue delivery",
-  "issue-evaluation record --outcome <delivered|not_delivered> --reason <reason>
-  --expected-revision <revision>"}` for a completed Workspace with a pending
-  evaluation, in both the manual and workflow completed branches.
-- `completedConversationLabel` changes the completed-workspace conversation action
-  label to "Start orchestrator to evaluate linked Issue" when a launch error is
-  recorded; it stays "Start or resume conversation" otherwise.
-- `workspace status --json` already exposes the whole `Workspace`, so
-  `issue_evaluation` is visible with no further change.
-
-### 3. CLI (`internal/cli/cli.go`, `internal/cli/help.go`, §4.4/§4.6)
-- `workspace complete` gains `--no-issue-evaluation-start`, mapped to
-  `CompleteOptions.NoEvaluationLaunch`.
-- New workspace-level group `workspace issue-evaluation` with subcommand `record`
-  (`--outcome`, `--reason`, `--expected-revision`, plus the global
-  `--operation-key`). It calls `RecordIssueEvaluation` and prints the returned
-  `Status`, so its JSON `data` equals `workspace status --json`.
-- Help specs were added for both new command paths and for the new flag/options,
-  keeping `TestHelpIsAvailableAtEveryCommandLevel` and the flag-spec checks green.
-
-### 4. Test adaptations (`internal/core/issue_evaluation_test.go`)
-- T1/T2's `completeLinkedWorkspace` helper now passes `NoEvaluationLaunch: true`.
-  Those tests deliberately own the orchestrator lifecycle (they start it
-  explicitly afterwards), so suppressing the new side effect keeps them focused
-  and deterministic. All T1/T2 assertions are unchanged.
-
-### 5. New tests
-- `internal/core/issue_evaluation_launch_test.go`:
-  - completion of a linked manual Workspace starts exactly one conversation-only
-    orchestrator Run and re-completing with the same key does not start a second;
-  - a forced launch failure (a Runtime whose `Launch` fails) still returns the
-    committed `completed` status, records `issue_evaluation.launch_error`, leaves
-    no active Run, and makes the menu expose the evaluation action with the
-    launch-aware conversation label;
-  - `NoEvaluationLaunch` leaves the evaluation pending with no Run, and a later
-    `StartOrchestrator` retries and starts exactly one Run.
-- `internal/cli/cli_test.go`:
-  - `TestIssueEvaluationRecordJSONMatchesStatusAndReplays` links a Workspace via
-    `create --from-issue`, completes it with `--no-issue-evaluation-start`, records
-    the evaluation from the CLI, compares the record `data` with
-    `workspace status --json`, and replays the same operation key.
-  - `TestTUICompleteWorkspaceLaunchesEvaluation` drives
-    `tui.CoreBackend.PerformAction("complete_workspace", ...)` against a real
-    `core.Service` and a fake Runtime, asserting the same automatic launch and
-    replay idempotency.
-- `internal/core/tmux_integration_test.go`:
-  - `TestTmuxLinkedCompletionStartsEvaluationOrchestrator` (opt-in) completes a
-    linked Workspace against the real `Tmux` runtime and asserts a
-    conversation-only orchestrator Run with a real pane starts.
+| File | Change |
+|---|---|
+| `docs/trackers.md` | New section "Automatic Issue evaluation on Workspace completion": trigger and pending marker, the auto-started conversation-only orchestrator Run, `--no-issue-evaluation-start`, the actor and its narrow scope, the outcomes table, the reason prefix/bound, the stale-digest guard, recorded-evaluation immutability, reopen, legacy workspaces, and the explicit "never writes the external tracker" statement. |
+| `ARCHITECTURE.md` | "Project Issue and Dispatcher state" gains the narrow authority exception (own linked Issue only, orchestrator/conversation-only Run or user terminal, `authorizeProjectActor` unchanged, Dispatcher leaves a pending evaluation alone). The `WORKSPACE.md` state description gains `issue_evaluation` (pending → recorded fields, `omitempty`). |
+| `PRODUCT.md` | New Product Scope bullet for automatic linked-Issue evaluation; a paragraph in the project-scope Issue section describing the automatic judgement, durability/idempotency/revision guard, stale-digest refusal, no-tracker-write, and the Dispatcher's restraint. |
+| `README.md` | Issue-operations paragraph corrected (the orchestrator/user evaluate the linked Issue; workers cannot mutate project Issues) with a `docs/trackers.md` link; completion section documents `complete --no-issue-evaluation-start` and the `workspace issue-evaluation record` reference with `--outcome`, `--reason`, `--expected-revision` and `--operation-key`. |
+| `docs/operations.md` | `issue-evaluation record` added to the workspace-mutation list; new "Automatic Issue evaluation" section describing the post-commit launch key `issue-evaluation:<ieval id>` and the two-file, single-critical-section write with the derived Issue receipt key `issue-evaluation:<ws_id>:<ieval_id>`, replay/conflict behavior, crash convergence, recorded immutability, stale-digest refusal, and no external effect. |
+| `docs/runtime.md` | The conversation-only continuation paragraph now records the one additional allowed operation (`issue-evaluation record`) for a pending evaluation, the automatic start when no orchestrator is active, the supervisor's no-auto-restart rule, and the byte-for-byte unchanged prompt when there is no pending evaluation. |
+| `internal/core/templates/dispatcher.AGENTS.md.tmpl` | Instruction text: the Dispatcher may still close local Issues but must not close an Issue whose linked Workspace has a pending evaluation. |
+| `TODO.md` | New checked `[x]` item recording the shipped feature. |
 
 ## Acceptance criteria mapping
 
-| Criterion | Evidence |
+| Criterion | Where satisfied |
 |---|---|
-| Completing a linked Workspace starts exactly one active conversation-only orchestrator Run; replaying the complete key does not create a second | `TestCompleteLinkedWorkspaceLaunchesEvaluationOrchestrator`; `TestTUICompleteWorkspaceLaunchesEvaluation` |
-| Forced launch failure still returns the committed completed status, sets `issue_evaluation.launch_error`, and the menu offers the evaluation action and conversation start | `TestCompleteLinkedWorkspaceLaunchFailureRecordsError` |
-| `--no-issue-evaluation-start` skips the launch and leaves the evaluation pending | `TestCompleteLinkedWorkspaceNoEvaluationLaunch`; `TestIssueEvaluationRecordJSONMatchesStatusAndReplays` |
-| The TUI `complete_workspace` path triggers the same launch, covered by a core-level test through `tui.Backend` | `TestTUICompleteWorkspaceLaunchesEvaluation` |
-| CLI JSON of `issue-evaluation record` equals `workspace status --json`; `--operation-key` replays | `TestIssueEvaluationRecordJSONMatchesStatusAndReplays` |
-| gofmt, `go test ./...`, `go vet ./...` pass; tmux suite passes with a new linked-completion case | checks below; environment caveat below |
+| Each document describes the implemented contract as in plan §4.8; docs describe the current contract, not a one-time state | All eight files above; contract statements verified against `internal/core/issue_evaluation.go`, `completion.go`, `session.go`, `workflow.go`, `internal/cli/cli.go` and the Dispatcher template. |
+| Docs make no claim that the external tracker is written; the stale-digest guard and outcomes behavior are described | `docs/trackers.md` ("No step of this flow writes to the external tracker"; outcomes table; `issue_revised` guard), `ARCHITECTURE.md`, `PRODUCT.md`, `README.md`, `docs/operations.md`, `TODO.md` all state the external tracker is untouched. |
+| All document links valid (run the doc link check used by the repo) | `python3 work-products/check-doc-links.py` → `checked=34 broken=0`, exit 0 (`evidence-t4-doc-links.txt`). |
+| gofmt not applicable; `go build ./...` passes; commit work in the task worktree | No Go source changed; `go build ./...` exit 0 (`evidence-t4-build.txt`); commit `e2c28da`. |
 
 ## Checks
 
 | Command | Exit | Evidence |
 |---|---|---|
-| `gofmt -l ./cmd ./internal` | 0 (clean) | `evidence-t3-launch-gofmt.txt` |
-| `go vet ./...` | 0 | `evidence-t3-launch-vet.txt` |
-| targeted core+CLI tests (new launch/menu/CLI/TUI + T1/T2 + help) | 0 | `evidence-t3-launch-targeted.txt` |
-| `go test ./... -count=1 -timeout 570s` | 0 | `evidence-t3-launch-go-test-all.txt` |
-| `WORKSPACE_TMUX_TEST=1 go test ./internal/core/ -run TestTmuxLinkedCompletionStartsEvaluationOrchestrator` | 0 | `evidence-t3-launch-tmux-targeted.txt` |
-| `WORKSPACE_TMUX_TEST=1 go test -race ./internal/core/ ./internal/tui/ -timeout 420s` | 0 | `evidence-t3-launch-tmux-race.txt` |
+| `python3 work-products/check-doc-links.py` | 0 | `evidence-t4-doc-links.txt` |
+| `go build ./...` | 0 | `evidence-t4-build.txt` |
+| `go vet ./...` | 0 | `evidence-t4-vet.txt` |
+| `go test ./internal/core/ -run 'TestSkill\|TestPrime\|TestDispatcher\|TestHelp' -count=1` | 0 | `evidence-t4-tests.txt` |
 
-The orchestration exports `WORKSPACE_*`, which the suite's in-process
-child-process helper (`TestWorkerProcess`) interprets as a nested invocation, so
-the commands unset the `WORKSPACE_*` variables (as the T1/T2 checks do). This is
-an environment artifact, not a code issue.
-
-### Known environment caveat: `WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 90s`
-
-On this sandbox that exact command cannot pass, for two reasons that pre-date T3
-and reproduce on the base commit `c5c78da` (evidence
-`evidence-t3-launch-base-regression-check.txt`, which prints `FAIL` for both):
-
-1. `workspace/internal/core` needs 153 s on the base commit and 185 s with T3
-   under `-race` + tmux on this WSL `/mnt/c` filesystem, so the 90 s per-package
-   timeout fires. The run above shows the cap being hit (`FAIL ... 90.017s`).
-2. `workspace/internal/terminal.TestNavigatorRealPTYAndClientSelection` fails on
-   the base commit too (`pseudo-TTY client did not attach`), independent of T3.
-
-The same suite passes with a realistic timeout: see `evidence-t3-launch-tmux-race.txt`
-(core+tui, exit 0) and the isolated new tmux case
-(`evidence-t3-launch-tmux-targeted.txt`, exit 0). The exact 90 s invocation and the
-base comparison are preserved as `evidence-t3-launch-acceptance-90s.txt` and
-`evidence-t3-launch-base-regression-check.txt`.
+The `go` commands unset the exported `WORKSPACE_*` variables, which the suite's
+in-process child-process helper would otherwise interpret as a nested invocation;
+this matches the T1–T3 reports and is an environment artifact, not a code issue.
 
 ## Risks / notes
 
-- The launch is best effort by design. A failing launch never fails completion;
-  `launch_error` plus the menu action and `workspace start` provide recovery. A
-  replayed `complete` key retries the launch only when no orchestrator is active.
-- The idempotency key is `issue-evaluation:<ieval id>`, not the user's completion
-  key, so retries and `workspace start` converge on one evaluation Run. When the
-  orchestrator Session is already active, the launch is a no-op rather than a new
-  Run.
-- The launch is triggered from `CompleteWorkspace`, so the CLI and the TUI
-  `complete_workspace` action share it; the TUI backend was not changed.
-- `recordIssueEvaluationLaunchError` is a second small write after the completion
-  commit, so the workspace revision advances by one more when a launch fails. The
-  evaluation-record command is revision-guarded against `status`, so this is safe.
-- No documentation (T4) was changed in this task.
+- Documentation only. The feature behavior and all code paths were implemented by
+  T1–T3 and are consumed unchanged.
+- `issue_evaluation` makes a completed linked Workspace unreadable by an older
+  strict-YAML binary, the same trade-off as the earlier optional `autonomy` field.
+  The docs state the `omitempty` behavior and the no-migration rule for legacy
+  Workspaces; the Issue schema itself is untouched.
+- English only; no links to external trackers were added.
