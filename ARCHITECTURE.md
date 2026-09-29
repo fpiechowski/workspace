@@ -393,9 +393,11 @@ conversation ID is an optional Session binding, never its identity or inbox addr
 Details and the wrapper format are described in [docs/clients.md](docs/clients.md).
 
 The profile contains client/provider/model routes, required capabilities, and an optional
-reasoning-effort setting applied to every route in that profile. Every new Run, including
-a resume, reads the current project configuration before resolving its profile, client,
-route, limits, capabilities, and reasoning effort. The router rejects unavailable
+reasoning-effort setting applied to every route in that profile. Every new Run reads the
+current project configuration before resolving its profile, route, limits, capabilities,
+and reasoning effort. A resumed Run reloads that profile, route, limits and reasoning
+effort but keeps the client definition owned by its logical Session, so recovery can
+still resolve the exact client it was running. The router rejects unavailable
 routes, routes in cooldown, and routes over their limits. It then balances providers
 based on local launches and reservations in a 24-hour window and records the decision
 plus the selected setting in the Run. These counters approximate local project load;

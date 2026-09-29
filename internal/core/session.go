@@ -313,6 +313,25 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			if prior.ClientThreadID != "" {
 				thread = prior.ClientThreadID
 			}
+			if prior.Route.Client != "" && prior.ClientSnapshot.Adapter != "" {
+				// A logical Session owns its client definition. Keep the launched
+				// client stable across Runs so that a resumed Run — including the
+				// supervisor recovering a lost pane — can still resolve the exact
+				// client it was running. The profile, route, limits and reasoning
+				// effort are still reloaded from the current project configuration
+				// below; only the client definition is carried over.
+				if cfg.Clients == nil {
+					cfg.Clients = map[string]Client{}
+				}
+				priorClient := prior.ClientSnapshot
+				// Older registries predate native OpenCode delivery. Upgrade the
+				// default snapshot on resume; an explicit generic delivery wrapper
+				// remains backward-compatible.
+				if usesNativeOpenCodeDelivery(priorClient) {
+					priorClient.NativeDelivery = true
+				}
+				cfg.Clients[prior.Route.Client] = priorClient
+			}
 		}
 		route, err := s.chooseRoute(cfg, profile)
 		if err != nil {
