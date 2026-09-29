@@ -14,15 +14,18 @@ import (
 // interactive interfaces. It is deliberately separate from Status so the
 // public JSON schema remains unchanged.
 type WorkspaceSnapshot struct {
-	Status     Status              `json:"status"`
-	Body       string              `json:"body"`
-	Services   []BackgroundService `json:"services"`
-	Checks     []CheckReceipt      `json:"checks"`
-	Handoffs   []Handoff           `json:"handoffs"`
-	Messages   []Message           `json:"messages"`
-	Relations  WorkspaceRelations  `json:"relations"`
-	Metrics    WorkspaceMetrics    `json:"metrics"`
-	ObservedAt time.Time           `json:"observed_at"`
+	Status    Status              `json:"status"`
+	Body      string              `json:"body"`
+	Services  []BackgroundService `json:"services"`
+	Checks    []CheckReceipt      `json:"checks"`
+	Handoffs  []Handoff           `json:"handoffs"`
+	Messages  []Message           `json:"messages"`
+	Relations WorkspaceRelations  `json:"relations"`
+	Metrics   WorkspaceMetrics    `json:"metrics"`
+	// Limits carries the active project route-limit records so read-only views
+	// can show why a route is unavailable without loading the ledger again.
+	Limits     []RouteLimit `json:"limits,omitempty"`
+	ObservedAt time.Time    `json:"observed_at"`
 }
 
 // WorkspaceSnapshot reads the document and its runtime index once, under the
@@ -31,6 +34,15 @@ type WorkspaceSnapshot struct {
 func (s *Service) WorkspaceSnapshot(ctx context.Context, selector string) (WorkspaceSnapshot, error) {
 	var out WorkspaceSnapshot
 	err := s.withReadableWorkspace(ctx, selector, func(d *Document) error {
+		now := nowUTC()
+		limits := []RouteLimit{}
+		if ledger, ledgerErr := loadRouteLimits(s.Root); ledgerErr == nil {
+			for _, key := range sortedRouteLimitKeys(ledger) {
+				if rec := ledger.Limits[key]; rec.Active(now) {
+					limits = append(limits, rec)
+				}
+			}
+		}
 		out = WorkspaceSnapshot{
 			Status:     d.Status(),
 			Body:       d.Body,
@@ -40,7 +52,8 @@ func (s *Service) WorkspaceSnapshot(ctx context.Context, selector string) (Works
 			Messages:   append([]Message(nil), d.Registry.Messages...),
 			Relations:  buildWorkspaceRelations(d),
 			Metrics:    workspaceMetrics(d),
-			ObservedAt: nowUTC(),
+			Limits:     limits,
+			ObservedAt: now,
 		}
 		return nil
 	})

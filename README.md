@@ -356,6 +356,60 @@ workspaces that must be able to keep an orchestrator session active at the same 
 The optional `max_launches_24h` route setting limits local launches of a given
 client/provider/model in the project; zero means there is no such limit.
 
+### Route usage limits
+
+Workspace never reads provider HTTP headers; it records the limit signals its clients
+expose. Observed limits are advisory, project-scoped, and live in
+`.workspace/route-limits.json`. A record matches a whole client account (`client`), a
+client and provider (`provider`), or one exact route (`route`); limits reported for
+Codex and Claude default to `client`, other adapters to `provider`. A hard record
+(`rate_limited` or `quota_exhausted`) makes its routes ineligible until the reset;
+`usage_pressure` only ranks a route after routes without pressure. If every route of a
+profile is limited, selection fails fast with `route_limited` and `retry_after` set to
+the earliest reset.
+
+Set the policy on a profile, or override it per route:
+
+```yaml
+profiles:
+  worker:
+    usage_limits:
+      mode: avoid                 # avoid (default) | observe | ignore
+      default_backoff_seconds: 900
+      max_backoff_seconds: 21600
+      soft_limit_percent: 90
+    routes:
+      - id: deepseek
+        client: opencode
+        provider: deepseek
+        model: deepseek/deepseek-flash
+        usage_limits:
+          mode: ignore
+```
+
+`avoid` excludes limited routes and applies the soft preference, `observe` records and
+shows limits without changing selection, and `ignore` ignores records for that route.
+Without a reported reset the record lasts `default_backoff_seconds`, doubling on
+repeated observations up to `max_backoff_seconds`; a reported reset is capped at seven
+days.
+
+Inspect and manage the ledger:
+
+```sh
+workspace profile limit list [--all]
+workspace profile limit set <profile>/<route-id> --kind quota_exhausted|rate_limited \
+  (--until RFC3339 | --for DURATION) [--scope client|provider|route] [--message ...]
+workspace profile limit clear <profile>/<route-id> [--scope client|provider|route]
+workspace profile limit report --kind ... [--reset-at RFC3339 | --retry-after DURATION] \
+  [--used-percent N] [--scope ...] [--message ...]
+```
+
+`report` runs only inside a Run and records for that Run's route, so a client hook or
+wrapper can call it using the `WORKSPACE_RUN_ID` in its environment. `set` and `clear`
+are for the user or a workspace orchestrator and accept `--operation-key`. `workspace
+profile explain NAME` shows each route's `limited_until` and `soft_limited` once a
+record matches.
+
 The optional `workspaces_dir: /absolute/path/project-workspaces` selects a directory
 outside the repository. Configure it before creating workspaces; changing it does not
 move existing directories. You can still select the project with `--project`; the CWD

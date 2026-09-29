@@ -19,6 +19,7 @@ List of planned improvements. Items are ordered by priority.
   state, profile fallback/override, verified runtime ownership, Issue-to-Workspace
   dispatch, and idempotent start/stop operations.
 - [ ] **Concurrency monitoring statistics** — add monitoring for the number of agents and sessions running in parallel.
+- [ ] **Wait-for-reset route mode** — v1 fails an all-limited profile fast with `route_limited`. Optionally add `usage_limits.when_all_limited: wait` that durably queues the launch and starts it after the earliest reset instead of failing.
 - [x] **Refresh indicator in the TUI** — replace the current refresh notification with an icon indicating that a refresh is in progress.
 - [x] **`idle` session status** — extend session statuses with `idle` and detect it when the agent is not doing work.
 - [ ] **Reasoning effort for profile config on route level instead of profile level** - move reasoning effort from profile level (shared for all routes in the profile) to individual route, so that reasoning efforts can be set per route

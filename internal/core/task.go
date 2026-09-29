@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -356,6 +357,15 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, rationale
 		if err := s.requireGateRationale(d, rationale); err != nil {
 			return err
 		}
+		// An autonomous run gets one retry per task. Check the routes read-only
+		// first so an all-limited profile fails with route_limited without
+		// consuming the bound or mutating the task. Interactive retries stay
+		// unchanged and fail later at session start.
+		if d.State.AutonomyRunning() && s.isAgentActor() {
+			if err := s.precheckRetryRoutes(d, *t); err != nil {
+				return err
+			}
+		}
 		if err := s.requireAutonomyBound(d, "autonomous.retry", "task:"+t.ID, 1, "retry"); err != nil {
 			return err
 		}
@@ -433,6 +443,38 @@ func (s *Service) retryTask(ctx context.Context, selector, id, reason, rationale
 		return saveResource(d, key, out)
 	})
 	return out, err
+}
+
+// precheckRetryRoutes resolves the task's profile and fails an autonomous retry
+// before the autonomy bound when every route is usage-limited. Only
+// route_limited is raised here; a pure configuration or capability failure
+// stays with the later session start so retry semantics do not change.
+func (s *Service) precheckRetryRoutes(d *Document, t Task) error {
+	cfg, err := s.Config()
+	if err != nil {
+		return err
+	}
+	profile := t.Profile
+	if profile == "" {
+		profile = workflowProfile(cfg, d, t.Role, "")
+	}
+	if profile == "" {
+		return nil
+	}
+	if _, ok := cfg.Profiles[profile]; !ok {
+		return nil
+	}
+	decision, err := s.assessRoutes(cfg, profile)
+	if err != nil {
+		return err
+	}
+	if _, err := selectedRoute(decision); err != nil {
+		var ce *Error
+		if errors.As(err, &ce) && ce.Code == "route_limited" {
+			return err
+		}
+	}
+	return nil
 }
 
 type taskBindingMode uint8

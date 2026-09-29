@@ -392,12 +392,18 @@ func (s *Service) tickWorkspaceAgents(ctx context.Context, status Status) error 
 	// an explicit retry, preventing unbounded restart loops.
 	orch, exists := latest[status.Workspace.OrchestratorAgentID]
 	if exists && orch.State == "interrupted" && (status.Workspace.Status == "active" || status.Workspace.Status == "needs_workflow") {
-		resumed, err := s.ResumeAgent(ctx, status.Workspace.ID, orch.AgentID, "recover:"+orch.LastRunID)
-		if err != nil {
-			return err
+		if !s.recoveryDeferred(status.Workspace.ID, nowUTC()) {
+			resumed, err := s.ResumeAgent(ctx, status.Workspace.ID, orch.AgentID, "recover:"+orch.LastRunID)
+			if err != nil {
+				if !s.deferRecoveryOnLimit(status.Workspace.ID, err, nowUTC()) {
+					return err
+				}
+			} else {
+				s.clearRecoveryDeferral(status.Workspace.ID)
+				sessions[resumed.ID] = resumed
+				latest[orch.AgentID] = resumed
+			}
 		}
-		sessions[resumed.ID] = resumed
-		latest[orch.AgentID] = resumed
 	}
 	for _, message := range messages {
 		if message.AcknowledgedAt != nil {
@@ -491,6 +497,45 @@ func (s *Service) tickWorkspaceAgents(ctx context.Context, status Status) error 
 		}
 	}
 	return nil
+}
+
+// recoveryDeferred reports whether an orchestrator recovery for the workspace
+// is waiting out a usage-limit reset. An expired deferral is cleared so the
+// next tick tries recovery again.
+func (s *Service) recoveryDeferred(workspaceID string, now time.Time) bool {
+	until, ok := s.recoveryLimitSkip[workspaceID]
+	if !ok {
+		return false
+	}
+	if !now.Before(until) {
+		delete(s.recoveryLimitSkip, workspaceID)
+		return false
+	}
+	return true
+}
+
+// deferRecoveryOnLimit records an in-memory skip for a workspace whose
+// orchestrator recovery failed because every route is usage-limited. It logs
+// the reason once per limited window and reports whether the error was handled.
+func (s *Service) deferRecoveryOnLimit(workspaceID string, err error, now time.Time) bool {
+	reset, ok := routeLimitedReset(err)
+	if !ok {
+		return false
+	}
+	if s.recoveryLimitSkip == nil {
+		s.recoveryLimitSkip = map[string]time.Time{}
+	}
+	if _, already := s.recoveryLimitSkip[workspaceID]; !already {
+		fmt.Fprintln(os.Stderr, "workspace supervisor: orchestrator recovery for "+workspaceID+" deferred until "+reset.UTC().Format(time.RFC3339)+": "+err.Error())
+	}
+	s.recoveryLimitSkip[workspaceID] = reset
+	return true
+}
+
+// clearRecoveryDeferral drops a completed deferral so a later interruption is
+// recovered immediately.
+func (s *Service) clearRecoveryDeferral(workspaceID string) {
+	delete(s.recoveryLimitSkip, workspaceID)
 }
 
 // notifyPendingMessage is the tmux-only fallback for transports that cannot
