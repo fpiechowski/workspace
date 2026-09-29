@@ -190,15 +190,18 @@ func TestTmuxEndToEnd(t *testing.T) {
 	if _, err := rt.call(ctx, "select-pane", "-t", shown.PaneID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.With(ctx, id, func(d *Document) error {
-		current, findErr := findSession(d, orch.ID)
-		if findErr != nil {
-			return findErr
-		}
-		current.ClientSnapshot.LaunchArgv = []string{"sh", "-c", "sleep 30"}
-		current.ClientSnapshot.ResumeArgv = nil
-		return saveDocument(d)
-	}); err != nil {
+	// Resumed Runs reload the current project configuration, so make the
+	// orchestrator's configured client long-running before resuming.
+	cfg, cfgErr := s.Config()
+	if cfgErr != nil {
+		t.Fatal(cfgErr)
+	}
+	cfg.Clients["test"] = Client{Adapter: "command", LaunchArgv: []string{"sh", "-c", "sleep 30", "--", "{prompt_file}"}}
+	encoded, marshalErr := yaml.Marshal(cfg)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	if err := atomicWrite(filepath.Join(s.Root, ".workspace", "config.yaml"), encoded); err != nil {
 		t.Fatal(err)
 	}
 	resumedOrchestrator, err := s.ResumeAgent(ctx, id, orch.AgentID, "tmux-orchestrator-resume")
