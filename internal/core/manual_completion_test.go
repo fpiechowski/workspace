@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -170,12 +171,104 @@ func TestManualCompletionRequiresUserAttestation(t *testing.T) {
 		t.Fatalf("refused completion mutated the workspace: %s", after.Workspace.Status)
 	}
 
-	// With the attestation the gate is satisfied and the still-active
-	// orchestrator session is the next precise refusal.
+	// With the attestation the gate is satisfied and the orchestrator's own
+	// still-active Session is tolerated: completion succeeds and does not stop
+	// that Session.
+	completed, err := agentService.CompleteWorkspace(ctx, ws, CompleteOptions{UserConfirmed: true, ExpectedRevision: revision})
+	if err != nil {
+		t.Fatalf("orchestrator completion failed: %v", err)
+	}
+	if completed.Workspace.Status != "completed" {
+		t.Fatalf("completion state: %s", completed.Workspace.Status)
+	}
+	after, err = s.Status(ctx, ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var orchestrator *Session
+	for i := range after.Sessions {
+		if after.Sessions[i].ID == p.ID {
+			orchestrator = &after.Sessions[i]
+		}
+	}
+	if orchestrator == nil || !orchestrator.Active() {
+		t.Fatal("completion stopped or removed the orchestrator session")
+	}
+}
+
+// An active worker Session still blocks completion and is named in the error,
+// while the orchestrator's own Session is tolerated. Archive keeps requiring
+// every Session, including the orchestrator, to be stopped.
+func TestManualCompletionToleratesOrchestratorButNotWorkers(t *testing.T) {
+	s, ws := manualFixture(t)
+	ctx := context.Background()
+	p, err := s.StartOrchestrator(ctx, ws, "manual-orchestrator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, worktree := worker(t, s, ws, "blocking")
+	workerSession, err := s.StartSession(ctx, ws, SessionOptions{Agent: agent.ID, Worktree: worktree.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentService := *s
+	agentService.Actor = Actor{AgentID: p.AgentID, SessionID: p.ID, RunID: p.CurrentRunID}
+
+	revision := currentRevision(t, s, ws)
 	if _, err := agentService.CompleteWorkspace(ctx, ws, CompleteOptions{UserConfirmed: true, ExpectedRevision: revision}); err == nil {
-		t.Fatal("completion accepted an active session")
+		t.Fatal("completion accepted an active worker session")
 	} else {
 		expectCode(t, err, "session_active")
+		if !strings.Contains(err.Error(), workerSession.ID) {
+			t.Fatalf("session_active did not name the worker session: %v", err)
+		}
+	}
+
+	if _, err := s.StopSession(ctx, ws, workerSession.ID); err != nil {
+		t.Fatal(err)
+	}
+	revision = currentRevision(t, s, ws)
+	completed, err := agentService.CompleteWorkspace(ctx, ws, CompleteOptions{UserConfirmed: true, ExpectedRevision: revision}, "manual-orchestrator-complete")
+	if err != nil {
+		t.Fatalf("orchestrator completion failed: %v", err)
+	}
+	if completed.Workspace.Status != "completed" {
+		t.Fatalf("completion state: %s", completed.Workspace.Status)
+	}
+
+	// The orchestrator Run is still live, so archive must still refuse.
+	if _, err := s.Archive(ctx, ws); err == nil {
+		t.Fatal("archive accepted the still-active orchestrator session")
+	} else {
+		expectCode(t, err, "session_active")
+	}
+	if _, err := s.StopSession(ctx, ws, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	archived, err := s.Archive(ctx, ws)
+	if err != nil {
+		t.Fatalf("archive after stopping the orchestrator failed: %v", err)
+	}
+	if archived.Workspace.Status != "archived" {
+		t.Fatalf("archive state: %s", archived.Workspace.Status)
+	}
+}
+
+// The user terminal (empty actor) also completes while the orchestrator Session
+// runs; it is tolerated and not stopped.
+func TestManualCompletionUserActorToleratesOrchestrator(t *testing.T) {
+	s, ws := manualFixture(t)
+	ctx := context.Background()
+	if _, err := s.StartOrchestrator(ctx, ws, "manual-orchestrator"); err != nil {
+		t.Fatal(err)
+	}
+	revision := currentRevision(t, s, ws)
+	completed, err := s.CompleteWorkspace(ctx, ws, CompleteOptions{ExpectedRevision: revision}, "manual-user-complete")
+	if err != nil {
+		t.Fatalf("user completion with a running orchestrator failed: %v", err)
+	}
+	if completed.Workspace.Status != "completed" {
+		t.Fatalf("completion state: %s", completed.Workspace.Status)
 	}
 }
 

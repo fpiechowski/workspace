@@ -363,6 +363,51 @@ func TestLandCompleteAndArchivePlanFirst(t *testing.T) {
 	}
 }
 
+// A landed plan-first workspace completes from the orchestrator's own actor
+// while its Session runs, but an active worker Session still blocks and is
+// named in the error.
+func TestLandCompleteToleratesOrchestratorButNotWorkers(t *testing.T) {
+	ctx := context.Background()
+	s, ws := planFirstFixture(t)
+	integratePlanFirst(t, s, ws, "release")
+	if _, err := s.LandIntegration(ctx, ws, LandingOptions{Target: "release"}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.StartOrchestrator(ctx, ws, "orch-complete")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentService := *s
+	agentService.Actor = Actor{AgentID: p.AgentID, SessionID: p.ID, RunID: p.CurrentRunID}
+
+	agent, worktree := worker(t, s, ws, "active-worker")
+	workerSession, err := s.StartSession(ctx, ws, SessionOptions{Agent: agent.ID, Worktree: worktree.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := currentRevision(t, s, ws)
+	if _, err := agentService.CompleteWorkspace(ctx, ws, CompleteOptions{UserConfirmed: true, ExpectedRevision: revision}); err == nil {
+		t.Fatal("landed completion accepted an active worker session")
+	} else {
+		expectCode(t, err, "session_active")
+		if !strings.Contains(err.Error(), workerSession.ID) {
+			t.Fatalf("session_active did not name the worker session: %v", err)
+		}
+	}
+
+	if _, err := s.StopSession(ctx, ws, workerSession.ID); err != nil {
+		t.Fatal(err)
+	}
+	revision = currentRevision(t, s, ws)
+	completed, err := agentService.CompleteWorkspace(ctx, ws, CompleteOptions{UserConfirmed: true, ExpectedRevision: revision}, "land-complete-orch")
+	if err != nil {
+		t.Fatalf("orchestrator completion failed: %v", err)
+	}
+	if completed.Workspace.Status != "completed" || completed.Workspace.Workflow.Phase != "completed" {
+		t.Fatalf("completion state: %+v", completed.Workspace)
+	}
+}
+
 // A plan-first workspace with no live implementer completes only with an
 // explicit reason.
 func TestCompletePlanFirstNothingToIntegrate(t *testing.T) {

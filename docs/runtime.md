@@ -229,9 +229,11 @@ not need to be stopped, recreated, or rebound.
 
 After the accepted integration is landed (`workspace integration land`) and the user
 confirms `workspace complete`, or after user-confirmed release for a custom workflow, stop
-remaining sessions and `archive` the workspace. An intentionally manual workspace has no
-release: finish it with the explicit, user-confirmed
-`workspace complete` operation once no active Sessions or services remain and every
+the remaining Sessions and `archive` the workspace. `workspace complete` requires no active
+worker Sessions or services; the orchestrator's own running Session is tolerated and is
+not stopped, and a Codex orchestrator Run exits after its current turn. An intentionally
+manual workspace has no release: finish it with the explicit, user-confirmed
+`workspace complete` operation once no active worker Sessions or services remain and every
 non-deleted task is accepted, then `archive` it without a release reference. A completed
 plan-first workspace also archives without a release reference.
 To authorize new work after completion, use `workspace reopen --reason ...
