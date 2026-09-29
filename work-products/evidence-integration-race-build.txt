@@ -1,0 +1,11 @@
+# Command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test -race ./... -run '^$' -count=1
+?   	workspace/cmd/workspace	[no test files]
+ok  	workspace/internal/bootstrap	1.011s [no tests to run]
+?   	workspace/internal/buildinfo	[no test files]
+ok  	workspace/internal/cli	1.118s [no tests to run]
+ok  	workspace/internal/core	1.011s [no tests to run]
+?   	workspace/internal/release	[no test files]
+ok  	workspace/internal/terminal	1.010s [no tests to run]
+ok  	workspace/internal/tui	1.104s [no tests to run]
+ok  	workspace/internal/upgrade	1.010s [no tests to run]
+race-build exit=0

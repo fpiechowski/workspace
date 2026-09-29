@@ -1,0 +1,3 @@
+# Command: gofmt -l ./cmd ./internal
+# Exit code: (see below)
+gofmt exit=0

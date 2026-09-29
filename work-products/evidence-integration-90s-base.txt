@@ -1,0 +1,136 @@
+# Command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./... -count=1 -timeout 90s
+# Run in the integration-base checkout 6887b347c82a4f00717c7bf281ca8798f4eb70d3
+# Expected: exit 1 (same pre-existing sandbox failure as the merged HEAD)
+?   	workspace/cmd/workspace	[no test files]
+ok  	workspace/internal/bootstrap	1.435s
+?   	workspace/internal/buildinfo	[no test files]
+ok  	workspace/internal/cli	4.774s
+panic: test timed out after 1m30s
+	running tests:
+		TestReasoningEffortCommandEnvAndOptionalArgv (1s)
+
+goroutine 3500 [running]:
+testing.(*M).startAlarm.func1()
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2484 +0x605
+created by time.goFunc
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/time/sleep.go:215 +0x45
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0xc000196380, {0xfe2b63, 0x2c}, 0x1008ac0)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1859 +0x91e
+testing.runTests.func1(0xc000196380)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2279 +0x86
+testing.tRunner(0xc000196380, 0xc0001c3ae0)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1792 +0x226
+testing.runTests(0xc000010090, {0x16313a0, 0x123, 0x123}, {0x1?, 0x0?, 0x1634d00?})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2277 +0x96d
+testing.(*M).Run(0xc0000448c0)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2142 +0xeeb
+main.main()
+	_testmain.go:625 +0x165
+
+goroutine 3402 [syscall]:
+syscall.Syscall6(0xf7, 0x3, 0xd, 0xc0003c3b18, 0x4, 0xc0000fa480, 0x0)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/syscall/syscall_linux.go:95 +0x45
+internal/syscall/unix.Waitid(0x3, 0xd, 0xc0003c3b18, 0x4, 0xc0000fa480)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/syscall/unix/waitid_linux.go:18 +0x70
+os.(*Process).pidfdWait.func1(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/pidfd_linux.go:106
+os.ignoringEINTR(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/file_posix.go:251
+os.(*Process).pidfdWait(0xc000587400)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/pidfd_linux.go:105 +0x365
+os.(*Process).wait(0xc000587400)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/exec_unix.go:27 +0x4e
+os.(*Process).Wait(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/exec.go:358
+os/exec.(*Cmd).Wait(0xc00060e000)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/exec/exec.go:922 +0xb0
+os/exec.(*Cmd).Run(0xc00060e000)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/exec/exec.go:626 +0x55
+workspace/internal/core.(*Service).ExecuteSession(0xc00032a460, {0x1188b30, 0x1656180}, {0xc00002d0c0, 0x1d}, {0xc000709300, 0x1e}, {0x1183420, 0xc0000a2b80}, {0x1183440, ...}, ...)
+	/tmp/opencode/base-6887b34/internal/core/session.go:663 +0x78c
+workspace/internal/core.TestReasoningEffortCommandEnvAndOptionalArgv(0xc00030b500)
+	/tmp/opencode/base-6887b34/internal/core/reasoning_effort_test.go:219 +0x798
+testing.tRunner(0xc00030b500, 0x1008ac0)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1792 +0x226
+created by testing.(*T).Run in goroutine 1
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1851 +0x8f3
+
+goroutine 3498 [IO wait]:
+internal/poll.runtime_pollWait(0x7f1b93c31cf0, 0x72)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000405040, 0x72, 0x1)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_poll_runtime.go:84 +0xb1
+internal/poll.(*pollDesc).waitRead(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000405020, {0xc000032d15, 0x2eb, 0x2eb})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_unix.go:165 +0x453
+os.(*File).read(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/file_posix.go:29
+os.(*File).Read(0xc00049a4a8, {0xc000032d15, 0x2eb, 0x2eb})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/file.go:124 +0xad
+bytes.(*Buffer).ReadFrom(0xc0001e6870, {0x11832a0, 0xc000204000})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/bytes/buffer.go:211 +0x10f
+io.copyBuffer({0x1183440, 0xc0001e6870}, {0x11832a0, 0xc000204000}, {0x0, 0x0, 0x0})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/io/io.go:415 +0x21e
+io.Copy(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/io/io.go:388
+os.genericWriteTo(0xc00049a4a8, {0x1183440, 0xc0001e6870})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/file.go:275 +0x67
+os.(*File).WriteTo(0xc00049a4a8, {0x1183440, 0xc0001e6870})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/file.go:253 +0xd5
+io.copyBuffer({0x1183440, 0xc0001e6870}, {0x1183320, 0xc00049a4a8}, {0x0, 0x0, 0x0})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/io/io.go:411 +0xd4
+io.Copy(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/io/io.go:388
+os/exec.(*Cmd).writerDescriptor.func1()
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/exec/exec.go:596 +0x5b
+os/exec.(*Cmd).Start.func2(0xc0000a3200)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/exec/exec.go:749 +0x3d
+created by os/exec.(*Cmd).Start in goroutine 3402
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/exec/exec.go:748 +0x110e
+
+goroutine 3499 [IO wait]:
+internal/poll.runtime_pollWait(0x7f1b93c31ac0, 0x72)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000405280, 0x72, 0x1)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_poll_runtime.go:84 +0xb1
+internal/poll.(*pollDesc).waitRead(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000405260, {0xc00020e200, 0x200, 0x200})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_unix.go:165 +0x453
+os.(*File).read(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/file_posix.go:29
+os.(*File).Read(0xc00049a4b8, {0xc00020e200, 0x200, 0x200})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/file.go:124 +0xad
+bytes.(*Buffer).ReadFrom(0xc0001e68a0, {0x11832a0, 0xc00070e020})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/bytes/buffer.go:211 +0x10f
+io.copyBuffer({0x1183440, 0xc0001e68a0}, {0x11832a0, 0xc00070e020}, {0x0, 0x0, 0x0})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/io/io.go:415 +0x21e
+io.Copy(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/io/io.go:388
+os.genericWriteTo(0xc00049a4b8, {0x1183440, 0xc0001e68a0})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/file.go:275 +0x67
+os.(*File).WriteTo(0xc00049a4b8, {0x1183440, 0xc0001e68a0})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/file.go:253 +0xd5
+io.copyBuffer({0x1183440, 0xc0001e68a0}, {0x1183320, 0xc00049a4b8}, {0x0, 0x0, 0x0})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/io/io.go:411 +0xd4
+io.Copy(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/io/io.go:388
+os/exec.(*Cmd).writerDescriptor.func1()
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/exec/exec.go:596 +0x5b
+os/exec.(*Cmd).Start.func2(0xc0000a3220)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/exec/exec.go:749 +0x3d
+created by os/exec.(*Cmd).Start in goroutine 3402
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/os/exec/exec.go:748 +0x110e
+FAIL	workspace/internal/core	90.016s
+?   	workspace/internal/release	[no test files]
+--- FAIL: TestNavigatorRealPTYAndClientSelection (5.73s)
+    navigation_integration_test.go:72: pseudo-TTY client did not attach
+FAIL
+FAIL	workspace/internal/terminal	5.739s
+ok  	workspace/internal/tui	6.848s
+ok  	workspace/internal/upgrade	1.281s
+FAIL
+base-90s exit=1

@@ -1,0 +1,9 @@
+# Command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./internal/core -run '^TestTmuxCompleteIssueWorkflow$' -count=1 -v -timeout 180s
+# Run on merged HEAD; expected exit 1 (pre-existing sandbox failure)
+=== RUN   TestTmuxCompleteIssueWorkflow
+    workflow_tmux_test.go:393: tester must use separate session in integrated worktree window
+--- FAIL: TestTmuxCompleteIssueWorkflow (10.61s)
+FAIL
+FAIL	workspace/internal/core	10.618s
+FAIL
+preexisting-merged exit=1

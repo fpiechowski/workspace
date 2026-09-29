@@ -1,0 +1,9 @@
+# Command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./internal/core -run '^TestTmuxCompleteIssueWorkflow$' -count=1 -v -timeout 180s
+# Run in the integration-base checkout 6887b347c82a4f00717c7bf281ca8798f4eb70d3; expected exit 1 (same failure)
+=== RUN   TestTmuxCompleteIssueWorkflow
+    workflow_tmux_test.go:393: tester must use separate session in integrated worktree window
+--- FAIL: TestTmuxCompleteIssueWorkflow (5.24s)
+FAIL
+FAIL	workspace/internal/core	5.248s
+FAIL
+preexisting-base exit=1

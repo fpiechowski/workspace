@@ -1,0 +1,40 @@
+- command: gofmt -l ./cmd ./internal
+  exit_code: 0
+  evidence: evidence-integration-gofmt.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go vet ./...
+  exit_code: 0
+  evidence: evidence-integration-vet.txt
+- command: go build ./...
+  exit_code: 0
+  evidence: evidence-integration-build.txt
+- command: python3 work-products/check-doc-links.py
+  exit_code: 0
+  evidence: evidence-integration-doc-links.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test -race ./... -run '^$' -count=1
+  exit_code: 0
+  evidence: evidence-integration-race-build.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 900s
+  exit_code: 0
+  evidence: evidence-integration-go-test-all.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./internal/core ./internal/tui -skip '^TestTmuxCompleteIssueWorkflow$' -count=1 -timeout 420s
+  exit_code: 0
+  evidence: evidence-integration-tmux-race.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./internal/core -run '^TestTmuxLinkedCompletionStartsEvaluationOrchestrator$' -count=1 -v -timeout 180s
+  exit_code: 0
+  evidence: evidence-integration-tmux-targeted.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./... -count=1 -timeout 90s
+  exit_code: 1
+  expected_exit: 1
+  evidence: evidence-integration-90s-merged.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./... -count=1 -timeout 90s
+  exit_code: 1
+  expected_exit: 1
+  evidence: evidence-integration-90s-base.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./internal/core -run '^TestTmuxCompleteIssueWorkflow$' -count=1 -v -timeout 180s
+  exit_code: 1
+  expected_exit: 1
+  evidence: evidence-integration-preexisting-merged.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./internal/core -run '^TestTmuxCompleteIssueWorkflow$' -count=1 -v -timeout 180s
+  exit_code: 1
+  expected_exit: 1
+  evidence: evidence-integration-preexisting-base.txt

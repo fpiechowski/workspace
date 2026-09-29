@@ -1,0 +1,6 @@
+# Command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./internal/core -run '^TestTmuxLinkedCompletionStartsEvaluationOrchestrator$' -count=1 -v -timeout 180s
+=== RUN   TestTmuxLinkedCompletionStartsEvaluationOrchestrator
+--- PASS: TestTmuxLinkedCompletionStartsEvaluationOrchestrator (6.77s)
+PASS
+ok  	workspace/internal/core	7.786s
+tmux-targeted exit=0

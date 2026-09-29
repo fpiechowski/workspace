@@ -1,0 +1,11 @@
+# Command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 900s
+?   	workspace/cmd/workspace	[no test files]
+ok  	workspace/internal/bootstrap	0.322s
+?   	workspace/internal/buildinfo	[no test files]
+ok  	workspace/internal/cli	3.495s
+ok  	workspace/internal/core	84.625s
+?   	workspace/internal/release	[no test files]
+ok  	workspace/internal/terminal	0.004s
+ok  	workspace/internal/tui	0.681s
+ok  	workspace/internal/upgrade	0.248s
+go-test-all exit=0

@@ -1,0 +1,101 @@
+# Command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./... -count=1 -timeout 90s
+# Expected: exit 1 (known-unpassable gate on this /mnt/c WSL sandbox)
+?   	workspace/cmd/workspace	[no test files]
+ok  	workspace/internal/bootstrap	1.432s
+?   	workspace/internal/buildinfo	[no test files]
+ok  	workspace/internal/cli	5.673s
+panic: test timed out after 1m30s
+	running tests:
+		TestOpenCodeLegacyCheckingPhaseIsRecoverable (0s)
+
+goroutine 3009 [running]:
+testing.(*M).startAlarm.func1()
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2484 +0x605
+created by time.goFunc
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/time/sleep.go:215 +0x45
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0xc000220380, {0xffe485, 0x2c}, 0x10260d8)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1859 +0x91e
+testing.runTests.func1(0xc000220380)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2279 +0x86
+testing.tRunner(0xc000220380, 0xc00024dae0)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1792 +0x226
+testing.runTests(0xc000010090, {0x165f3a0, 0x132, 0x132}, {0x7?, 0x1?, 0x1662e60?})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2277 +0x96d
+testing.(*M).Run(0xc000046960)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:2142 +0xeeb
+main.main()
+	_testmain.go:655 +0x165
+
+goroutine 3005 [runnable]:
+encoding/json.(*decodeState).scanWhile(0xc0002418c0, 0x9)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/encoding/json/decode.go:293 +0x1b9
+encoding/json.(*decodeState).object(0xc0002418c0, {0xfb8420?, 0xc0001f5570?, 0xc0003d5040?})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/encoding/json/decode.go:663 +0xbd9
+encoding/json.(*decodeState).value(0xc0002418c0, {0xfb8420?, 0xc0001f5570?, 0x3?})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/encoding/json/decode.go:375 +0xa5
+encoding/json.(*decodeState).object(0xc0002418c0, {0xef7120?, 0xc0001f5540?, 0xc00042f637?})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/encoding/json/decode.go:762 +0x14a9
+encoding/json.(*decodeState).value(0xc0002418c0, {0xef7120?, 0xc0001f5540?, 0x67f4a5?})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/encoding/json/decode.go:375 +0xa5
+encoding/json.(*decodeState).unmarshal(0xc0002418c0, {0xef7120, 0xc0001f5540})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/encoding/json/decode.go:178 +0x285
+encoding/json.Unmarshal({0xc000018a00, 0x2006, 0x2007}, {0xef7120, 0xc0001f5540})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/encoding/json/decode.go:108 +0x225
+workspace/internal/core.readJSON({0xc00039bf00, 0x7e}, {0xef7120, 0xc0001f5540})
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3P1P5PT72C64W4PF6CAXQNP/worktrees/integration/internal/core/files.go:92 +0x73
+workspace/internal/core.recoverWrite({0xc0001b2fc0, 0x68})
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3P1P5PT72C64W4PF6CAXQNP/worktrees/integration/internal/core/files.go:161 +0x176
+workspace/internal/core.flushDocument(0xc0005a1888)
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3P1P5PT72C64W4PF6CAXQNP/worktrees/integration/internal/core/files.go:262 +0x57a
+workspace/internal/core.saveDocument(0xc0005a1888)
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3P1P5PT72C64W4PF6CAXQNP/worktrees/integration/internal/core/files.go:232 +0x125
+workspace/internal/core.saveResource(0xc0005a1888, {0x0, 0x0}, {0xfce700, 0xc0003d3188})
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3P1P5PT72C64W4PF6CAXQNP/worktrees/integration/internal/core/files.go:314 +0x245
+workspace/internal/core.(*Service).StartSession.func1(0xc0005a1888)
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3P1P5PT72C64W4PF6CAXQNP/worktrees/integration/internal/core/session.go:551 +0x9726
+workspace/internal/core.(*Service).With(0xc000496000, {0x11ac8d0, 0x1684300}, {0xc0004b3b00, 0x1d}, 0xc0004313c8)
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3P1P5PT72C64W4PF6CAXQNP/worktrees/integration/internal/core/project.go:476 +0x122
+workspace/internal/core.(*Service).StartSession(_, {_, _}, {_, _}, {{0xc000529180, 0x20}, {0xc00002dcc0, 0x1d}, {0x0, ...}, ...})
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3P1P5PT72C64W4PF6CAXQNP/worktrees/integration/internal/core/session.go:55 +0x1ab
+workspace/internal/core.nativeOpenCodeDeliveryFixture(_, {_, _}, {_, _}, {_, _})
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3P1P5PT72C64W4PF6CAXQNP/worktrees/integration/internal/core/opencode_delivery_test.go:171 +0x34a
+workspace/internal/core.TestOpenCodeLegacyCheckingPhaseIsRecoverable(0xc000320c40)
+	/mnt/c/Users/fpiec/Documents/ChatGPT/workspace/.workspace/ws_01M3P1P5PT72C64W4PF6CAXQNP/worktrees/integration/internal/core/opencode_delivery_test.go:505 +0x168
+testing.tRunner(0xc000320c40, 0x10260d8)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1792 +0x226
+created by testing.(*T).Run in goroutine 1
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/testing/testing.go:1851 +0x8f3
+
+goroutine 3006 [IO wait]:
+internal/poll.runtime_pollWait(0x7f4a28620f60, 0x72)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc0002be020, 0x72, 0x0)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_poll_runtime.go:84 +0xb1
+internal/poll.(*pollDesc).waitRead(...)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc0002be000)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/internal/poll/fd_unix.go:620 +0x505
+net.(*netFD).accept(0xc0002be000)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/net/fd_unix.go:172 +0x45
+net.(*TCPListener).accept(0xc0001bc300)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/net/tcpsock_posix.go:159 +0x4e
+net.(*TCPListener).Accept(0xc0001bc300)
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/net/tcpsock.go:380 +0x65
+net/http.(*Server).Serve(0xc00040e000, {0x11ab958, 0xc0001bc300})
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/net/http/server.go:3424 +0x65f
+net/http/httptest.(*Server).goServe.func1()
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/net/http/httptest/server.go:311 +0xb4
+created by net/http/httptest.(*Server).goServe in goroutine 3005
+	/home/fpiechowski/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.0.linux-amd64/src/net/http/httptest/server.go:309 +0xa5
+FAIL	workspace/internal/core	90.017s
+?   	workspace/internal/release	[no test files]
+--- FAIL: TestNavigatorRealPTYAndClientSelection (5.74s)
+    navigation_integration_test.go:72: pseudo-TTY client did not attach
+FAIL
+FAIL	workspace/internal/terminal	5.756s
+ok  	workspace/internal/tui	6.996s
+ok  	workspace/internal/upgrade	1.285s
+FAIL
+merged-90s exit=1

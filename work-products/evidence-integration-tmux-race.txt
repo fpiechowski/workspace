@@ -1,0 +1,4 @@
+# Command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID WORKSPACE_TMUX_TEST=1 go test -race ./internal/core ./internal/tui -skip '^TestTmuxCompleteIssueWorkflow$' -count=1 -timeout 420s
+ok  	workspace/internal/core	183.659s
+ok  	workspace/internal/tui	6.847s
+tmux-race exit=0
