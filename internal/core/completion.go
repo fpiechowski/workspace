@@ -84,6 +84,7 @@ func (s *Service) completeManual(d *Document, opt CompleteOptions, out *Status) 
 	}
 	d.State.Status = "completed"
 	d.Body += "\n\n## Manual completion\n\n" + reason + " at " + now.Format(time.RFC3339) + "\n"
+	markIssueEvaluationPending(d, "Manual completion")
 	if err := saveDocument(d); err != nil {
 		return err
 	}
@@ -143,6 +144,7 @@ func (s *Service) completeLanding(ctx context.Context, d *Document, opt Complete
 	d.State.Workflow.Phase = "completed"
 	d.State.Status = "completed"
 	d.Body += "\n\n## Completion\n\n" + reason + " at " + now.Format(time.RFC3339) + "\n"
+	markIssueEvaluationPending(d, "Completion")
 	if err := saveDocument(d); err != nil {
 		return err
 	}
