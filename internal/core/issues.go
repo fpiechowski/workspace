@@ -821,89 +821,107 @@ func (s *Service) UpdateIssue(ctx context.Context, selector string, opt IssueUpd
 	}
 	var out Issue
 	err := withProjectLock(ctx, s.Root, func() error {
-		if err := recoverIssueWrite(s.Root); err != nil {
-			return err
-		}
-		request := struct {
-			IssueID          string
-			Status           string
-			Reason           string
-			ExpectedRevision int
-		}{selector, opt.Status, strings.TrimSpace(opt.Reason), opt.ExpectedRevision}
-		if opt.OperationKey != "" {
-			receipt, exists, err := readIssueReceipt(s.Root, opt.OperationKey, request)
-			if err != nil {
-				return err
-			}
-			if exists && receipt.State == "completed" && len(receipt.Result) > 0 {
-				return json.Unmarshal(receipt.Result, &out)
-			}
-			if exists && receipt.ResourceID != "" {
-				replayed, _, readErr := readIssue(s.Root, receipt.ResourceID)
-				if readErr != nil {
-					return readErr
-				}
-				out = replayed
-				return nil
-			}
-			if exists {
-				// If the process wrote the new Issue but crashed before recording
-				// the receipt's resource, reconcile the exact requested status
-				// transition instead of treating the already-applied revision as
-				// a stale guard conflict.
-				candidate, _, readErr := readIssue(s.Root, selector)
-				if readErr == nil && candidate.Revision == opt.ExpectedRevision+1 && candidate.Status == opt.Status && candidate.StatusReason == request.Reason {
-					out = candidate
-					receipt.ResourceID, receipt.Revision = out.ID, out.Revision
-					if writeErr := writeJSON(issueOperationPath(s.Root, opt.OperationKey), receipt); writeErr != nil {
-						return writeErr
-					}
-					return completeIssueReceipt(s.Root, opt.OperationKey, receipt, out, out.Revision)
-				}
-			}
-			if !exists {
-				if _, err := beginIssueReceipt(s.Root, opt.OperationKey, request); err != nil {
-					return err
-				}
-			}
-		}
-		before, _, err := readIssue(s.Root, selector)
-		if err != nil {
-			return err
-		}
-		if before.Revision != opt.ExpectedRevision {
-			return fail("revision_conflict", "expected %d, current %d", opt.ExpectedRevision, before.Revision)
-		}
-		out = before
-		out.Revision++
-		out.Status = opt.Status
-		out.StatusReason = strings.TrimSpace(opt.Reason)
-		out.UpdatedAt = nowUTC()
-		if err := writeIssue(s.Root, before, out, true); err != nil {
-			return err
-		}
-		if opt.OperationKey != "" {
-			receipt, exists, err := readIssueReceipt(s.Root, opt.OperationKey, request)
-			if err != nil {
-				return err
-			}
-			if !exists {
-				receipt, err = beginIssueReceipt(s.Root, opt.OperationKey, request)
-				if err != nil {
-					return err
-				}
-			}
-			receipt.ResourceID, receipt.Revision = out.ID, out.Revision
-			if err := writeJSON(issueOperationPath(s.Root, opt.OperationKey), receipt); err != nil {
-				return err
-			}
-			if err := completeIssueReceipt(s.Root, opt.OperationKey, receipt, out, out.Revision); err != nil {
-				return err
-			}
-		}
-		return nil
+		var err error
+		out, err = s.updateIssueLocked(selector, opt)
+		return err
 	})
 	return out, err
+}
+
+// updateIssueLocked performs the Issue status write while the caller already
+// holds the project lock. It does no authorization: the caller owns that. The
+// public UpdateIssue wrapper validates, authorizes and takes the lock; the
+// Issue-evaluation record reuses this helper from inside an already-locked
+// Workspace mutation so the two files commit without reentering the lock.
+func (s *Service) updateIssueLocked(selector string, opt IssueUpdateOptions) (Issue, error) {
+	var out Issue
+	if err := recoverIssueWrite(s.Root); err != nil {
+		return out, err
+	}
+	request := struct {
+		IssueID          string
+		Status           string
+		Reason           string
+		ExpectedRevision int
+	}{selector, opt.Status, strings.TrimSpace(opt.Reason), opt.ExpectedRevision}
+	if opt.OperationKey != "" {
+		receipt, exists, err := readIssueReceipt(s.Root, opt.OperationKey, request)
+		if err != nil {
+			return out, err
+		}
+		if exists && receipt.State == "completed" && len(receipt.Result) > 0 {
+			if err := json.Unmarshal(receipt.Result, &out); err != nil {
+				return out, err
+			}
+			return out, nil
+		}
+		if exists && receipt.ResourceID != "" {
+			replayed, _, readErr := readIssue(s.Root, receipt.ResourceID)
+			if readErr != nil {
+				return out, readErr
+			}
+			out = replayed
+			return out, nil
+		}
+		if exists {
+			// If the process wrote the new Issue but crashed before recording
+			// the receipt's resource, reconcile the exact requested status
+			// transition instead of treating the already-applied revision as
+			// a stale guard conflict.
+			candidate, _, readErr := readIssue(s.Root, selector)
+			if readErr == nil && candidate.Revision == opt.ExpectedRevision+1 && candidate.Status == opt.Status && candidate.StatusReason == request.Reason {
+				out = candidate
+				receipt.ResourceID, receipt.Revision = out.ID, out.Revision
+				if writeErr := writeJSON(issueOperationPath(s.Root, opt.OperationKey), receipt); writeErr != nil {
+					return out, writeErr
+				}
+				if err := completeIssueReceipt(s.Root, opt.OperationKey, receipt, out, out.Revision); err != nil {
+					return out, err
+				}
+				return out, nil
+			}
+		}
+		if !exists {
+			if _, err := beginIssueReceipt(s.Root, opt.OperationKey, request); err != nil {
+				return out, err
+			}
+		}
+	}
+	before, _, err := readIssue(s.Root, selector)
+	if err != nil {
+		return out, err
+	}
+	if before.Revision != opt.ExpectedRevision {
+		return out, fail("revision_conflict", "expected %d, current %d", opt.ExpectedRevision, before.Revision)
+	}
+	out = before
+	out.Revision++
+	out.Status = opt.Status
+	out.StatusReason = strings.TrimSpace(opt.Reason)
+	out.UpdatedAt = nowUTC()
+	if err := writeIssue(s.Root, before, out, true); err != nil {
+		return out, err
+	}
+	if opt.OperationKey != "" {
+		receipt, exists, err := readIssueReceipt(s.Root, opt.OperationKey, request)
+		if err != nil {
+			return out, err
+		}
+		if !exists {
+			receipt, err = beginIssueReceipt(s.Root, opt.OperationKey, request)
+			if err != nil {
+				return out, err
+			}
+		}
+		receipt.ResourceID, receipt.Revision = out.ID, out.Revision
+		if err := writeJSON(issueOperationPath(s.Root, opt.OperationKey), receipt); err != nil {
+			return out, err
+		}
+		if err := completeIssueReceipt(s.Root, opt.OperationKey, receipt, out, out.Revision); err != nil {
+			return out, err
+		}
+	}
+	return out, nil
 }
 
 func (s *Service) authorizeProjectActor(ctx context.Context) error {

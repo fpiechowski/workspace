@@ -113,6 +113,10 @@ func (s *Service) ReopenWorkspace(ctx context.Context, selector string, opt Reop
 		d.State.LiveTest = LiveTest{}
 		d.State.Release = Release{}
 		d.State.Autonomy = nil
+		// The prior completion's Issue evaluation is invalidated with the other
+		// derived completion state. The next completion creates a new pending
+		// evaluation with a fresh ID. The Issue itself is not changed here.
+		d.State.IssueEvaluation = nil
 		for i := range d.State.ChangeRequests {
 			d.State.ChangeRequests[i].State = "outdated"
 		}

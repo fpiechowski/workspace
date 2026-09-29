@@ -118,6 +118,30 @@ type Workspace struct {
 	// Autonomy is nil for an interactive workspace. Its fields are all
 	// omitempty so a non-autonomous document serializes exactly as before.
 	Autonomy *Autonomy `yaml:"autonomy,omitempty" json:"autonomy,omitempty"`
+	// IssueEvaluation is the durable Issue-evaluation state of a Workspace
+	// created from an Issue. Completion records a fresh pending evaluation in
+	// the same revision; the completed Workspace's orchestrator (or the user at
+	// the terminal) records the outcome. It is nil for every unlinked Workspace.
+	IssueEvaluation *IssueEvaluation `yaml:"issue_evaluation,omitempty" json:"issue_evaluation,omitempty"`
+}
+
+// IssueEvaluation is the durable record of the automatic linked-Issue
+// evaluation that starts when a linked Workspace reaches completed. ID is a
+// fresh "ieval_..." per completion cycle, so a reopen and re-completion produce
+// a new pending identity instead of mutating the earlier record.
+type IssueEvaluation struct {
+	ID            string     `yaml:"id" json:"id"`
+	IssueID       string     `yaml:"issue_id" json:"issue_id"`
+	State         string     `yaml:"state" json:"state"` // pending | recorded
+	RequestedAt   time.Time  `yaml:"requested_at" json:"requested_at"`
+	Outcome       string     `yaml:"outcome,omitempty" json:"outcome,omitempty"` // delivered | not_delivered
+	Reason        string     `yaml:"reason,omitempty" json:"reason,omitempty"`
+	IssueAction   string     `yaml:"issue_action,omitempty" json:"issue_action,omitempty"`     // closed | left_open | reopened | unchanged_closed
+	IssueRevision int        `yaml:"issue_revision,omitempty" json:"issue_revision,omitempty"` // Issue revision after the write
+	EvaluatedBy   string     `yaml:"evaluated_by,omitempty" json:"evaluated_by,omitempty"`     // agent ID or "user"
+	RunID         string     `yaml:"run_id,omitempty" json:"run_id,omitempty"`
+	EvaluatedAt   *time.Time `yaml:"evaluated_at,omitempty" json:"evaluated_at,omitempty"`
+	LaunchError   string     `yaml:"launch_error,omitempty" json:"launch_error,omitempty"`
 }
 
 // workspaceMode classifies the durable workspace mode. It is the single source
