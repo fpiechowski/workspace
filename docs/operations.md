@@ -30,6 +30,14 @@ A successful retry returns the preserved result. It may describe an older state:
 start it again. Read the current state through `status`, `session list`, or the relevant
 `list` command. Resource identifiers and the operation number remain stable.
 
+`workspace create`, `issue dispatch`, `agent create`, `task create`, and `session start`
+accept `--id` to choose the new resource's ID. The explicit ID is part of the operation
+payload, so replaying the key with a different `--id` returns `operation_conflict`. A
+keyed retry after an uncertain create returns the same allocated ID: an auto-generated
+slug is reserved before the entity is written, and the retry reuses its own reservation.
+An invalid ID shape returns `invalid_id`; an ID that is already taken returns `id_exists`
+instead of gaining a suffix. Both fail with a non-zero exit.
+
 Mutation JSON with a key contains `operation_id` and, for a workspace, the operation
 `revision`. This revision refers to the persisted result. `data.workspace.revision` in
 the `status` response is the current revision for the next

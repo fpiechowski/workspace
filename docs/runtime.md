@@ -1,6 +1,8 @@
 # Runtime and recovery
 
-Each workspace owns a tmux session. Worktrees appear as windows; concrete agent Runs
+Each workspace owns a tmux session named `workspace-<workspace-id>`, such as
+`workspace-ws_named-ids` for a slug ID or `workspace-ws_<ULID>` for a legacy workspace.
+Worktrees appear as windows; concrete agent Runs
 appear as panes. A logical Session can remain idle/disconnected without a pane and can
 accumulate many Runs. The orchestrator window runs from the workspace directory.
 Auxiliary services use their own records and panes, not agent identities:

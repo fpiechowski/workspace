@@ -26,7 +26,7 @@ func (m *Model) allItems() []collectionItem {
 			if workspace.Error != "" {
 				state = "error"
 			}
-			subtitle := fmt.Sprintf("%s · %s · active %d · problems %d", workspace.Phase, shortID(workspace.ID), workspace.ActiveRuns, workspace.Problems)
+			subtitle := fmt.Sprintf("%s · %s · active %d · problems %d", workspace.Phase, rowID("workspace", workspace.ID), workspace.ActiveRuns, workspace.Problems)
 			if workspace.IssueID != "" {
 				subtitle += " · issue " + shortID(workspace.IssueID)
 			}
@@ -130,7 +130,7 @@ func (m *Model) allItems() []collectionItem {
 				if handoff.Stale {
 					state = "stale"
 				}
-				items = append(items, collectionItem{ID: handoff.ID, Kind: "handoff", Title: handoff.Summary, Subtitle: fmt.Sprintf("%s · task %s · attempt %d", handoff.Outcome, shortID(handoff.TaskID), handoff.Attempt), State: state, At: handoff.CreatedAt})
+				items = append(items, collectionItem{ID: handoff.ID, Kind: "handoff", Title: handoff.Summary, Subtitle: fmt.Sprintf("%s · task %s · attempt %d", handoff.Outcome, rowID("task", handoff.TaskID), handoff.Attempt), State: state, At: handoff.CreatedAt})
 			}
 		case "checks":
 			for _, check := range s.Checks {
@@ -170,7 +170,7 @@ func (m *Model) allItems() []collectionItem {
 			if !m.isTask(m.route.ParentID) && (m.route.StatusFilter == "current" && session.LifecycleState == "closed" || m.route.StatusFilter == "history" && session.LifecycleState != "closed") {
 				continue
 			}
-			items = append(items, collectionItem{ID: session.ID, Kind: "session", Title: session.AgentSnapshot.Name, Subtitle: fmt.Sprintf("%s · %s · attempt %d", session.LifecycleState, shortID(session.CurrentRunID), session.TaskAttempt), State: session.State, At: session.LastActiveAt})
+			items = append(items, collectionItem{ID: session.ID, Kind: "session", Title: session.AgentSnapshot.Name, Subtitle: fmt.Sprintf("%s · %s · %s · attempt %d", rowID("session", session.ID), session.LifecycleState, shortID(session.CurrentRunID), session.TaskAttempt), State: session.State, At: session.LastActiveAt})
 		}
 	case "runs":
 		for _, run := range s.Status.Runs {
@@ -186,7 +186,7 @@ func (m *Model) allItems() []collectionItem {
 				continue
 			}
 			seen[agent.ID] = true
-			items = append(items, collectionItem{ID: agent.ID, Kind: "agent", Title: agent.Name, Subtitle: agent.Role + " · " + agent.Profile, State: "defined"})
+			items = append(items, collectionItem{ID: agent.ID, Kind: "agent", Title: agent.Name, Subtitle: agent.Role + " · " + agent.Profile + " · " + rowID("agent", agent.ID), State: "defined"})
 		}
 	case "services":
 		for _, service := range s.Services {
@@ -312,6 +312,18 @@ func shortID(id string) string {
 	return id
 }
 
+// rowID returns the ID shown inside a list row. IDs of the four first-class
+// entities (workspace, agent, session, task) are shown untruncated so slug IDs
+// stay copyable; Run IDs and other ULID kinds keep the compact shortID form.
+func rowID(kind, id string) string {
+	switch kind {
+	case "workspace", "agent", "session", "task":
+		return id
+	default:
+		return shortID(id)
+	}
+}
+
 func (m *Model) orchestrator() (*core.Session, *core.Run) {
 	status := m.snapshot.Status
 	var selected *core.Session
@@ -357,7 +369,7 @@ func (m *Model) attentionItems() []collectionItem {
 			if task, ok := m.task(handoff.TaskID); !ok || task.Attempt != handoff.Attempt {
 				continue
 			}
-			items = append(items, collectionItem{ID: handoff.ID, Kind: "handoff", Title: "Review: " + handoff.Summary, Subtitle: shortID(handoff.TaskID), State: "submitted"})
+			items = append(items, collectionItem{ID: handoff.ID, Kind: "handoff", Title: "Review: " + handoff.Summary, Subtitle: rowID("task", handoff.TaskID), State: "submitted"})
 		}
 	}
 	for _, session := range m.snapshot.Status.Sessions {

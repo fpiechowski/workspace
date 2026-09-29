@@ -123,6 +123,7 @@ func issueCommands(o *options) *cobra.Command {
 	dispatchCmd.Flags().BoolVar(&dispatch.Autonomous, "autonomous", false, "Start the linked Workspace in an autonomous run; user dispatches only")
 	dispatchCmd.Flags().StringVar(&dispatch.Base, "base", "HEAD", "Base Git revision")
 	dispatchCmd.Flags().StringVar(&dispatch.Title, "title", "", "Workspace title override")
+	dispatchCmd.Flags().StringVar(&dispatch.ID, "id", "", "Explicit linked Workspace ID slug, with or without the ws_ prefix")
 	dispatchCmd.Flags().BoolVar(&dispatch.Start, "start", false, "Also start the linked Workspace Orchestrator")
 	group.AddCommand(dispatchCmd)
 	return group
