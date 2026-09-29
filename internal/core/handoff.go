@@ -412,18 +412,22 @@ func promoteRejectedHandoffProvenance(d *Document, h *Handoff, t *Task) {
 }
 
 func (s *Service) ReviewHandoff(ctx context.Context, selector, id string, accept bool, feedback string, keys ...string) (Handoff, error) {
-	return s.ReviewHandoffAudited(ctx, selector, id, accept, feedback, "", nil, keys...)
+	return s.ReviewHandoffAudited(ctx, selector, id, accept, feedback, "", nil, false, keys...)
 }
 
 // ReviewHandoffAudited is ReviewHandoff with the rationale and evidence an
-// autonomous orchestrator must attach while the run is running. The rationale
-// joins the idempotency payload only when non-empty, so non-autonomous and
-// pre-existing receipts keep their digests.
-func (s *Service) ReviewHandoffAudited(ctx context.Context, selector, id string, accept bool, feedback, rationale string, evidence []string, keys ...string) (Handoff, error) {
+// autonomous orchestrator must attach while the run is running, plus the opt-out
+// that keeps the submitting worker Session open. The rationale, evidence and
+// keep-session flag join the idempotency payload only when set, so non-autonomous
+// and pre-existing receipts keep their digests.
+func (s *Service) ReviewHandoffAudited(ctx context.Context, selector, id string, accept bool, feedback, rationale string, evidence []string, keepSession bool, keys ...string) (Handoff, error) {
 	var out Handoff
 	request := any([]any{"handoff.review", id, accept, feedback})
 	if strings.TrimSpace(rationale) != "" || len(evidence) > 0 {
 		request = []any{"handoff.review", id, accept, feedback, rationale, evidence}
+	}
+	if keepSession {
+		request = []any{"handoff.review", id, accept, feedback, rationale, evidence, true}
 	}
 	err := mutate(s, ctx, selector, keys, request, &out, s.requireOrchestrator, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
@@ -515,6 +519,10 @@ func (s *Service) ReviewHandoffAudited(ctx context.Context, selector, id string,
 				d.State.LiveTest.AcceptedHandoff = h.ID
 				d.State.LiveTest.HeadCommit = h.HeadCommit
 			}
+			if !keepSession {
+				// Record the durable close intent atomically with the acceptance.
+				s.requestWorkerSessionClose(d, h.FromSession, fmt.Sprintf("task %s accepted (handoff %s)", t.ID, h.ID), nowUTC())
+			}
 		} else {
 			if strings.TrimSpace(feedback) == "" {
 				return fail("feedback_required", "give a reason for rejection")
@@ -569,6 +577,11 @@ func (s *Service) ReviewHandoffAudited(ctx context.Context, selector, id string,
 		s.appendGateDecision(d, kind, subject, rationale, evidence)
 		return saveDocument(d)
 	})
+	if err == nil {
+		// Best-effort convergence after the atomic commit. A settle failure does
+		// not fail the review; it is recorded in CloseError and retried.
+		_ = s.settleClosingSessions(ctx, selector)
+	}
 	return out, err
 }
 

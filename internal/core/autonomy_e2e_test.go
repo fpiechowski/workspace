@@ -53,7 +53,7 @@ func finishTaskAgent(t *testing.T, s, agent *Service, ws string, p Session, w Wo
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", rationale, []string{"ck_verified"}); err != nil {
+	if _, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", rationale, []string{"ck_verified"}, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.StopSession(ctx, ws, p.ID); err != nil {
@@ -88,7 +88,7 @@ func setupAutonomyLanding(t *testing.T) (*Service, *Service, string, Session, Wo
 	plan := plannedTask(t, s, ws, "e2e-plan", "planner", nil)
 	pp, pw := startTask(t, s, ws, plan)
 	ph := submitPlanForGate(t, s, ws, pp, pw, "e2e-plan-result")
-	if _, err := agent.ReviewHandoffAudited(ctx, ws, ph.ID, true, "", "PLAN maps each criterion", nil); err != nil {
+	if _, err := agent.ReviewHandoffAudited(ctx, ws, ph.ID, true, "", "PLAN maps each criterion", nil, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.StopSession(ctx, ws, pp.ID); err != nil {

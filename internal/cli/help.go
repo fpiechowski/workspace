@@ -440,7 +440,7 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace handoff list",
 	),
 	"workspace handoff accept": h(
-		"Accept a submitted handoff and record the review decision separately from inbox acknowledgement.",
+		"Accept a submitted handoff and record the review decision separately from inbox acknowledgement. Acceptance closes the submitting worker Session by default; use --keep-session to keep it for consultation.",
 		"workspace handoff accept handoff_01",
 		requiredArgument("handoff", "Handoff ID to accept."),
 	),
@@ -757,7 +757,7 @@ var flagHelpSpecs = map[string]map[string]string{
 		"check":        "Captured check receipt ID; repeat for multiple checks.",
 		"risk":         "Known risk; repeat for multiple risks.",
 	},
-	"workspace handoff accept":      {"reason-file": "Review feedback file.", "rationale": "Autonomous-run rationale for accepting the result.", "evidence": "Artifact IDs, check IDs or commits supporting the decision."},
+	"workspace handoff accept":      {"reason-file": "Review feedback file.", "rationale": "Autonomous-run rationale for accepting the result.", "evidence": "Artifact IDs, check IDs or commits supporting the decision.", "keep-session": "Keep the submitting worker Session open for consultation instead of auto-closing it."},
 	"workspace handoff reject":      {"reason-file": "Review feedback file; required when rejecting.", "rationale": "Autonomous-run rationale for rejecting the result.", "evidence": "Artifact IDs, check IDs or commits supporting the decision."},
 	"workspace integration prepare": {"tasks": "Accepted task IDs; repeat or comma-separate. Defaults to all implementation tasks.", "base": "Target base revision.", "target": "Branch the integration lands into; defaults to the workspace base ref for landing workflows."},
 	"workspace integration land":    {"target": "Target branch; must match the prepared integration target.", "expected-revision": "Required current workspace revision.", "user-confirmed": "Attest that the user explicitly approved landing into the target branch when running from an agent session."},

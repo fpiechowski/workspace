@@ -228,13 +228,18 @@ type Session struct {
 	DeletedAt       *time.Time `json:"deleted_at,omitempty" yaml:"deleted_at,omitempty"`
 	ClosedAt        *time.Time `json:"closed_at,omitempty" yaml:"closed_at,omitempty"`
 	CloseReason     string     `json:"close_reason,omitempty" yaml:"close_reason,omitempty"`
-	LifecycleState  string     `json:"lifecycle_state" yaml:"lifecycle_state"`
-	Scope           string     `json:"scope,omitempty" yaml:"scope,omitempty"`
-	ProjectID       string     `json:"project_id,omitempty" yaml:"project_id,omitempty"`
-	CurrentRunID    string     `json:"current_run_id,omitempty" yaml:"current_run_id,omitempty"`
-	LastRunID       string     `json:"last_run_id,omitempty" yaml:"last_run_id,omitempty"`
-	RunCount        int        `json:"run_count" yaml:"run_count"`
-	LastActiveAt    time.Time  `json:"last_active_at" yaml:"last_active_at"`
+	// CloseRequestedAt records a durable intent to close the Session after an
+	// accepted handoff. The settle step converges it; CloseError holds the last
+	// failure so Reconcile and StartSession can retry without failing the accept.
+	CloseRequestedAt *time.Time `json:"close_requested_at,omitempty" yaml:"close_requested_at,omitempty"`
+	CloseError       string     `json:"close_error,omitempty" yaml:"close_error,omitempty"`
+	LifecycleState   string     `json:"lifecycle_state" yaml:"lifecycle_state"`
+	Scope            string     `json:"scope,omitempty" yaml:"scope,omitempty"`
+	ProjectID        string     `json:"project_id,omitempty" yaml:"project_id,omitempty"`
+	CurrentRunID     string     `json:"current_run_id,omitempty" yaml:"current_run_id,omitempty"`
+	LastRunID        string     `json:"last_run_id,omitempty" yaml:"last_run_id,omitempty"`
+	RunCount         int        `json:"run_count" yaml:"run_count"`
+	LastActiveAt     time.Time  `json:"last_active_at" yaml:"last_active_at"`
 
 	// The fields below are a compatibility/status projection of current_run (or
 	// last_run when idle). They are never the source of runtime ownership.

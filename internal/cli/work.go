@@ -252,6 +252,7 @@ func handoffCommands(o *options) *cobra.Command {
 		var file string
 		var rationale string
 		var evidence []string
+		var keepSession bool
 		c := command(verb+" <handoff>", "Review a handoff separately from inbox acknowledgement", func(c *cobra.Command, args []string) error {
 			feedback := ""
 			if file != "" {
@@ -265,7 +266,7 @@ func handoffCommands(o *options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			v, err := s.ReviewHandoffAudited(c.Context(), id, args[0], verb == "accept", feedback, rationale, evidence, o.key)
+			v, err := s.ReviewHandoffAudited(c.Context(), id, args[0], verb == "accept", feedback, rationale, evidence, keepSession, o.key)
 			if err != nil {
 				return err
 			}
@@ -275,6 +276,9 @@ func handoffCommands(o *options) *cobra.Command {
 		c.Flags().StringVar(&file, "reason-file", "", "Review feedback (required to reject)")
 		c.Flags().StringVar(&rationale, "rationale", "", "Autonomous-run rationale for accepting or rejecting the result")
 		c.Flags().StringSliceVar(&evidence, "evidence", nil, "Audit evidence for the autonomous decision; repeat or comma-separate")
+		if verb == "accept" {
+			c.Flags().BoolVar(&keepSession, "keep-session", false, "Keep the submitting worker Session open for consultation instead of auto-closing it")
+		}
 		group.AddCommand(c)
 	}
 	return group
