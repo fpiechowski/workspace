@@ -1,399 +1,128 @@
-# Integrated implementation reports (I4 and I5)
+# Implementation: Auto-close completed worker Sessions
 
-The I4 and I5 implementation tasks each committed their report to this shared
-root path (`work-products/IMPLEMENTATION.md`). Merging I5 (branched from I3)
-onto the I4 lineage produced a whole-file content conflict because each report
-rewrote the file. Both reports are preserved verbatim below; the per-task copies
-also remain on their branches and in the task artifacts.
+Task: task_01M3P785FNW7WPVAQ0NJKVHCX0
+Plan: art_01M3P2E8D7AHJE7MHE36Q5CQPK (PLAN.md, planner head 59fa949)
+Base: 3031ccd17917f9586d907382a5eb94efc5d2d61d
+Commit: 248ae63 `feat: auto-close accepted worker sessions`
+Worktree: `.workspace/ws_01M3P1NVNKTKBC53CQ2EGBYTVN/worktrees/impl-autoclose`
 
----
+## 1. What changed
 
-# Implementation report — task_01M3MJYRXPT60803R31VMFWE6C (I4: Orchestrator guidance and documentation)
+Accepting a worker handoff now records a durable close intent on the submitting
+worker Session in the same atomic commit as the acceptance. After the commit a
+best-effort settle step verifies pane ownership, stops the owned Run, and marks
+the Session `closed`. Settle failures never fail the acceptance: they are stored
+in `close_error` and retried by `Reconcile`, every supervisor tick, and the next
+`StartSession`. A pane that is not verified as owned is never stopped. The
+documented consultation resume of an accepted worker is preserved only for
+Sessions kept with the new `--keep-session` opt-out.
 
-## Commit
+Follows design D from PLAN.md sections 3-5 (T1 core, T2 CLI/help, T3 docs in one
+worktree). No new dependencies, no unrelated refactors, stock prompt templates
+untouched.
 
-- `c718ed1` — `feat: add autonomous-mode guidance and documentation`
+### Core (`internal/core`)
 
-## Changes
+- `model.go`: added `Session.CloseRequestedAt *time.Time` and
+  `Session.CloseError string` (both `omitempty`, additive; no schema bump).
+- `session.go`:
+  - `requestWorkerSessionClose(d, sessionID, reason, now)` records the intent.
+    No-op for a missing/deleted/closed/orchestrator Session, for the acting
+    Session itself, and when an intent is already pending.
+  - `settleClosingSessionsLocked(ctx, d)` converges every Session with a pending
+    intent and returns whether the document changed:
+    - idle (no current Run or a terminated Run): clear `current_run_id`, set
+      `closed_at`, keep `close_reason`, clear `close_error`, `syncSession`;
+    - active Run with a recorded pane: `Inspect`; `pane_missing`/dead marks the
+      Run `exited` (no "without a handoff" error) and closes; an owned pane calls
+      `Runtime.Stop`, marks the Run `stopped` with `finished_at`, then closes; a
+      pane that is not owned, a `launch_uncertain` Run without a pane, or any
+      other inspect/stop error records `close_error` and leaves the intent
+      pending;
+  - `settleClosingSessions(ctx, selector)` is the `With` wrapper.
+  - Wired into `StartSession` (before ownership and parallel-limit checks) and
+    `Reconcile` (after the Runs loop, before save).
+  - Resume validation treats a pending intent as closed
+    (`session_closed`), the parent-Session guard does the same, and `ResumeAgent`
+    clears `ResumeSession` so a closing latest Session starts fresh.
+  - `CloseSession` clears a pending intent/error when a manual close converges.
+- `handoff.go`: `ReviewHandoffAudited` gained a `keepSession bool` parameter. On
+  the accept branch (unless keep) it records the intent before the commit; after
+  the commit (including a replayed receipt) it calls `settleClosingSessions` and
+  ignores its error. The keep flag joins the idempotency payload only when true,
+  so existing receipts keep their digests.
 
-### Binary-owned autonomous notice (`internal/core`)
+### CLI (`internal/cli`)
 
-- `internal/core/autonomy.go` adds the `autonomyRunNotice` constant. It is the
-  authoritative autonomous-mode guidance appended to orchestrator Run prompts:
-  the §3.3 judgment rules (plan/task/integrator acceptance, phase advance,
-  worker questions, the 2-rejection/1-retry bound) and the §4 boundary (the
-  operations reserved for the user). It is owned by the binary, so it cannot go
-  stale or be removed by a customized project template.
-- `internal/core/session.go` appends the notice after the existing
-  conversation-only notice when `a.Role == "orchestrator"` and
-  `d.State.AutonomyRunning()`. `promptData` gains `Autonomous`, populated from
-  the same state, so the stock session prompt templates can switch on it.
-- `internal/core/workflow_model.go` adds `Workspace.Autonomous()`, a method that
-  mirrors `AutonomyRunning()` and backs the `{{if .Autonomous}}` template switch
-  for every render path that passes a `Workspace` value.
+- `work.go`: `--keep-session` on `handoff accept` only (not `reject`), passed
+  through to `ReviewHandoffAudited`.
+- `help.go`: accept long help and the flag description map updated.
 
-### Stock templates
+### Docs
 
-- `internal/core/templates/orchestrator.AGENTS.md.tmpl` replaces the
-  "Keep the conversation interactive" paragraph with an `{{if .Autonomous}}`
-  branch while the interactive text remains the `{{else}}` branch.
-- `internal/core/templates/workflows/plan-first/WORKFLOW.md.tmpl` and
-  `internal/core/templates/workflows/plan-first/prompts/orchestrator.md.tmpl`
-  add a short autonomy note.
-- `internal/core/templates/manual/WORKFLOW.md.tmpl` and
-  `internal/core/templates/manual/prompts/orchestrator.md.tmpl` add a one-line
-  autonomy note (finish with `autonomy report`, outcome `ready_to_complete`).
-- `internal/core/project.go` sets `Workspace.Autonomy` before
-  `snapshotTemplates`, so `create --autonomous` renders the autonomous branches
-  (not just the Run-time notice).
+- `docs/runtime.md`: Session projection table gains
+  `close_requested_at`/`close_error`; a new auto-close convergence paragraph; the
+  consultation paragraph now requires `--keep-session`.
+- `README.md`: one sentence each near `handoff accept` and `session close`.
+- `PRODUCT.md`: one sentence in the session-lifecycle paragraph.
+- `ARCHITECTURE.md`: durable close-intent sentence in the Session projections
+  paragraph.
+- Stock prompt templates (`prompts/*.tmpl`,
+  `internal/core/templates/**/*.tmpl`) are untouched.
 
-### Stale-template detection
+## 2. Acceptance criteria
 
-- `internal/core/project.go` adds the previous stock digests to the
-  stale-detection lists: `0f8af6…` to `stockPlanFirstTemplateDigests`
-  (`workflows/plan-first/WORKFLOW.md.tmpl`) and `5c789f…` to
-  `stockOrchestratorPromptDigests`
-  (`workflows/plan-first/prompts/orchestrator.md.tmpl`). Projects on those
-  versions are recognized as unmodified stock and refreshed; customized files
-  are preserved and listed.
-
-### Agent skill
-
-- `internal/core/skill/workspace/SKILL.md` (and the identical tracked copy at
-  `.agents/skills/workspace/SKILL.md`) add the `--autonomous` create flag note,
-  the `decision_required` autonomous clause (resolve with
-  `--rationale`/`--evidence`, never attest an excluded operation with
-  `--user-confirmed` while running), and the `workspace autonomy enable|disable`
-  and `workspace autonomy report` commands. `workspace prime` prints the new
-  text.
-
-### Documentation
-
-- `PRODUCT.md`: new principle "Autonomous Runs Are Auditable and Bounded" and a
-  Product Scope bullet.
-- `README.md`: the `--autonomous` create flag, the `workspace autonomy
-  enable|disable|report` contract, the report outcome, and the excluded
-  operations.
-- `ARCHITECTURE.md`: an `Autonomy` Domain Model row and the persisted-state
-  contract (autonomy record, `omitempty` audit fields, downgrade behavior,
-  delivery precondition, run end).
-- `docs/operations.md`: the new receipted mutations, the rationale/evidence
-  gate payload committed atomically with an audit `Decision`, and the
-  `autonomy_excluded` boundary.
-- `docs/runtime.md`: the delivery precondition (`autonomy_unsupported`) and the
-  `autonomy report` run end.
-
-### Tests
-
-- New `internal/core/autonomy_prompt_test.go`:
-  - an autonomous plan-first orchestrator prompt contains the binary-owned notice
-    while an interactive one does not, and `create --autonomous` rendered the
-    autonomy branches into `AGENTS.md` and `WORKFLOW.md`;
-  - the notice survives customized/older project templates (binary ownership);
-  - manual, plan-first and custom (`extended`) workflows all render with
-    `missingkey=error` and their autonomy notes.
-
-## Acceptance criteria
-
-- An autonomous orchestrator Run prompt contains the notice; a non-autonomous
-  one does not; the notice is present even with customized templates
-  (`TestAutonomousOrchestratorPromptCarriesNotice`,
-  `TestAutonomyNoticeSurvivesCustomizedTemplates`).
-- The changed templates render with `missingkey=error` for manual, plan-first
-  and custom workflows, and `workspace prime` includes the new skill text
-  (`TestAutonomyTemplateRenderingForEachCreationMode`, `evidence-i4-prime.txt`).
-- The previous stock plan-first workflow and orchestrator-prompt digests were
-  added to the stale-detection lists.
-- The docs describe the current contract; the link check reports
-  `checked=29 broken=0`.
-- `go test ./internal/core -run 'Session|Skill|Template|Autonomy' -count=1`,
-  the tmux race prompt-composition subset, `gofmt` clean, `go vet ./...` and
-  `go test ./...` all pass.
-
-## Checks
-
-See `work-products/CHECKS-I4.yaml`. All recorded commands exit 0 except the
-full `WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 90s` suite, which is
-red on this machine for pre-existing reasons (see Risks).
-
-## Risks and deviations
-
-- The acceptance names `WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 90s`.
-  On this machine the full race suite is red independently of this change: the
-  `internal/terminal` `TestNavigatorRealPTYAndClientSelection` pseudo-TTY test
-  fails at the unmodified HEAD (`58b5862`), and the `internal/core` race binary
-  exceeds the 90s budget (the non-race core suite alone takes ~65–142s here).
-  I ran the change-relevant race subset
-  (`WORKSPACE_TMUX_TEST=1 go test -race ./internal/core -run
-  'Session|Skill|Template|Autonomy' -timeout 120s`) green in 22.5s; there is no
-  data race. Evidence: `evidence-i4-race-all.txt`,
-  `evidence-i4-tmux-prompt.txt`.
-- `create --autonomous` now assigns `Workspace.Autonomy` before
-  `snapshotTemplates`. This only affects the newly created autonomous document;
-  non-autonomous creation and its receipt digests are unchanged (covered by the
-  existing autonomy serialization test and the full suite).
-- The stock `orchestrator.AGENTS.md.tmpl` and `manual/*` templates are not in
-  the stale-detection lists (they were not before this change either); only the
-  two plan-first stock files are refreshed by digest.
-
----
-
-# Implementation report — task_01M3MJYS3TAP3E9057R289DR1G (I5: TUI support)
-
-## Commit
-
-- `eca7ab5` — `feat(tui): surface autonomous runs and guarded disable`
-
-## Changes
-
-### Create form (already in I1; verified here)
-
-- `openCreateWorkspaceForm` offers the `Autonomous run` confirm next to the
-  workflow selector, and `createOptions` maps `ActionCall.Autonomous` into
-  `CreateOptions.Autonomous` together with either a named workflow or the
-  explicit `No workflow (manual orchestration)` choice. No change was needed in
-  I5; `TestCreateFormAutonomyCompatibleWithBothWorkflowChoices` now pins both
-  combinations.
-
-### Autonomy badge (`internal/tui/autonomy.go`, `internal/tui/view.go`, `internal/tui/status.go`)
-
-- New `autonomyStateBadge` returns `● autonomous running`, `✓ autonomous delivered`
-  or `○ autonomous disabled` (plain text, empty for an interactive workspace) and
-  `(*Model).autonomyBadge` applies the semantic color (accent / success /
-  neutral). Both render the state word in `--no-color` mode.
-- `headerIdentityText` appends the badge after the workspace status, so every
-  workspace route shows it. `statusBadge` recognizes the `delivered` and
-  `disabled` states used by the report and attention rows.
-
-### Report view and Needs attention (`internal/tui/autonomy.go`, `routes.go`, `update.go`, `detail.go`)
-
-- New `autonomyContent` detail page renders the mode, source, enabled revision
-  and time, disabled reason, and, once delivered, the final report (outcome,
-  recommendation, phase, integration head, artifact IDs, pending commands).
-- A delivered report is a Needs-attention entry (`Autonomous run delivered:
-  <outcome>`, priority with decisions) whose `Enter` opens the report view. More
-  lists `Autonomy` whenever an autonomy record exists, so the view stays
-  reachable after the attention row is gone. The `autonomy` route is wired into
-  `detailContent`, `detailSections` and `isDetailPage`.
-
-### ResolvedBy marker (`internal/tui/routes.go`, `internal/tui/detail.go`)
-
-- Decisions collection rows append `· by <resolver>` and, when the decision is
-  autonomous, `(autonomous)`.
-- Decision detail adds `Resolved by`, `Autonomous`, `Subject`, an `Evidence`
-  section, and the Run / decider provenance timestamps.
-
-### Guarded disable action (`internal/tui/forms.go`, `backend.go`, `pending.go`)
-
-- `availableActions` offers `Disable autonomous run` from the Orchestrator,
-  Runtime and Autonomy pages while an autonomy record exists and is not
-  `disabled` (and the workspace is not closed). The action opens the required
-  reason form and then a confirmation.
-- `beginAction` records the exact current workspace revision
-  (`ExpectedRevision`) and the per-action `tui_<ULID>` key, and the backend
-  dispatches `Service.DisableAutonomy` with the reason and revision guard. The
-  TUI service actor is empty (user), so no `--user-confirmed` attestation is
-  needed for the user's own terminal action.
-- Added the caption, description, warning severity and `Disabling autonomy`
-  status verb for the action.
-
-### Documentation (`docs/tui.md`)
-
-- The create-form paragraph documents the `Autonomous run` toggle.
-- A new `## Autonomous runs` section documents the badge and its `--no-color`
-  form, the More/report view, the Needs-attention entry, the guarded disable
-  action (`tui_<ULID>` key and revision guard), and that the TUI does not offer
-  `autonomy enable` (A4) or auto-accept results and decisions.
-
-## Tests
-
-- New `internal/tui/autonomy_test.go`:
-  - `TestAutonomyBadgeStatesColorAndNoColor` — every state names itself in color
-    and `--no-color`, and no escape is emitted without color; interactive shows
-    nothing.
-  - `TestAutonomyBadgeRendersInWorkspaceHeader` — the header shows the badge.
-  - `TestDeliveredReportAppearsInAttentionAndOpensReportView` — the delivered
-    report is a Needs-attention row that opens the report view with its outcome,
-    recommendation, artifact and pending command.
-  - `TestMoreExposesAutonomyOnlyWhenEnabled` — More lists the view only for an
-    autonomous workspace.
-  - `TestDisableAutonomyActionUsesRevisionGuardAndTuiKey` — the action is offered
-    for running/delivered, carries revision 7 and a `tui_` key, and is absent
-    when disabled.
-  - `TestDisableAutonomyReasonKeepsGuardedRequest` — the confirmation keeps the
-    same key, revision and reason.
-  - `TestTUIDoesNotOfferAutonomyEnableOrResultAcceptance` — no enable or
-    accept/handoff action on the Orchestrator, Runtime or Autonomy pages.
-  - `TestAutonomyDecisionShowsResolvedByAndEvidence` — the collection and detail
-    surface the resolver, autonomy marker, subject and evidence.
-  - `TestCreateFormAutonomyCompatibleWithBothWorkflowChoices` — autonomy reaches
-    `CreateOptions` for a named workflow and for the manual choice.
-
-## Acceptance criteria
-
-- The create form passes `Autonomous` and is compatible with both workflow
-  choices.
-- The badge renders running/delivered/disabled in color and `--no-color` modes.
-- Disable from the TUI uses the current revision guard and a `tui_<ULID>` key.
-- No TUI action auto-accepts results or enables autonomy on an existing
-  workspace; enable is not offered in v1 (A4).
-- `go test ./internal/tui -count=1`, gofmt, `go vet ./...` and `go test ./...`
-  pass; `docs/tui.md` documents the new UI.
-
-## Checks
-
-The exact commands, exit codes and evidence files are in
-`work-products/CHECKS-I5.yaml`. All exited 0: `go test ./internal/tui -count=1`,
-`gofmt -l ./cmd ./internal` (empty), `go vet ./...`, and
-`go test ./... -count=1 -timeout 570s`.
-
-## Risks and deviations
-
-- The harness environment exports `WORKSPACE_AGENT_ID`, `WORKSPACE_SESSION_ID`,
-  `WORKSPACE_RUN_ID` and `WORKSPACE_ROLE`. These make the pre-existing
-  `TestWorkerProcess` fixture and the CLI actor tests behave as an agent and
-  fail; the failures reproduce unchanged at the base commit `58b5862` without
-  this task's changes. The full-suite evidence therefore clears exactly those
-  variables (`env -u …`), matching the I3 checks file and the maintainer
-  environment. Targeted `go test ./internal/tui` passes with or without them.
-- The TUI never offers `autonomy enable`; enabling stays a terminal-only
-  `workspace autonomy enable` decision (A4).
-- The autonomy badge in the workspace header is plain text because `header()`
-  sanitizes the identity segment; the colored badge is rendered on the Autonomy
-  detail page (`autonomyBadge`).
-
----
-
-# IMPLEMENTATION — single-client auto-jump for the TUI navigation flow
-
-Task: `task_01M3MN4RE4J7NKEJCD45MTSH7S`
-Plan: `art_01M3MMYVEGXFT2WCVEFFXECK1X` (task `task_01M3MKVG69T3XM0DPREVQ1BXPP`)
-Base: `aa72616494937c5c977187ade2fd342d230fac93`
-
-## Commits
-
-| Commit | Message |
+| Criterion | Where |
 |---|---|
-| `f6e666e63bad2dc1d7311f0600a551e37a7dd796` | `feat(tui): jump immediately with the only attached tmux client` |
-| `d1bd846e550bf9e437190592206fd7e8319aa66b` | `docs: describe single-client auto-jump navigation` |
+| Accept closes the worker Session (`closed`, `closed_at`, `close_reason`), stops the owned Run, frees pane and slot, no manual stop | `TestAutoCloseAcceptClosesLiveWorker`, `TestAutoCloseReleasesParallelSlot` |
+| Archive/autonomy/next start not blocked after last worker accepted | `TestAutoCloseUnblocksArchiveAfterLastWorkerAccepted`, `TestAutoCloseUnblocksAutonomyReport`, `TestAutoCloseReleasesParallelSlot` |
+| Runtime failures never fail acceptance; durable `close_requested_at`/`close_error`; converge via Reconcile; unowned pane never stopped | `TestAutoCloseRuntimeFailureIsDurableAndConverges`, `TestAutoCloseNeverKillsUnownedPane` |
+| Idempotent under replay and repeated settle; `ClosedAt` not rewritten | `TestAutoCloseIsIdempotent` |
+| Rejected handoffs, orchestrator Sessions, `--keep-session` unaffected; kept Sessions still support consultation resume | `TestAutoCloseRejectLeavesSessionOpen`, `TestAutoCloseKeepSessionOptOut` |
+| Dead pane closes with Run `exited` and task stays `accepted` | `TestAutoCloseDeadPaneExitsRunWithoutBlockingTask` |
+| Closing Session cannot resume; `ResumeAgent` starts fresh | `TestAutoCloseClosingSessionCannotResume`, `TestAutoCloseResumeAgentStartsFreshSession` |
+| Review message to a closed Session stays queued and is not rerouted | `TestAutoCloseReviewMessageToClosedWorkerIsNotRerouted` |
+| CLI flag/help coverage | `TestHandoffAcceptHasKeepSessionFlagOnly` + existing help-map tests |
+| Existing tests updated for the new `ReviewHandoffAudited` shape | `autonomy_gates_test.go`, `autonomy_e2e_test.go` |
 
-Both commits are on the worktree branch
-`workspace/ws_01M3MJZRZ42N2F623G70K60M05/impl-single-client-jump`.
+New test file: `internal/core/session_autoclose_test.go` (PLAN section 5
+scenarios 1-11, 13). Existing `handoff_test.go`, `reopen_test.go`,
+`autonomy*_test.go`, `plan_first_v2_test.go`, `workflow_test.go` and the full
+suite pass unchanged.
 
-## What changed
+## 3. Checks (real commands and outcomes)
 
-### `internal/tui/navigation_flow.go`
+Evidence files are submitted with the handoff.
 
-- **T1**: In `handleNavigationClients`, after the zero-client check (l.126) and the
-  generation/target/ref guard (l.133) and before `orderedClients`, a new
-  `len(msg.clients) == 1` branch calls
-  `jumpClientCommand(msg.target, msg.ref, msg.clients[0], msg.afterReconcile,
-  msg.generation, msg.sequence, true, true)`. It does not set `m.form`, `m.formMode`,
-  `m.formClient` or `m.navigationClients`, so no picker opens.
-- **T1**: Inside the existing staleness guard only, when `len(msg.clients) == 1` the
-  notice becomes “The selected workspace target changed before the jump started. Press g
-  to try again.” The multi-client wording is unchanged. No second guard was added.
-- **T2**: `jumpClientCommand` gained a trailing `automatic bool`. Both existing callers
-  (reconcile retry `navigation_flow.go:99`, picker accept `:201`) pass `false`; the new
-  single-client branch passes `true`. When automatic, the in-flight notice is
-  “Jumping the only attached tmux client to the verified workspace pane…” and the
-  `navigation_target_changed` message is “the selected tmux target changed during client
-  discovery; press g to try again”; otherwise both texts are unchanged. Recheck, `Jump`,
-  `SaveLastUsed` and message shapes are untouched.
-- **T3**: `handleNavigationTarget` loads the last-used preference only when
-  `len(clients) > 1` (was `> 0`). The `SaveLastUsed` call on a successful jump is
-  unchanged, so the single client is still recorded and its save failure is still
-  reported by `handleNavigationResult`.
-
-### `internal/tui/navigation_flow_test.go`
-
-- Extracted `discoverNavigationClients` (resolve → `handleNavigationTarget` → discovery
-  message) and made `openNavigationPicker` reuse it, still asserting the picker opened.
-- Renamed `TestJumpAlwaysShowsClientPickerAndJumpsChosenClient` to
-  `TestMultipleClientsShowPickerAndJumpChosenClient`, dropped the one-client subtest, and
-  test both rows (index 0 and 1) with `flowClients()`; it asserts `prefs.loads == 1`.
-- `TestJumpCancellationAndFailureNeverSavePreference` and
-  `TestPreferenceWriteFailureReportsSuccessfulJumpSeparately` now use `flowClients()`.
-- Added `TestSingleClientJumpsWithoutPicker`, `TestSingleClientTargetChangedDuringDiscovery`,
-  `TestSingleClientGoneOnAutomaticPath`, `TestSingleClientPreferenceSaveFailureReportedSeparately`,
-  `TestSingleClientStaleDiscoveryDoesNotJump` (stale sequence/generation/changed target) and
-  `TestEscDuringAutomaticJumpDropsResult`.
-- Multi-client, zero-client, target-change-while-picker-open, detached-client,
-  stale-response and reconcile-retry tests are unchanged and passing.
-
-### Contract docs (T5)
-
-- `README.md` (~446–449 and ~478–482, plus the parallel Sessions line ~466),
-  `PRODUCT.md` (~225–229 and ~254), `docs/runtime.md` (~14–17), `docs/tui.md`
-  (~65–68, the `g` key table row, the Terminal and Managed Pane paragraph ~254–257 and
-  the target-recheck sentence ~269–270).
-- No stale “always / even for one client” wording remains. Verified with
-  `grep -rn "even for one client\|always opens\|always presents\|including for one client\|even when only one client" --include="*.md" .` → no matches.
-
-## Decisions and deviations from the plan
-
-- **Extended doc scope (deviation)**: the plan’s T5 list did not name `ARCHITECTURE.md`
-  or `DESIGN.md`, but both contained the same stale contract
-  (`ARCHITECTURE.md:316` “always presents the client picker, including for a single
-  client”; `DESIGN.md:165-166` “always opens the attached-client picker … even when only
-  one client is attached”). The acceptance criterion requires that no stale
-  “always/even for one client” wording remains (grep verified) and `AGENTS.md` requires
-  the architecture/design contract to describe current behavior, so both were updated.
-- **`docs/tui.md:269-270`**: changed “changed while the picker was open” to “changed
-  before the jump started”, because the single-client path has no picker.
-- **T3 fallback not used**: the plan offered keeping the load at l.110 as a fallback; the
-  chosen behavior is `len(clients) > 1`, pinned by `TestSingleClientJumpsWithoutPicker`
-  (`prefs.loads == 0`) and the multi-client test (`prefs.loads == 1`).
-- Zero-client notice, multi-client picker behavior (ordering, last-used marker,
-  read-error notice, Esc/Ctrl+C cancel), reconcile retry, and auto-select among several
-  clients are unchanged/out of scope.
-
-## Acceptance criteria
-
-| Criterion | Status | Evidence |
+| Command | Exit | Evidence |
 |---|---|---|
-| T1 single-client branch, no form | Met | `navigation_flow.go:143-145`; `TestSingleClientJumpsWithoutPicker` asserts `form==nil`, `formMode==""`, `navigationClients==nil` |
-| T1 single-client staleness notice, no second guard | Met | `navigation_flow.go:133-142`; `TestSingleClientStaleDiscoveryDoesNotJump/changed target` |
-| T2 `automatic bool`, texts, other callers false | Met | `navigation_flow.go:99,201,204,213-217,226-231`; `TestSingleClientTargetChangedDuringDiscovery` |
-| T3 load only when `>1`, save unchanged | Met | `navigation_flow.go:111`; `TestSingleClientJumpsWithoutPicker` (`loads==0`, save on success) and multi-client test (`loads==1`) |
-| T4 new tests + helper + renamed/updated existing tests | Met | `navigation_flow_test.go` |
-| T5 docs, no stale wording | Met | docs diff; grep clean |
-| Out of scope unchanged | Met | existing zero/multi/stale/reconcile/detached tests pass |
-| Checks pass and evidence captured | Met (see below) | check receipts |
-| Committed with clear messages | Met | `f6e666e`, `d1bd846` |
+| `gofmt -l ./internal ./cmd` | 0 | `evidence-autoclose-gofmt.txt` |
+| `env -i PATH HOME go vet ./...` | 0 | `evidence-autoclose-vet.txt` |
+| `env -i PATH HOME go test ./...` | 0 | `evidence-autoclose-test-all.txt` |
+| `env -i PATH HOME go test -race ./... -timeout 300s` | 0 | `evidence-autoclose-race.txt` |
+| `env -i PATH HOME WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 300s` | 1 | `evidence-autoclose-race-tmux.txt` |
+| Same tmux test on clean base `3031ccd` | 1 | `evidence-autoclose-base-tmux.txt` |
+| `python3 work-products/check-doc-links.py` | 0 | `evidence-autoclose-doc-links.txt` |
 
-## Check results
+Tests were run with a clean environment (`env -i`) because this worktree exports
+`WORKSPACE_SESSION_ID`, which would otherwise make `TestWorkerProcess` execute in
+the parent test binary.
 
-Run via `workspace check run` (receipts under `work-products/checks/`):
+## 4. Risks and limitations
 
-| Command | Exit | Receipt |
-|---|---|---|
-| `gofmt -l internal/tui` (empty) | 0 | `check_01M3MNFZ50HDM3MP552AXF456K` |
-| `go test ./internal/tui -run 'Navigation\|Jump\|Client\|Preference\|Reconcile\|Stale' -v` | 0 | `check_01M3MNG1HM1BD0BKWHJHXWM0H8` |
-| `go vet ./...` | 0 | `check_01M3MNG4S33XD94MYZCY2NAHKS` |
-| `WORKSPACE_TMUX_TEST=1 go test -race ./internal/tui -timeout 90s` | 0 | `check_01M3MNGE76V24JG1KQ1BAW9PQB` |
-| `go test ./...` | 1 (pre-existing) | `check_01M3MNGM4N1G072Z0JG568KHES` |
-| `WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 90s` | 1 (pre-existing) | `check_01M3MNGYY6FAS3APQ3NVD11R1M` |
-
-Raw evidence copies: `work-products/evidence/gofmt.txt`, `tui-focused.txt`,
-`go-vet.txt`, `go-test-all.txt`, `tmux-race.txt`.
-
-**Pre-existing failures (not caused by this change).** `go test ./...` and the full race
-run fail in `internal/cli`, `internal/core` and `internal/terminal` in exactly the same
-way on the base commit `aa72616` with this change stashed:
-`TestCompleteAndArchiveManualWorkspace`, `TestReopenJSONAndHelpContract`,
-`TestIntegrationLandJSON`, the `internal/core` harness
-(`open -test.timeout=...: no such file or directory`), and
-`TestNavigatorRealPTYAndClientSelection` (`pseudo-TTY client did not attach`). The
-changed package `internal/tui` passes the full suite both normally and under
-`-race` with `WORKSPACE_TMUX_TEST=1`.
-
-## Risks
-
-- **Surprise switch**: a user expecting a confirmation step now gets an immediate
-  single-client switch. This is the intended issue behavior; it is mitigated by the
-  explicit in-flight/success notices and the doc update.
-- **TOCTOU**: a second client could attach between `ListClients` and `Jump`; the verified
-  jump still moves only the discovered client, the same guarantee the picker gave.
-- **Text drift**: tests assert substrings (“only attached”, “press g”, “Jump completed”);
-  wording changes must update the tests together.
+- **tmux integration suite is red in this sandbox.** `WORKSPACE_TMUX_TEST=1`
+  fails with `launch_uncertain: invalid tmux pane: "%0_@0"` in
+  `TestTmuxEndToEnd`, `TestDispatcherTmuxEndToEnd`, `TestTmuxLandAndCompletePlanFirst`,
+  `TestTmuxCompleteIssueWorkflow` and
+  `TestNavigatorRealPTYAndClientSelection`. This reproduces unchanged on the
+  clean base commit `3031ccd` (see `evidence-autoclose-base-tmux.txt`), so it is a
+  pre-existing tmux 3.7c/environment incompatibility, not caused by this change.
+  The race suite without the tmux opt-in passes, and the auto-close logic is
+  covered through the fake runtime.
+- **Consultation contract change.** Accepted workers are no longer resumable for
+  consultation unless `--keep-session` is used. This is the accepted plan's
+  decision and is documented in docs/runtime.md, README.md and PRODUCT.md.
+- **Downgrade.** An older binary ignores `close_requested_at` on load and drops
+  it on save, leaving a live worker; this is the same manual situation as before.
+- **Lock hold time.** `Runtime.Stop` runs under the workspace lock, matching the
+  existing `stopSession` pattern.
