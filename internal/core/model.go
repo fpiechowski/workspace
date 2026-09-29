@@ -144,6 +144,17 @@ type IssueEvaluation struct {
 	LaunchError   string     `yaml:"launch_error,omitempty" json:"launch_error,omitempty"`
 }
 
+// linkedIssueEvaluation projects the optional Workspace evaluation into the two
+// scalar fields carried by the read models. A nil evaluation yields two empty
+// strings so an unlinked or not-yet-evaluated Workspace is indistinguishable
+// from one that predates the field.
+func linkedIssueEvaluation(eval *IssueEvaluation) (state, outcome string) {
+	if eval == nil {
+		return "", ""
+	}
+	return eval.State, eval.Outcome
+}
+
 // workspaceMode classifies the durable workspace mode. It is the single source
 // of truth behind Manual, NeedsWorkflow and WorkflowSelected so creation,
 // delegation and lifecycle code never repeat the fragile nil/status test.

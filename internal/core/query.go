@@ -63,22 +63,27 @@ func (s *Service) WorkspaceSnapshot(ctx context.Context, selector string) (Works
 // WorkspaceSummary is a light project-picker row. Error is populated for an
 // unreadable workspace directory without hiding healthy siblings.
 type WorkspaceSummary struct {
-	ID            string    `json:"id"`
-	ProjectID     string    `json:"project_id,omitempty"`
-	Title         string    `json:"title,omitempty"`
-	Directory     string    `json:"directory"`
-	Status        string    `json:"status"`
-	Phase         string    `json:"phase,omitempty"`
-	InputSource   string    `json:"input_source,omitempty"`
-	IssueID       string    `json:"issue_id,omitempty"`
-	IssueTitle    string    `json:"issue_title,omitempty"`
-	IssueRevision int       `json:"issue_revision,omitempty"`
-	IssueDigest   string    `json:"issue_digest,omitempty"`
-	CreatedAt     time.Time `json:"created_at,omitempty"`
-	ActiveRuns    int       `json:"active_runs"`
-	Problems      int       `json:"problems"`
-	Revision      int       `json:"revision"`
-	Error         string    `json:"error,omitempty"`
+	ID            string `json:"id"`
+	ProjectID     string `json:"project_id,omitempty"`
+	Title         string `json:"title,omitempty"`
+	Directory     string `json:"directory"`
+	Status        string `json:"status"`
+	Phase         string `json:"phase,omitempty"`
+	InputSource   string `json:"input_source,omitempty"`
+	IssueID       string `json:"issue_id,omitempty"`
+	IssueTitle    string `json:"issue_title,omitempty"`
+	IssueRevision int    `json:"issue_revision,omitempty"`
+	IssueDigest   string `json:"issue_digest,omitempty"`
+	// EvaluationState and EvaluationOutcome mirror the Workspace
+	// issue_evaluation so the project overview carries the evaluation without a
+	// second read. Both are empty when there is no evaluation.
+	EvaluationState   string    `json:"evaluation_state,omitempty"`
+	EvaluationOutcome string    `json:"evaluation_outcome,omitempty"`
+	CreatedAt         time.Time `json:"created_at,omitempty"`
+	ActiveRuns        int       `json:"active_runs"`
+	Problems          int       `json:"problems"`
+	Revision          int       `json:"revision"`
+	Error             string    `json:"error,omitempty"`
 }
 
 type ProjectOverview struct {
@@ -162,6 +167,7 @@ func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) 
 				Revision:  status.Workspace.Revision,
 			}
 			row.Phase = status.Workspace.PhaseLabel()
+			row.EvaluationState, row.EvaluationOutcome = linkedIssueEvaluation(status.Workspace.IssueEvaluation)
 			for _, run := range status.Runs {
 				if !run.Active() {
 					continue
@@ -213,7 +219,7 @@ func (s *Service) ProjectOverview(ctx context.Context) (ProjectOverview, error) 
 			row = issueSummary(i)
 			for _, workspace := range out.Workspaces {
 				if workspace.Error == "" && workspace.IssueID == row.ID {
-					row.LinkedWorkspaces = append(row.LinkedWorkspaces, IssueWorkspaceLink{WorkspaceID: workspace.ID, Title: workspace.Title, Status: workspace.Status, IssueRevision: workspace.IssueRevision, IssueDigest: workspace.IssueDigest})
+					row.LinkedWorkspaces = append(row.LinkedWorkspaces, IssueWorkspaceLink{WorkspaceID: workspace.ID, Title: workspace.Title, Status: workspace.Status, IssueRevision: workspace.IssueRevision, IssueDigest: workspace.IssueDigest, EvaluationState: workspace.EvaluationState, EvaluationOutcome: workspace.EvaluationOutcome})
 				}
 			}
 			row.LinkedWorkspaceCount = len(row.LinkedWorkspaces)

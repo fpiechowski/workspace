@@ -581,3 +581,68 @@ func TestIssueEvaluationStaleDigestAllowsNotDelivered(t *testing.T) {
 		t.Fatalf("workspace evaluation: %+v", recorded.Workspace.IssueEvaluation)
 	}
 }
+
+// TestReadModelsCarryLinkedEvaluationState proves the project overview row and
+// the Issue detail link both mirror the Workspace issue_evaluation, and that an
+// unlinked or un-completed Workspace carries no state at all.
+func TestReadModelsCarryLinkedEvaluationState(t *testing.T) {
+	ctx := context.Background()
+	s, _ := fixture(t)
+	ws, issue := linkedManualWorkspace(t, s, "")
+
+	workspaceRow := func() WorkspaceSummary {
+		t.Helper()
+		overview, err := s.ProjectOverview(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range overview.Workspaces {
+			if row.ID == ws {
+				return row
+			}
+		}
+		t.Fatalf("workspace %s missing from the overview", ws)
+		return WorkspaceSummary{}
+	}
+	issueLink := func() IssueWorkspaceLink {
+		t.Helper()
+		detail, err := s.ShowIssue(ctx, issue.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(detail.LinkedWorkspaces) != 1 {
+			t.Fatalf("linked workspaces: %+v", detail.LinkedWorkspaces)
+		}
+		return detail.LinkedWorkspaces[0]
+	}
+
+	if row := workspaceRow(); row.EvaluationState != "" || row.EvaluationOutcome != "" {
+		t.Fatalf("uncompleted workspace carried an evaluation: %+v", row)
+	}
+	if link := issueLink(); link.EvaluationState != "" || link.EvaluationOutcome != "" {
+		t.Fatalf("uncompleted link carried an evaluation: %+v", link)
+	}
+
+	completeLinkedWorkspace(t, s, ws, "")
+	row := workspaceRow()
+	if row.EvaluationState != "pending" || row.EvaluationOutcome != "" {
+		t.Fatalf("overview did not carry the pending evaluation: %+v", row)
+	}
+	link := issueLink()
+	if link.EvaluationState != "pending" || link.EvaluationOutcome != "" {
+		t.Fatalf("issue link did not carry the pending evaluation: %+v", link)
+	}
+
+	agent, _ := startEvaluationOrchestrator(t, s, ws)
+	if _, err := agent.RecordIssueEvaluation(ctx, ws, IssueEvaluationOptions{Outcome: "delivered", Reason: "All criteria met", ExpectedRevision: currentRevision(t, s, ws)}, "eval:read-model"); err != nil {
+		t.Fatal(err)
+	}
+	row = workspaceRow()
+	if row.EvaluationState != "recorded" || row.EvaluationOutcome != "delivered" {
+		t.Fatalf("overview did not carry the recorded outcome: %+v", row)
+	}
+	link = issueLink()
+	if link.EvaluationState != "recorded" || link.EvaluationOutcome != "delivered" {
+		t.Fatalf("issue link did not carry the recorded outcome: %+v", link)
+	}
+}
