@@ -1,0 +1,15 @@
+- command: gofmt -l ./cmd ./internal
+  exit_code: 0
+  evidence: evidence-completion-gofmt.txt
+- command: go vet ./...
+  exit_code: 0
+  evidence: evidence-completion-vet.txt
+- command: go test ./internal/core -run 'Complet|Landing|Land|Reopen|Autonomy|Archive' -count=1
+  exit_code: 0
+  evidence: evidence-completion-core-targeted.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID -u WORKSPACE_SCOPE -u WORKSPACE_ID -u WORKSPACE_PROJECT_DIR -u WORKSPACE_ROLE -u WORKSPACE_PROJECT_ID -u WORKSPACE_ORCHESTRATOR_ID -u WORKSPACE_PARENT_AGENT_ID -u WORKSPACE_PARENT_SESSION_ID -u WORKSPACE_WORKTREE_ID -u WORKSPACE_TASK_ID -u WORKSPACE_DIR -u WORKSPACE_REASONING_EFFORT -u WORKSPACE_TMUX_SOCKET go test ./... -count=1
+  exit_code: 0
+  evidence: evidence-completion-go-test-all.txt
+- command: python3 work-products/check-doc-links.py
+  exit_code: 0
+  evidence: evidence-completion-doc-links.txt

@@ -117,6 +117,9 @@ conversation-only and may reuse the compatible logical Session. An existing acce
 worker Session may also be resumed for consultation, but it cannot claim or submit new
 work. Exact Session-addressed messages remain deliverable while the conversation Run is
 active. The supervisor does not restart completed Sessions automatically.
+`workspace complete` tolerates the orchestrator's own running Session and does not stop
+it; that Run does not become `conversation_only`, cannot create work (status guards), and
+must be stopped before `archive`.
 
 `workspace reopen` is a distinct mutation. It requires a non-empty reason and the exact
 current `--expected-revision`; an agent actor must also pass `--user-confirmed`. The

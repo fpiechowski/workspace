@@ -587,9 +587,11 @@ discard: after the full ID is entered, it stops the runtime and removes state,
 worktrees, uncommitted files, and local workspace branches without requiring release or
 archive. Archive preserves history; a workflow that declares a release gate requires a
 confirmed release, while a completed manual or plan-first workspace requires an earlier
-`complete`; both require no active
-sessions/services. A completed workspace also offers conversation and the guarded
-`Reopen completed workspace` action; reopening records a reason and revision, preserves
+`complete`. `complete` requires no active worker sessions or services (the
+orchestrator's own running session is tolerated and not stopped), while `archive`
+requires every session and service to be stopped. A completed workspace also offers
+conversation and the guarded `Reopen completed workspace` action; reopening records a
+reason and revision, preserves
 accepted history, and requires derived release/integration evidence to be rebuilt. The
 TUI also provides `Complete this manual workspace` and, after landing,
 `Complete this workflow workspace` as confirmed core operations.

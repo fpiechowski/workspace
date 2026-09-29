@@ -27,8 +27,9 @@ type CompleteOptions struct {
 //   - an intentionally manual workspace, or an active landing workflow in the
 //     integration phase with a landed integration or nothing to integrate;
 //   - an agent session must attest the user's explicit confirmation;
-//   - no active service, active session or non-accepted (non-retired) task may
-//     remain;
+//   - no active service, active worker session or non-accepted (non-retired)
+//     task may remain; the orchestrator's own running Session is tolerated and
+//     is not stopped;
 //   - archive then succeeds without a workflow release confirmation.
 func (s *Service) CompleteWorkspace(ctx context.Context, selector string, opt CompleteOptions, keys ...string) (Status, error) {
 	var out Status
@@ -156,9 +157,13 @@ func completionRuntimeQuiet(d *Document) error {
 		}
 	}
 	for _, session := range d.Registry.Sessions {
-		if session.Active() {
-			return fail("session_active", "stop session %s before completing", session.ID)
+		if !session.Active() {
+			continue
 		}
+		if session.AgentID == d.State.OrchestratorAgentID || session.AgentSnapshot.Role == "orchestrator" {
+			continue
+		}
+		return fail("session_active", "stop worker session %s before completing", session.ID)
 	}
 	return nil
 }

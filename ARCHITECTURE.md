@@ -506,7 +506,8 @@ release confirmation, decisions, integration, change requests, and live testing 
 return `operation_not_applicable` in manual mode and do not appear in the menu; there
 is also no conversion from a manual workspace to a workflow. Completion is a separate,
 idempotent `workspace complete` mutation, available after user confirmation and only
-when there are no active sessions, services, or unaccepted tasks; only that operation
+when there are no active worker sessions (the orchestrator's own Session is tolerated),
+services, or unaccepted tasks; only that operation
 allows a manual workspace to be archived without a release. Accepting all tasks, a
 process exit, or handoff acceptance alone does not complete a manual workspace.
 
