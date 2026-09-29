@@ -8,10 +8,10 @@ attempt at the work requires a new key.
 Workspace mutations include creating resources and tasks, starting/resuming/stopping
 sessions, messages and ACKs, handoffs and their evaluation, workflows, state updates,
 migrations, integration prepare and `integration land`, CRs, decisions, release,
-`complete` for a manual workspace or a landed plan-first workflow, pause/resume,
-reconcile, `reopen` for a completed workspace, archive, clean, autonomy
-enable/disable/report, and the optional rationale/evidence payload that records an
-autonomous gate decision.
+`complete` for a manual workspace or a landed plan-first workflow, `issue-evaluation
+record` for a completed linked workspace, pause/resume, reconcile, `reopen` for a
+completed workspace, archive, clean, autonomy enable/disable/report, and the optional
+rationale/evidence payload that records an autonomous gate decision.
 `project init`, `skill install`, and `server stop` write project-scoped receipts.
 Reads, `clean --dry-run`, interactive attach, and the continuously running `serve`
 command are not one-shot mutations that require a receipt.
@@ -127,6 +127,32 @@ handoffs, and base provenance remain; integration, live-test, release, pending-d
 and change-request state is invalidated or marked outdated. Repeating the same
 operation key and payload replays the original status; changing the reason or revision
 with that key returns `operation_conflict`. Archived workspaces cannot be reopened.
+
+## Automatic Issue evaluation
+
+Completing a linked Workspace records a `pending` `issue_evaluation` in the same
+`WORKSPACE.md` revision and then tries to start a conversation-only orchestrator Run
+under the stable key `issue-evaluation:<ieval id>`. The launch is a post-commit side
+effect, not part of the completion receipt: a failure never rolls back the committed
+completion and is stored as `issue_evaluation.launch_error`, which `status` and `menu`
+surface. `workspace start`, or a replay of `complete`, retries it only while no
+orchestrator Session is active, so an active or replayed evaluation never creates a
+second Run.
+
+`workspace issue-evaluation record --outcome delivered|not_delivered --reason ...
+--expected-revision N` runs under the project lock and writes two files in one critical
+section: the linked `ISSUE.md`, through the lock-free `updateIssueLocked` helper (so the
+non-reentrant project lock is not taken twice), and the Workspace with the `recorded`
+evaluation. The Issue write carries its own receipt key
+`issue-evaluation:<ws_id>:<ieval_id>`, independent of the caller's `--operation-key`.
+The same key and payload returns the preserved result without advancing the Issue
+revision; the same key with a different payload returns `operation_conflict`. A crash
+after the Issue write but before the Workspace save converges when the same key is
+retried: the Issue receipt replays, then the evaluation is recorded. A different
+evaluation is refused with `issue_evaluation_recorded`; `workspace reopen` clears it and
+the next completion creates a new `ieval` id. A `delivered` judgement whose Issue digest
+no longer matches the frozen snapshot is refused with `issue_revised`. None of these
+writes leave the local project or touch the external tracker.
 
 ## TUI Operations
 

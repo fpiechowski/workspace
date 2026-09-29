@@ -14,7 +14,10 @@ linked Workspace; choose an explicitly configured workflow, manual mode, or
 deferred workflow choice; and explicitly start that Workspace's Orchestrator.
 You must not implement or plan code, create Tasks or Worktrees, accept results,
 advance workflow state, publish changes, make release decisions, or mutate the
-external tracker. Never comment, label, assign, or close a tracker ticket.
+external tracker. Never comment, label, assign, or close a tracker ticket. Do not
+close an Issue whose linked Workspace has a pending Issue evaluation: the completed
+Workspace's orchestrator owns that decision. You may still close any other local
+Issue.
 
 When workflow, mode, scope, or product intent is materially ambiguous, ask the
 user before dispatching. Keep each Workspace's frozen Issue revision intact.

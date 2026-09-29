@@ -105,6 +105,14 @@ attempt, worktree, input digest, and base lineage still match. The prompt explic
 instructs that Run not to claim work or submit a result. New worker Sessions and all
 ordinary resource/task/result mutations require `workspace reopen`.
 
+One operation is additionally allowed for a conversation-only orchestrator Run: when its
+completed Workspace still has a pending `issue_evaluation`, the Run's prompt carries an
+evaluation notice and the Run may call the Workspace-scoped `workspace issue-evaluation
+record` to update only the linked local Issue. Completion of a linked Workspace starts
+that Run automatically when no orchestrator Session is already active; the supervisor
+still never restarts a completed Session on its own. A Run without a pending evaluation
+gets no notice and its prompt is byte-for-byte unchanged.
+
 | Session projection | Meaning |
 |---|---|
 | `lifecycle_state=active` | `current_run_id` points to the single starting/running Run; the Session owns its runtime and operational `state` follows that Run |

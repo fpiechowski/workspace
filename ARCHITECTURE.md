@@ -245,6 +245,12 @@ document that contains `autonomy` or the new decision fields; because they are o
 autonomy is used, that downgrade restriction applies only to autonomous workspaces. Creating
 or enabling autonomy requires a deliver-capable orchestrator route, and a running run ends
 with a receipted `autonomy report` that sets `state=delivered`.
+A Workspace created from an Issue (`input.issue_id`) carries `issue_evaluation` after it
+completes: `pending` with a fresh `ieval` id and a requested-at timestamp, then `recorded`
+with the outcome, reason, Issue action, resulting Issue revision, evaluating actor, and
+Run. The contract is described in
+[docs/trackers.md](docs/trackers.md); the field is `omitempty`, so an unlinked Workspace
+serializes exactly as before.
 `.runtime/index.json` is an operational index, not a competing workflow version. Public
 `status --json` has its own explicit schema number. The TUI uses a private
 `WorkspaceSnapshot`; it does not add entities to `index.json`, change the public Status
@@ -316,6 +322,16 @@ identity model as Workspace agents but are never placed in a Workspace registry.
 Project tmux metadata includes explicit scope, project, Agent, role, Session, and Run
 fields. `authorizeProjectActor` accepts only a user terminal or the active Dispatcher
 Run for project-level Issue mutations; Workspace actors are rejected.
+
+That rule has one narrow exception. A linked Workspace carries `issue_evaluation` once it
+is completed. Its own orchestrator (including a conversation-only Run) or the user
+terminal may then call the Workspace-scoped `workspace issue-evaluation record`, which
+changes only the local status and reason of the Issue named by that Workspace's
+`input.issue_id`; the Dispatcher and worker actors are still refused for every project
+Issue, and no command reaches an Issue outside that link. The Dispatcher may keep closing
+local Issues, but must leave an Issue whose linked Workspace evaluation is `pending` to
+the Workspace orchestrator. `authorizeProjectActor` itself is unchanged; the details are
+in [docs/trackers.md](docs/trackers.md).
 
 ## Process Runtime
 
