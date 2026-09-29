@@ -390,7 +390,14 @@ func (m *Model) issueContent() string {
 		doc.body("No workspace has been created from this Issue.")
 	} else {
 		for _, link := range m.issue.LinkedWorkspaces {
-			doc.bullet(fmt.Sprintf("%s · %s · revision %d", firstNonempty(link.Title, link.WorkspaceID), link.Status, link.IssueRevision))
+			line := fmt.Sprintf("%s · %s · revision %d", firstNonempty(link.Title, link.WorkspaceID), link.Status, link.IssueRevision)
+			if link.EvaluationState != "" {
+				line += " · evaluation " + link.EvaluationState
+				if link.EvaluationOutcome != "" {
+					line += " (" + link.EvaluationOutcome + ")"
+				}
+			}
+			doc.bullet(line)
 		}
 	}
 	doc.section("Provenance")

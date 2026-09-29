@@ -1,3 +1,13 @@
+# Integrated implementation summaries (integration worktree, T5 merge)
+
+The shared `work-products/SUMMARY.md` path is rewritten in full by each task
+lineage, so every merge of this path conflicts. Per the repository convention,
+both lineages are preserved verbatim below.
+
+---
+
+## Lineage A - integration base summary (unchanged)
+
 # Integrated implementation summaries (integration worktree, T2 merge)
 
 The shared `work-products/SUMMARY.md` path is rewritten in full by each task
@@ -491,3 +501,31 @@ Full command/evidence list: `work-products/CHECKS-T2-PROMPTS.yaml`.
   are the project's pinned runtime config; the task scopes `internal/core/templates`).
 - The `--expected-revision` placeholder is resolved by the orchestrator from
   `workspace status --json`; the operation remains revision-guarded.
+
+
+---
+
+## Lineage B - incoming T5 `impl-tui` summary (f737a52)
+
+# SUMMARY — T5: Evaluation state in project overview link and TUI Issue detail
+
+Task `task_01M3P9E8MAVA0KN5WP767JJ5FB` implemented on top of T1 in the `impl-tui`
+worktree. Commit `9958a07` (base `d0bb317`).
+
+## What changed
+- `IssueWorkspaceLink` and `WorkspaceSummary` now carry `EvaluationState` and
+  `EvaluationOutcome`, populated from the Workspace `issue_evaluation`.
+- `ProjectOverview` fills the workspace row and the per-Issue linked-workspace entries.
+- The TUI Issue detail renders `· evaluation <state>` (and `(<outcome>)` when recorded)
+  on each linked Workspace bullet; an un-evaluated Workspace is unchanged.
+
+## Verification
+- `gofmt -l ./cmd ./internal`: clean.
+- `go vet ./...`: pass.
+- Targeted new tests (`TestReadModelsCarryLinkedEvaluationState`,
+  `TestIssueDetailShowsLinkedWorkspaceEvaluation`): pass.
+- `go test ./... -count=1 -timeout 570s`: pass.
+
+See `IMPLEMENTATION.md` and `CHECKS-T5-EVAL.yaml`; evidence files:
+`evidence-t5-eval-gofmt.txt`, `evidence-t5-eval-vet.txt`,
+`evidence-t5-eval-targeted.txt`, `evidence-t5-eval-go-test-all.txt`.

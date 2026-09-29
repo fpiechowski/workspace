@@ -52,6 +52,37 @@ func TestProjectDispatcherHintAdvertisesJumpOnlyWhenRunning(t *testing.T) {
 	}
 }
 
+// TestIssueDetailShowsLinkedWorkspaceEvaluation proves the Issue detail renders
+// the linked Workspace evaluation state and outcome while an un-evaluated
+// Workspace is unchanged.
+func TestIssueDetailShowsLinkedWorkspaceEvaluation(t *testing.T) {
+	m := New(Config{ProjectFound: true, ProjectID: "proj_test", NoColor: true})
+	m.width, m.height = 120, 30
+	m.issue = core.IssueDetail{
+		Issue: core.Issue{ID: "issue_1", ProjectID: "proj_test", Title: "Checkout retry", Status: "closed", Revision: 3, Digest: "sha256:test"},
+		LinkedWorkspaces: []core.IssueWorkspaceLink{
+			{WorkspaceID: "ws_pending", Title: "Delivery", Status: "completed", IssueRevision: 2, EvaluationState: "pending"},
+			{WorkspaceID: "ws_done", Title: "Shipped", Status: "completed", IssueRevision: 2, EvaluationState: "recorded", EvaluationOutcome: "delivered"},
+			{WorkspaceID: "ws_legacy", Title: "Legacy", Status: "completed", IssueRevision: 1},
+		},
+	}
+	m.route = route{Page: "issue", EntityID: "issue_1"}
+
+	compact := strings.NewReplacer("\n", "", " ", "").Replace(m.detailContent())
+	for _, want := range []string{
+		"Delivery·completed·revision2·evaluationpending",
+		"Shipped·completed·revision2·evaluationrecorded(delivered)",
+		"Legacy·completed·revision1",
+	} {
+		if !strings.Contains(compact, want) {
+			t.Fatalf("Issue detail is missing %q:\n%s", want, m.detailContent())
+		}
+	}
+	if strings.Contains(compact, "Legacy·completed·revision1·evaluation") {
+		t.Fatalf("Issue detail invented an evaluation for an un-evaluated workspace:\n%s", m.detailContent())
+	}
+}
+
 func TestProjectScopeUnavailablePrimaryKeysDoNotEnterWorkspaceRoutes(t *testing.T) {
 	for _, key := range []rune{'4', '5'} {
 		m := New(Config{ProjectFound: true, ProjectID: "proj_test"})

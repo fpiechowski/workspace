@@ -46,6 +46,12 @@ type IssueWorkspaceLink struct {
 	Status        string `json:"status" yaml:"status"`
 	IssueRevision int    `json:"issue_revision" yaml:"issue_revision"`
 	IssueDigest   string `json:"issue_digest" yaml:"issue_digest"`
+	// EvaluationState and EvaluationOutcome mirror the linked Workspace's
+	// issue_evaluation so read models can show e.g. "completed · evaluation
+	// pending" without a second Workspace read. Both are empty when the
+	// Workspace has no evaluation.
+	EvaluationState   string `json:"evaluation_state,omitempty" yaml:"evaluation_state,omitempty"`
+	EvaluationOutcome string `json:"evaluation_outcome,omitempty" yaml:"evaluation_outcome,omitempty"`
 }
 
 // IssueSummary intentionally omits Body so periodic project refreshes remain
@@ -665,7 +671,7 @@ func (s *Service) linkedWorkspaces(ctx context.Context, issueID string) ([]Issue
 		if row.Error != "" || row.IssueID != issueID {
 			continue
 		}
-		links = append(links, IssueWorkspaceLink{WorkspaceID: row.ID, Title: row.Title, Status: row.Status, IssueRevision: row.IssueRevision, IssueDigest: row.IssueDigest})
+		links = append(links, IssueWorkspaceLink{WorkspaceID: row.ID, Title: row.Title, Status: row.Status, IssueRevision: row.IssueRevision, IssueDigest: row.IssueDigest, EvaluationState: row.EvaluationState, EvaluationOutcome: row.EvaluationOutcome})
 	}
 	return links, nil
 }
