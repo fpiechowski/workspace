@@ -1,3 +1,55 @@
+# Integration summary — task_01M3P3TAPQBP1PPEKNZVX6JWSF
+
+## What was integrated
+
+The single accepted implementation head
+`c8b3bfd4f730f5f52eaeade4ffdec2edb7ef2670` (`ccbd752` product + tests + docs,
+`c8b3bfd` evidence-only) for `task_01M3P2JFEFSWE8CD2VHS5PXBQW` — tolerate the
+orchestrator's own running session when completing a workspace.
+
+## How
+
+- Integration was re-prepared on the new `master` tip `7cb2b8f` after the first
+  attempt could not land (`target_moved`: `master` advanced `3031ccd -> 7cb2b8f`
+  while other workspaces landed). Worktree `wt_01M3P76J97AJ71QNSTH7P2JSN4`.
+- `git merge --no-ff c8b3bfd4f730f5f52eaeade4ffdec2edb7ef2670` from that
+  worktree; because the base moved this is a real three-way merge (merge base
+  `3031ccd`).
+- Merge HEAD: `aaed27c35ec12c60e890dde1826e0bc4bdbe334d`, parents
+  `7cb2b8f` and `c8b3bfd`. Verified `c8b3bfd` (and `ccbd752`) are ancestors of
+  the integration HEAD.
+- **Two textual conflicts**, both artifact-only shared report paths
+  (`work-products/IMPLEMENTATION.md`, `work-products/SUMMARY.md`); both resolved
+  by preserving the base and incoming lineages verbatim. `ARCHITECTURE.md` and
+  `docs/runtime.md` auto-merged (distinct regions, both intents kept) with no
+  semantic conflict. Full detail in `INTEGRATION.md`.
+
+## Checks
+
+Captured as check receipts (`workspace check run`) at the integration reporting
+HEAD with a clean tree and the `WORKSPACE_*` actor variables cleared; all exit 0:
+
+- `gofmt -l ./cmd ./internal` — empty.
+- `go vet ./...`.
+- `go test ./internal/core -run 'Complet|Landing|Land|Reopen|Autonomy|Archive' -count=1` — ok.
+- `go test ./... -count=1` — all packages ok.
+- `python3 work-products/check-doc-links.py` — `checked=30 broken=0`.
+
+## Result
+
+Merged head is on the `workspace/ws_01M3P1N1MBMTHGFQM8HSN1SMCE/integration-e42444070113`
+branch and is ready for the user's integration-land decision. Nothing was landed
+into `master`.
+
+---
+
+# Preserved report history
+
+The reports below were preserved from the merge conflict resolution (base branch
+lineage first, then the incoming implementation head lineage).
+
+---
+
 # Integration summary — task_01M3P2ZDWEZW9727N3NCK3CCH5 (round 3)
 
 Merged both accepted heads onto `master` tip `3031ccd`, reconciled the

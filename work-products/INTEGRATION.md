@@ -1,166 +1,177 @@
-# Integration report — integration round 3 (`task_01M3P2ZDWEZW9727N3NCK3CCH5`)
+# Integration report — task_01M3P3TAPQBP1PPEKNZVX6JWSF
 
-Merge the two accepted heads for this workspace onto `master` tip `3031ccd`:
+Integrate the accepted implementation head for `task_01M3P2JFEFSWE8CD2VHS5PXBQW`
+(tolerate the orchestrator's own session in workspace completion) into the
+prepared integration worktree.
 
-| Order | Task | Name | Head |
-| --- | --- | --- | --- |
-| 1 | `task_01M3MZD82YXFS0G5HKV46G5JNQ` | dispatcher jump (`g`) | `7d4af63dad9a1b93b854cee81c9747fe57d724d4` |
-| 2 | `task_01M3P156JTWMYAT9TPBDMZ917B` | orchestrator recovery fix | `3384ce3085d345165ce1f46326e482d6fb8d5299` |
+## Why this run was re-prepared
 
-- Integration worktree: `wt_01M3P2W355Z1PHQJ27TA307MZ7`
-  (`worktrees/integration-334f877519a2`).
-- Base commit: `3031ccd17917f9586d907382a5eb94efc5d2d61d` (`master`).
-- Manifest: `integration/manifest.json` — `strategy: merge`, `target: master`.
-- Integration branch: `workspace/ws_01M3MKBEJER3T6GPCF4HZC3HX8/integration-334f877519a2`.
+The first integration landed nothing but could not be followed by landing:
+`workspace integration land` failed with `target_moved` because `master` advanced
+from `3031ccd` to `7cb2b8f` while other workspaces landed concurrently. Per the
+integration resolution flow the integration was re-prepared on the new `master`
+tip (`wt_01M3P76J97AJ71QNSTH7P2JSN4`, base `7cb2b8f`) and the merge is redone
+here. This report supersedes the earlier attempt reports at this shared path.
 
-The head merge-bases differ: `7d4af63` branched from `aa72616` (pre
-single-client auto-jump); `3384ce3` branched from `2a72e3a`. Master had moved to
-`3031ccd` with `267725c` (limit-aware resume/retry/supervisor recovery),
-`3684988` (native-thread route affinity) and `3031ccd` (test-side recovery
-resolution), so both merges are real three-way merges.
+## Inputs
 
-## Merge commits
+- Manifest base commit: `7cb2b8fc1453568b04b0cdadcbedf3ea9f423647` (current
+  `master` tip, recorded in `integration/manifest.json`).
+- Original workspace base: `3031ccd17917f9586d907382a5eb94efc5d2d61d`
+  (`WORKSPACE.md` `base.commit`); it is the merge base of the implementation head
+  and the re-prepared integration line.
+- Target branch: `master`; strategy `merge`.
+- Manifest: `integration/manifest.json` — `worktree_id:
+  wt_01M3P76J97AJ71QNSTH7P2JSN4`, `task_ids: [task_01M3P2JFEFSWE8CD2VHS5PXBQW]`,
+  `heads: [c8b3bfd4f730f5f52eaeade4ffdec2edb7ef2670]`, `head_commit: ""` (empty
+  before this run).
+- Integration worktree: `wt_01M3P76J97AJ71QNSTH7P2JSN4`, path
+  `.../worktrees/integration-e42444070113`, branch
+  `workspace/ws_01M3P1N1MBMTHGFQM8HSN1SMCE/integration-e42444070113`.
+- There is a single live implementation head; the planning worktree
+  (`plan-complete-blocking`) has no commits (`HEAD == 3031ccd`) and is not an
+  input.
 
-`git merge --no-ff` in the recorded order:
+| Order | Task | Name | Branch | Head |
+| --- | --- | --- | --- | --- |
+| 1 | `task_01M3P2JFEFSWE8CD2VHS5PXBQW` | implement-complete-orchestrator-exemption | `workspace/ws_01M3P1N1MBMTHGFQM8HSN1SMCE/impl-complete-orchestrator-exemption` | `c8b3bfd4f730f5f52eaeade4ffdec2edb7ef2670` |
 
-| Merge | Second parent | Parents | Result |
-| --- | --- | --- | --- |
-| `d3eb5f12b4aa5a8e1a793b28c736c2c6d1154ac3` | `7d4af63` (dispatcher jump) | `3031ccd`, `7d4af63` | 4 textual conflicts |
-| `4105c50f22052b34a0d9f0d7eb55aaaf49e8eb3c` | `3384ce3` (recovery fix) | `d3eb5f1`, `3384ce3` | 2 textual conflicts |
-| `99d178f0914093ba2505a2e300822a5f2a8aaafb` | — | `4105c50` | integration-resolution commit (test reconciliation) |
+The accepted head contains two commits:
 
-Both heads are ancestors of the final integration HEAD, and there are no
-unrelated changes: the product diff vs `3031ccd` is exactly the dispatcher-jump
-change, the recovery fix, and the recovery-test adaptation (see below).
+- `ccbd7525b4256a3977cd3bcfcf358c298af9e533` —
+  `feat: tolerate the orchestrator's own session when completing` (product code,
+  tests and docs).
+- `c8b3bfd4f730f5f52eaeade4ffdec2edb7ef2670` —
+  `docs: record completion-exemption implementation evidence` (`work-products/`
+  evidence only; no product code).
+
+## Base movement (this is a genuine three-way merge)
+
+`master` moved `3031ccd -> 7cb2b8f` (11 commits) between the implementation
+branch and this re-prepared integration line:
+
+```
+7cb2b8f chore: raise route concurrency limits
+4d174eb docs: record round-3 integration report and summary
+99d178f test: keep session client snapshot in whole-window recovery test (integration resolution)
+4105c50 Merge fix-orchestrator-recovery-regression (3384ce3) into integration (round 3, master 3031ccd)
+d3eb5f1 Merge impl-dispatcher-jump (7d4af63) into integration (round 3, master 3031ccd)
+3384ce3 docs: declare only passing checks; mark negative proofs as evidence
+5c89757 docs: record fix-recovery implementation report and summary
+5b75caa fix: keep session client snapshot on resume for recovery
+7d4af63 docs: skip pre-existing tmux PTY failure in dispatcher jump checks
+8a12ce7 docs: record dispatcher jump implementation evidence
+bf5a3e9 feat(tui): jump (g) to the project Dispatcher page
+```
+
+The merge base of the integration HEAD and the implementation head is
+`3031ccd`, so unlike the earlier (clean) attempts this is a real three-way
+merge. Because the two lineages touch mostly disjoint files, it produced only
+two textual conflicts (both artifact-only; see below).
+
+## Strategy actually used
+
+`git merge --no-ff c8b3bfd4f730f5f52eaeade4ffdec2edb7ef2670` from the
+integration worktree, in the recorded single-head order.
+
+- Merge commit (integration HEAD):
+  `aaed27c35ec12c60e890dde1826e0bc4bdbe334d`
+  (`Merge impl-complete-orchestrator-exemption (c8b3bfd) into integration (base 7cb2b8f)`).
+- Parents: `7cb2b8fc1453568b04b0cdadcbedf3ea9f423647` (first) and
+  `c8b3bfd4f730f5f52eaeade4ffdec2edb7ef2670` (second).
+- Ancestry verified: `git merge-base --is-ancestor
+  c8b3bfd4f730f5f52eaeade4ffdec2edb7ef2670 HEAD` exits `0` and `git merge-base
+  HEAD c8b3bfd…` returns `c8b3bfd…` itself, so the integration HEAD contains the
+  full accepted implementation head (`ccbd752` too).
+- Scope verified: `git diff --stat 7cb2b8f HEAD` contains exactly the
+  implementation head's product/doc changes (`internal/core/completion.go`,
+  `internal/core/landing_test.go`, `internal/core/manual_completion_test.go`,
+  `README.md`, `ARCHITECTURE.md`, `docs/operations.md`, `docs/runtime.md`) plus
+  its `work-products/` evidence. No unrelated product change was introduced; the
+  concurrent `master` work (session client-snapshot recovery, route limits,
+  dispatcher navigation) is preserved on both parents and untouched.
 
 ## Conflict resolutions
 
-### Merge 1 — `7d4af63` (dispatcher jump)
+Two conflicts, both at shared `work-products/` report paths. Neither requires a
+product or implementation decision; both are artifact-only.
 
-1. `docs/tui.md` — the `g` navigation paragraph.
-   - *Conflict*: master (HEAD) documents the single-client auto-jump ("with
-     exactly one attached client it jumps immediately with it; with several it
-     opens a picker", landed via `367c006`). The incoming head branched before
-     that and documented "It always opens a picker, including when there is only
-     one client", plus the new dispatcher paragraph.
-   - *Resolution*: kept master's single-client auto-jump wording and appended
-     the incoming dispatcher-jump sentences (jump-capable while the Dispatcher
-     has a live ownership-verified Run; canonical
-     `workspace-dispatcher-<project-id>`; hidden and inert when idle;
-     `workspace dispatcher attach` unchanged).
-   - *Rationale*: `g`'s picker contract is master's newer product behavior and
-     must not regress; the dispatcher addition is the incoming intent. Both fit
-     in one paragraph.
+1. `work-products/IMPLEMENTATION.md` — both lineages rewrote this whole-file
+   shared report (round 3 landed its own integrated report here; the accepted
+   head rewrote it with the completion-exemption report).
+   - *Resolution*: kept the base branch's integrated reports first and appended
+     the incoming implementation report verbatim under an
+     `# Incoming implementation report — completion-exemption` divider, matching
+     the round-3 precedent. No content was dropped.
 
-2. `work-products/CHECKS.yaml` — shared check manifest rewritten by both
-   lineages.
-   - *Resolution*: both files are top-level YAML sequences; concatenated them
-     into one valid list, preserving every entry (validated with a YAML parse:
-     14 entries). Artifact-only; no product decision.
+2. `work-products/SUMMARY.md` — same whole-file rewrite conflict.
+   - *Resolution*: preserved both summaries verbatim under a divider (base
+     branch content first, incoming implementation summary appended).
 
-3. `work-products/IMPLEMENTATION.md` — shared report path rewritten by both.
-   - *Resolution*: preserved both reports verbatim, keeping the existing
-     integrated reports first and appending the dispatcher report under an
-     "Incoming implementation report" divider. Artifact-only.
+`ARCHITECTURE.md` and `docs/runtime.md` **auto-merged** without textual
+conflict: `master` and the implementation head changed different regions
+(`master`: navigation/reasoning-effort prose; the head: the Manual Mode
+completion precondition and the completion/archive paragraph). The merged files
+keep both intents; no semantic conflict was found and no manual edit was needed.
+`internal/core/completion.go`, `landing_test.go` and `manual_completion_test.go`
+did not overlap `master`'s concurrent changes, so they merged cleanly.
 
-4. `work-products/SUMMARY.md` — same whole-file rewrite conflict.
-   - *Resolution*: preserved both summaries verbatim under a divider.
-     Artifact-only.
+No product or implementation decision was required, so no blocked handoff was
+raised.
 
-### Merge 2 — `3384ce3` (recovery fix)
+The implementation head also adds `work-products/CHECKS-completion.yaml` and the
+`evidence-completion-*.txt` files; these are ordinary additions on this line.
 
-1. `work-products/IMPLEMENTATION.md` — shared report path rewritten by both.
-   - *Resolution*: preserved both reports verbatim (existing content plus the
-     recovery-fix report under an "Incoming implementation report" divider).
+## Checks on the integrated tree
 
-2. `work-products/SUMMARY.md` — same.
-   - *Resolution*: preserved both summaries verbatim under a divider.
+Run from the integration worktree with a clean tree and the sandbox `WORKSPACE_*`
+actor variables cleared (inside a worker/integrator session those variables leak
+into the harness and cause pre-existing failures unrelated to this change).
+Commands are recorded as `workspace check run` receipts bound to the submitted
+reporting HEAD; the same commands were first run at the merge HEAD `aaed27c` and
+all passed.
 
-`internal/core/session.go` **auto-merged** (no textual conflict). The merged
-result keeps both intents:
+| Check | Command | Expected |
+| --- | --- | --- |
+| Format | `gofmt -l ./cmd ./internal` | empty output, exit 0 |
+| Vet | `go vet ./...` | exit 0 |
+| Focused core | `env -u WORKSPACE_* go test ./internal/core -run 'Complet\|Landing\|Land\|Reopen\|Autonomy\|Archive' -count=1` | `ok`, exit 0 |
+| Full suite | `env -u WORKSPACE_* go test ./... -count=1` | all packages `ok`, exit 0 |
+| Doc links | `python3 work-products/check-doc-links.py` | `checked=30 broken=0`, exit 0 |
 
-- the accepted fix's product behavior — on resume the Run keeps the logical
-  Session's client definition (`cfg.Clients[prior.Route.Client] =
-  prior.ClientSnapshot`, `session.go:313-331`); and
-- master's limit-aware resume and native-thread route affinity —
-  `chooseRoute` returning the `RoutingDecision`, the single-candidate route
-  pinning for a native thread, and `resumeRouteLimitedError`
-  (`session.go:333-356`), plus master's test changes.
+Pre-flight results at merge HEAD `aaed27c` (identical tree apart from this
+reporting commit): `gofmt` clean; `go vet ./...` exit 0; focused core
+`ok workspace/internal/core 29.088s`; full suite all packages `ok` (core
+80.601s), exit 0; doc links `checked=30 broken=0`.
 
-`ARCHITECTURE.md`, `docs/runtime.md` and `internal/core/reasoning_effort_test.go`
-merged without conflicts.
+The `WORKSPACE_TMUX_TEST=1 go test -race ./...` suite was not run: this change
+touches no runtime/tmux code, and the suite is red at the unmodified base for
+pre-existing reasons (`internal/terminal` pseudo-TTY test; the core race binary
+exceeds the 90s budget on this machine). The non-`WORKSPACE_TMUX_TEST` runtime
+tests are included in the green full-suite run above.
 
-## Semantic conflict resolved after the merges (test adaptation, `99d178f`)
+## Risks and deviations
 
-The two merged intents genuinely conflict in `TestTmuxEndToEnd`:
-
-- `3031ccd` made the orchestrator long-running by writing the long-running client
-  into the **current project config** before resuming.
-- the accepted fix makes a resumed Run keep the **logical Session's client
-  definition**, overriding the current-config client for that route.
-
-On the merged tree the fix therefore relaunched the orchestrator with the
-session's one-shot helper, so no live orchestrator remained to recover and the
-test failed at `tmux_integration_test.go:346` (reproduced: 2/3 runs failed; base
-`3031ccd` passed 3/3). Per the task's reconciliation policy the fix's product
-behavior wins, so `internal/core/tmux_integration_test.go` was adapted: instead
-of writing the client into the project config, the test sets the orchestrator
-Session's `ClientSnapshot.LaunchArgv` to the long-running client before resuming
-(the mechanism the fix guarantees). The test's intent (whole-window supervisor
-recovery) is unchanged; profile/route/limits/reasoning still reload from the
-current config, which is covered by `TestResumeKeepsSessionClientSnapshotAndReloadsRoute`
-and `TestReasoningEffortReloadsOnResume`.
-
-There were **no other conflicts**. No product/code decision outside this policy
-was needed; no blocked question was raised.
-
-## Verification (merged tree)
-
-Commands run from the integration worktree with the harness `WORKSPACE_*` worker
-environment cleared; `WORKSPACE_TMUX_TEST=1` re-set for the tmux runs. Real
-evidence files.
-
-Declared checks (all exit 0), manifest `work-products/CHECKS-r3.yaml`:
-
-| Command | Exit | Evidence |
-| --- | ---: | --- |
-| `gofmt -l ./cmd ./internal` | 0 | `evidence-r3-gofmt.txt` |
-| `go vet ./...` | 0 | `evidence-r3-vet.txt` |
-| `go test ./... -count=1 -timeout 570s` | 0 | `evidence-r3-go-test-all.txt` |
-| `WORKSPACE_TMUX_TEST=1 go test -race ./... -count=1 -skip TestNavigatorRealPTYAndClientSelection -timeout 900s` | 0 | `evidence-r3-tmux-all-skip.txt` |
-| `WORKSPACE_TMUX_TEST=1 go test -race ./internal/core/ -run 'TestTmuxEndToEnd\|TestDispatcherTmuxEndToEnd' -run ... -v` | 0 | `evidence-r3-tmux-e2e.txt` |
-| targeted resume + dispatcher navigation tests (core/terminal/tui) | 0 | `evidence-r3-targeted.txt` |
-
-Specifically green:
-
-- `TestTmuxEndToEnd` (whole-window supervisor recovery), `TestDispatcherTmuxEndToEnd`.
-- `TestResumeKeepsSessionClientSnapshotAndReloadsRoute`,
-  `TestReasoningEffortReloadsOnResume`.
-- Dispatcher jump: `TestResolveDispatcherNavigationTarget` (core);
-  `TestNavigatorVerifiesProjectScopedDispatcherTarget`,
-  `TestNavigatorRejectsNonCanonicalDispatcherSession`,
-  `TestNavigatorListsAndJumpsProjectScopedDispatcher`,
-  `TestNavigatorReportsMissingDispatcherSessionAsPaneMissing` (terminal);
-  `TestDispatcherJumpResolvesVerifiedTargetThroughPicker`,
-  `TestDispatcherJumpIsInertWithoutLiveRun`, `TestDispatcherAdvertisesJumpWhenRunning`,
-  `TestDispatcherTargetChangeWhilePickerOpenRequiresFreshChoice`,
-  `TestDispatcherDetachedClientIsReportedAndNotReplaced` (tui).
-
-Documented evidence, **not** declared checks:
-
-- `TestNavigatorRealPTYAndClientSelection` is a pre-existing environmental
-  failure ("pseudo-TTY client did not attach"), reproduced on the base; the tmux
-  acceptance run excludes it with `-skip`.
-- `work-products/evidence-r3-reconciliation.txt` records the base-vs-merged
-  `TestTmuxEndToEnd` runs that justify the test adaptation.
+- The integration base is `7cb2b8f`, not the workspace base `3031ccd`; this is
+  the intended re-preparation after `target_moved` and is recorded above.
+- `work-products/INTEGRATION.md`, `work-products/SUMMARY.md` and
+  `work-products/IMPLEMENTATION.md` are shared root paths previously committed by
+  unrelated integrations. This report replaces the stale `INTEGRATION.md`; the
+  `work-products/SUMMARY.md` conflict was resolved by preserving both lineages
+  and this integration's summary is placed on top. No product file is affected.
+- Residual copy outside the accepted T3 scope (`internal/cli/help.go`,
+  `internal/tui/forms.go`, `docs/tui.md:125`) still says `complete` requires "no
+  active Runs". Wording only; noted by the implementer as a follow-up.
+- The task note "single commit" is not literally true: the accepted head has a
+  second `work-products/`-only evidence commit. The task goal itself records both
+  commits (`ccbd752 + c8b3bfd`), and the second changes no product code.
+- No product code was fixed or changed beyond the merge. Nothing was broken, so
+  no blocked handoff is needed.
 
 ## Result
 
-- Dispatcher jump behavior is intact (core dispatcher navigation target,
-  terminal `verifyDispatcher`, TUI gating); the orchestrator jump, existing jump
-  kinds and the single-client auto-jump are not regressed.
-- The recovery fix's product behavior is intact and master's limit-aware resume,
-  native-thread affinity and test changes are kept, except the test setup that
-  genuinely conflicts with the fix (adapted above).
-- No result was pushed or landed. Landing into the target branch requires the
-  user's explicit integration-land confirmation.
+- Integrated merge HEAD: `aaed27c35ec12c60e890dde1826e0bc4bdbe334d`, plus the
+  reporting commit carrying this file and `SUMMARY.md`.
+- Working tree clean at the submitted head.
+- No landing into the target branch (`master`) was performed; landing requires
+  the user's explicit integration-land confirmation.
