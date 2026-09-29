@@ -33,7 +33,9 @@ func linkedManualWorkspace(t *testing.T, s *Service, source string) (string, Iss
 
 func completeLinkedWorkspace(t *testing.T, s *Service, ws, reason string) Status {
 	t.Helper()
-	completed, err := s.CompleteWorkspace(context.Background(), ws, CompleteOptions{Reason: reason, ExpectedRevision: currentRevision(t, s, ws)})
+	// These domain tests own the orchestrator lifecycle explicitly, so they
+	// suppress the T3 post-commit evaluation launch.
+	completed, err := s.CompleteWorkspace(context.Background(), ws, CompleteOptions{Reason: reason, ExpectedRevision: currentRevision(t, s, ws), NoEvaluationLaunch: true})
 	if err != nil {
 		t.Fatalf("completion failed: %v", err)
 	}

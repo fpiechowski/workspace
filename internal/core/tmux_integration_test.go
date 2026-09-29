@@ -639,6 +639,75 @@ func TestDispatcherTmuxEndToEnd(t *testing.T) {
 	}
 }
 
+// Opt-in: completing a linked Workspace launches the conversation-only
+// evaluation orchestrator in a real tmux pane.
+func TestTmuxLinkedCompletionStartsEvaluationOrchestrator(t *testing.T) {
+	if os.Getenv("WORKSPACE_TMUX_TEST") != "1" {
+		t.Skip("set WORKSPACE_TMUX_TEST=1 to run real tmux integration")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("tmux integration runs in Linux/WSL or macOS")
+	}
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := fixture(t)
+	ctx := context.Background()
+	socket := "workspace-eval-test-" + ID("tmux")
+	rt := Tmux{Socket: socket}
+	s.Runtime = rt
+	t.Cleanup(func() { _ = exec.Command("tmux", "-L", socket, "kill-server").Run() })
+	bin := filepath.Join(t.TempDir(), "bin with 'quotes'", "workspace")
+	if err := os.MkdirAll(filepath.Dir(bin), 0700); err != nil {
+		t.Fatal(err)
+	}
+	build := exec.Command("go", "build", "-o", bin, "./cmd/workspace")
+	build.Dir = filepath.Join("..", "..")
+	if b, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, b)
+	}
+	s.Executable = bin
+	if err := s.EnsureSupervisor(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.StopSupervisor(context.Background()) })
+
+	ws, _ := linkedManualWorkspace(t, s, "")
+	completed, err := s.CompleteWorkspace(ctx, ws, CompleteOptions{Reason: "delivered", ExpectedRevision: currentRevision(t, s, ws)})
+	if err != nil {
+		t.Fatalf("completion failed: %v", err)
+	}
+	if eval := completed.Workspace.IssueEvaluation; eval == nil || eval.State != "pending" {
+		t.Fatalf("completion evaluation: %+v", eval)
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	var evaluation Run
+	for time.Now().Before(deadline) {
+		status, statusErr := s.Status(ctx, ws)
+		if statusErr != nil {
+			t.Fatal(statusErr)
+		}
+		for _, run := range status.Runs {
+			if run.ConversationOnly && run.PaneID != "" {
+				evaluation = run
+			}
+		}
+		if evaluation.ID != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if evaluation.ID == "" {
+		t.Fatal("completion did not start a conversation-only orchestrator pane")
+	}
+	if pane, inspectErr := rt.Inspect(ctx, evaluation.PaneID); inspectErr == nil {
+		if pane.RunID != evaluation.ID || pane.SessionID != evaluation.SessionID || pane.WorkspaceID != ws {
+			t.Fatalf("evaluation pane metadata: pane=%+v run=%+v", pane, evaluation)
+		}
+	}
+}
+
 func waitUIStatus(t *testing.T, service *Service, workspaceID string, ready func(UIStatus) bool) UIStatus {
 	t.Helper()
 	deadline := time.Now().Add(8 * time.Second)
