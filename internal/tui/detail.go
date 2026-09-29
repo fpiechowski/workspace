@@ -408,7 +408,11 @@ func (m *Model) dispatcherContent() string {
 	doc := newDetailDoc(m.palette, m.detailWidth())
 	d := m.project.Dispatcher
 	doc.title("Project Dispatcher", "", d.State)
-	doc.action("a start or stop Dispatcher · r refresh")
+	if m.dispatcherJumpReady() {
+		doc.action("a start or stop Dispatcher · g jump · r refresh")
+	} else {
+		doc.action("a start or stop Dispatcher · r refresh")
+	}
 	doc.section("Facts")
 	doc.field("State", firstNonempty(d.State, "never_started"))
 	doc.field("Role", firstNonempty(d.Role, "dispatcher"))

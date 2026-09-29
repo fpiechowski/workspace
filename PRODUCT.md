@@ -259,7 +259,10 @@ At project scope, the TUI exposes Issues and Dispatcher alongside Workspaces. An
 detail shows its source, retrieved revision, status reason, linked Workspaces, and the
 guarded action to create a Workspace from that exact snapshot. Dispatcher start, status,
 stop, and attach actions are project-scoped; Dispatcher text is treated as untrusted
-input and cannot expand project mutation authority.
+input and cannot expand project mutation authority. While its Run is live the Dispatcher
+page is jump-capable: `g` moves the chosen attached client to the verified Dispatcher
+pane, and the shortcut is hidden and inert when the Dispatcher is not running.
+`workspace dispatcher attach` is unchanged.
 
 Worktrees appear as a revision tree, with source revisions and related task names.
 Creation records the parent when the selected local branch identifies a registered

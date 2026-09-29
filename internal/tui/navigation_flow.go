@@ -17,6 +17,12 @@ func (m *Model) jumpSelected() tea.Cmd {
 	if m.route.Page == "orchestrator" {
 		return m.jump(core.EntityRef{Kind: "orchestrator"})
 	}
+	if m.route.Page == "dispatcher" {
+		if !m.dispatcherJumpReady() {
+			return nil
+		}
+		return m.jump(core.EntityRef{Kind: "dispatcher"})
+	}
 	if jumpCapable(m.route.Page) && m.route.EntityID != "" {
 		return m.jump(core.EntityRef{Kind: m.route.Page, ID: m.route.EntityID})
 	}

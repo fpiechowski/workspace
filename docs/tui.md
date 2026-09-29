@@ -54,7 +54,9 @@ input source, and creation date. The Issues tab lists durable Issue revisions, l
 status, source, digest, and linked Workspace states. Opening an Issue shows its full
 description and exact linked revisions; `a` can create a Workspace with a frozen Issue
 input. The Dispatcher tab shows project-scoped state and offers explicit start/stop
-actions. When the list is empty, it shows a title, one-sentence
+actions. While its Run is live it is also jump-capable: `g` moves a chosen attached
+client to the verified Dispatcher pane, and the `g jump` hint, footer and full help
+appear only then. When the Dispatcher is not running, `g` is hidden and inert. When the list is empty, it shows a title, one-sentence
 explanation, and one valid action (`a` creates a workspace), so it no longer contradicts
 the Create workspace action. In wide mode, it shows selection details (ID, path, input
 source, creation date, and state) next to the list without a panel border. Selecting a
@@ -288,7 +290,12 @@ attached clients on that target's tmux socket. With exactly one attached client 
 immediately with it; with several it opens a picker. Each sanitized row identifies the
 terminal TTY and current session, with process/name metadata when available. The user
 confirms the client to move to the exact verified workspace session, window, and pane.
-`Esc` and `Ctrl+C` cancel without changing tmux.
+`Esc` and `Ctrl+C` cancel without changing tmux. The project Dispatcher page is
+jump-capable while it has a live, ownership-verified Run: `g` resolves the durable
+current Run against the verified project topology and targets the canonical
+`workspace-dispatcher-<project-id>` session. When the Dispatcher is not running the
+shortcut is hidden and pressing it has no effect. `workspace dispatcher attach` is
+unchanged and remains a separate CLI path.
 
 The TUI stores the last successfully selected client under the project's ignored
 `.workspace/tui/clients` directory, with a separate preference for each socket. The

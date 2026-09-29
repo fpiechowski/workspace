@@ -13,3 +13,38 @@
 - command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID -u WORKSPACE_ROLE -u WORKSPACE_PARENT_SESSION_ID go test ./... -count=1 -timeout 570s
   exit_code: 0
   evidence: evidence-autonomy-go-test-all.txt
+
+# --- incoming dispatcher-jump checks (head 7d4af63) ---
+- command: gofmt -l ./cmd ./internal
+  exit_code: 0
+  evidence: evidence-gofmt.txt
+- command: go vet ./...
+  exit_code: 0
+  evidence: evidence-vet.txt
+- command: go test ./internal/tui/ -count=1
+  exit_code: 0
+  evidence: evidence-go-test-tui.txt
+- command: go test ./internal/terminal/ -count=1
+  exit_code: 0
+  evidence: evidence-go-test-terminal.txt
+- command: go test ./internal/core/ -run 'TestResolveDispatcherNavigationTarget|TestWorkspaceRuntimeAndNavigationUseVerifiedOwnership|TestDispatcherLifecycleAndReplay|TestDispatcher|TestProjectOverview|TestWorkspaceSnapshot|TestSupervisor|TestProjectDispatcher' -count=1
+  exit_code: 0
+  evidence: evidence-go-test-core-targeted.txt
+- command: env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test ./... -count=1 -timeout 180s
+  exit_code: 0
+  evidence: evidence-go-test-all.txt
+- command: WORKSPACE_TMUX_TEST=1 env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test -race ./internal/core/ -run 'Navigator|Navigation|Dispatcher|Supervisor|Tmux' -count=1 -timeout 300s
+  exit_code: 0
+  evidence: evidence-tmux-core.txt
+- command: WORKSPACE_TMUX_TEST=1 env -u WORKSPACE_AGENT_ID -u WORKSPACE_SESSION_ID -u WORKSPACE_RUN_ID go test -race ./internal/terminal/ ./internal/tui/ -count=1 -timeout 120s -skip 'TestNavigatorRealPTYAndClientSelection'
+  exit_code: 0
+  evidence: evidence-tmux-term-tui-skip.txt
+  note: >-
+    TestNavigatorRealPTYAndClientSelection ("pseudo-TTY client did not attach") is a
+    pre-existing environmental failure, independently reproduced on base
+    aa72616494937c5c977187ade2fd342d230fac93; it is unrelated to this change and is
+    skipped here. The unskipped run's failing output is retained as informational
+    evidence in evidence-tmux-term-tui.txt.
+- command: python3 work-products/check-doc-links.py
+  exit_code: 0
+  evidence: evidence-doc-links.txt
