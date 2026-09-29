@@ -169,9 +169,16 @@ func workspaceNameIDs(statuses []core.Status) map[string]string {
 
 func chooseWorkspace(o *options, statuses []core.Status, selector string) (core.Status, error) {
 	if selector != "" {
+		// An exact ID match always wins: a slug or legacy ID is never reported
+		// as ambiguous with a workspace title that happens to look like it.
+		for _, status := range statuses {
+			if status.Workspace.ID == selector {
+				return status, nil
+			}
+		}
 		matches := make([]core.Status, 0, 1)
 		for _, status := range statuses {
-			if status.Workspace.ID == selector || strings.EqualFold(workspaceTitle(status), selector) {
+			if strings.EqualFold(workspaceTitle(status), selector) {
 				matches = append(matches, status)
 			}
 		}
@@ -239,7 +246,7 @@ func newRoot(o *options) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	f := root.PersistentFlags()
 	f.StringVar(&o.project, "project", "", "Project path (also WORKSPACE_PROJECT_DIR)")
-	f.StringVar(&o.workspace, "workspace", "", "Workspace ID (also WORKSPACE_ID)")
+	f.StringVar(&o.workspace, "workspace", "", "Workspace ID (slug or legacy ID; also WORKSPACE_ID)")
 	f.StringVar(&o.socket, "tmux-socket", os.Getenv("WORKSPACE_TMUX_SOCKET"), "Optional isolated tmux server name")
 	f.StringVar(&o.scopeName, "scope", "", "Internal runtime scope (project or workspace)")
 	f.StringVar(&o.key, "operation-key", "", "Idempotency key for a mutation; changed payload with the same key is rejected")
@@ -380,6 +387,7 @@ func newRoot(o *options) *cobra.Command {
 	})
 	createCmd.Args = cobra.MaximumNArgs(1)
 	createCmd.Flags().StringVar(&create.Title, "title", "", "Workspace title")
+	createCmd.Flags().StringVar(&create.ID, "id", "", "Explicit workspace ID slug, with or without the ws_ prefix")
 	createCmd.Flags().StringVar(&inputFile, "input-file", "", "Saved issue/description file")
 	createCmd.Flags().StringVar(&create.Source, "issue", "", "Issue URL; fetch from configured tracker unless an intent or --input-file is supplied")
 	createCmd.Flags().StringVar(&create.FromIssue, "from-issue", "", "Create from an existing durable Issue ID; mutually exclusive with intent, --input-file and --issue")
@@ -729,6 +737,7 @@ func agentCommands(o *options) *cobra.Command {
 	create.Args = cobra.ExactArgs(1)
 	f := create.Flags()
 	f.StringVar(&opt.Role, "role", "", "planner, implementer, integrator or tester")
+	f.StringVar(&opt.ID, "id", "", "Explicit agent ID slug, with or without the agent_ prefix")
 	f.StringVar(&opt.Profile, "profile", "", "Default model profile")
 	f.StringVar(&opt.PromptTemplate, "prompt-template", "", "Prompt template name")
 	f.StringVar(&instructionsFile, "instructions-file", "", "Persona/delegated scope instructions")
@@ -809,11 +818,12 @@ func sessionCommands(o *options) *cobra.Command {
 	})
 	f := start.Flags()
 	f.StringVar(&opt.Agent, "agent", "", "Agent ID or name")
+	f.StringVar(&opt.ID, "id", "", "Explicit logical Session ID slug for a newly created session, with or without the sess_ prefix")
 	f.StringVar(&opt.Worktree, "worktree", "", "Worktree ID or name")
-	f.StringVar(&opt.Parent, "parent", "", "Parent agent ID (defaults to orchestrator)")
+	f.StringVar(&opt.Parent, "parent", "", "Parent agent ID (slug or legacy; defaults to the orchestrator)")
 	f.StringVar(&opt.ParentSessionID, "parent-session", "", "Exact parent logical Session ID for a worker session")
 	f.StringVar(&opt.Profile, "profile", "", "Override model profile")
-	f.StringVar(&opt.Task, "task", "", "Task ID or name")
+	f.StringVar(&opt.Task, "task", "", "Task ID (slug or legacy) or name assigned to the session")
 	f.StringVar(&opt.PromptTemplate, "prompt-template", "", "Override snapshotted prompt template")
 	f.BoolVar(&opt.ReadOnly, "read-only", false, "Analysis persona shares the checkout without repository write rights (cooperative)")
 	group.AddCommand(start)

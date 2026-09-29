@@ -188,24 +188,24 @@ var commandHelpSpecs = map[string]commandHelp{
 	),
 	"workspace tui show": h(
 		"Explicitly enable and reconcile the managed companion panel into an existing orchestrator window. --operation-key makes retries idempotent.",
-		"workspace tui show --workspace ws_01 --operation-key tui-show:ws_01",
+		"workspace tui show --workspace ws_named-ids --operation-key tui-show:ws_named-ids",
 	),
 	"workspace tui hide": h(
 		"Disable and remove only the verified managed companion panel. --operation-key makes retries idempotent.",
-		"workspace tui hide --workspace ws_01 --operation-key tui-hide:ws_01",
+		"workspace tui hide --workspace ws_named-ids --operation-key tui-hide:ws_named-ids",
 	),
 	"workspace tui status": h(
 		"Show desired state, generation, pane/window ownership and last known runtime state for the managed companion panel.",
-		"workspace tui status --workspace ws_01 --json",
+		"workspace tui status --workspace ws_named-ids --json",
 	),
 	"workspace open": h(
-		"Choose a workspace interactively when no selector is supplied, then attach to its tmux session. A selector can be an ID or title.",
+		"Choose a workspace interactively when no selector is supplied, then attach to its tmux session. A selector can be an exact ID (slug or legacy) or a title; an exact ID match always wins over a title match.",
 		"workspace open\nworkspace open specification",
-		optionalArgument("workspace", "Workspace ID or title; omit it to show the interactive selector."),
+		optionalArgument("workspace", "Workspace ID (slug or legacy) or title; omit it to show the interactive selector."),
 	),
 	"workspace status": h(
 		"Show the durable workspace document, workflow phase, agents, sessions, tasks, worktrees and recorded results.",
-		"workspace status --workspace ws_01",
+		"workspace status --workspace ws_named-ids",
 	),
 	"workspace workflow": h(
 		"Inspect available workflows and choose or advance the workflow associated with the selected workspace.",
@@ -295,7 +295,7 @@ var commandHelpSpecs = map[string]commandHelp{
 	"workspace agent resume": h(
 		"Start a new concrete Run for a persona, reusing a compatible logical Session, worktree and profile when possible. In a completed workspace, an accepted worker resume is consultation-only; new work requires workspace reopen.",
 		"workspace agent resume planner",
-		requiredArgument("agent", "Agent ID or persona name to resume."),
+		requiredArgument("agent", "Agent ID (slug or legacy ID) or persona name to resume."),
 	),
 	"workspace worktree": h(
 		"Manage dedicated Git checkouts used by delegated tasks.",
@@ -316,12 +316,12 @@ var commandHelpSpecs = map[string]commandHelp{
 	),
 	"workspace session start": h(
 		"Launch a persona in a tmux pane. The logical Session records lineage; its Run records the selected route, client, prompt and pane.",
-		"workspace session start --agent planner --parent-session sess_orchestrator --task task_01 --worktree planning",
+		"workspace session start --agent planner --parent-session sess_orchestrator --task task_plan-named-ids --worktree planning",
 	),
 	"workspace session bind-thread": h(
 		"Associate a native client conversation or session ID with an existing workspace session.",
-		"workspace session bind-thread sess_01 --thread-id thread_abc",
-		requiredArgument("session", "Workspace session ID to update."),
+		"workspace session bind-thread sess_planner --thread-id thread_abc",
+		requiredArgument("session", "Workspace session ID (slug or legacy) to update."),
 	),
 	"workspace session list": h(
 		"List logical Sessions with operational state (including live idle), lifecycle/run/client state, current/last Run, pane, native thread and lineage summaries.",
@@ -329,28 +329,28 @@ var commandHelpSpecs = map[string]commandHelp{
 	),
 	"workspace session history": h(
 		"List every concrete Run belonging to one logical Session, including terminated executions and their provenance.",
-		"workspace session history sess_01",
-		requiredArgument("session", "Logical Session ID, or a Run ID alias whose history should be shown."),
+		"workspace session history sess_planner",
+		requiredArgument("session", "Logical Session ID (slug or legacy), or a Run ID alias whose history should be shown."),
 	),
 	"workspace session resume": h(
 		"Create a new concrete Run in a compatible logical Session after verifying its task, worktree, input and client lineage.",
-		"workspace session resume sess_01",
-		requiredArgument("session", "Logical Session ID, or a Run ID alias to resume."),
+		"workspace session resume sess_planner",
+		requiredArgument("session", "Logical Session ID (slug or legacy), or a Run ID alias to resume."),
 	),
 	"workspace session stop": h(
 		"Stop the current owned Run and its tmux pane while preserving the logical Session and run history.",
-		"workspace session stop sess_01",
-		requiredArgument("session", "Workspace session ID to stop."),
+		"workspace session stop sess_planner",
+		requiredArgument("session", "Workspace session ID (slug or legacy) to stop."),
 	),
 	"workspace session close": h(
 		"Close an idle logical Session so it cannot be resumed again. Existing Runs and provenance remain available.",
-		"workspace session close sess_01 --reason completed",
-		requiredArgument("session", "Logical Session ID to close."),
+		"workspace session close sess_planner --reason completed",
+		requiredArgument("session", "Logical Session ID (slug or legacy) to close."),
 	),
 	"workspace session attach": h(
 		"Attach to the current Run's tmux pane after verifying logical Session and Run ownership.",
-		"workspace session attach sess_01",
-		requiredArgument("session", "Workspace session ID whose pane should receive focus."),
+		"workspace session attach sess_planner",
+		requiredArgument("session", "Workspace session ID (slug or legacy) whose pane should receive focus."),
 	),
 	"workspace run": h(
 		"Inspect concrete client and tmux executions independently from their durable logical Sessions.",
@@ -379,23 +379,23 @@ var commandHelpSpecs = map[string]commandHelp{
 	),
 	"workspace task retry": h(
 		"Start a fresh attempt for a task and invalidate dependent results.",
-		"workspace task retry task_01 --reason \"Previous check used stale fixtures\"",
-		requiredArgument("task", "Task ID or task name to retry."),
+		"workspace task retry task_plan-named-ids --reason \"Previous check used stale fixtures\"",
+		requiredArgument("task", "Task ID (slug or legacy) or task name to retry."),
 	),
 	"workspace task cancel": h(
 		"Retire a task as cancelled with a durable reason. This preserves its history and does not create a new attempt.",
-		"workspace task cancel task_01 --reason \"No longer required\"",
-		requiredArgument("task", "Task ID or task name to cancel."),
+		"workspace task cancel task_plan-named-ids --reason \"No longer required\"",
+		requiredArgument("task", "Task ID (slug or legacy) or task name to cancel."),
 	),
 	"workspace task abandon": h(
 		"Retire a task as abandoned with a durable reason. This preserves its history and does not create a new attempt.",
-		"workspace task abandon task_01 --reason \"Work was superseded\"",
-		requiredArgument("task", "Task ID or task name to abandon."),
+		"workspace task abandon task_plan-named-ids --reason \"Work was superseded\"",
+		requiredArgument("task", "Task ID (slug or legacy) or task name to abandon."),
 	),
 	"workspace task supersede": h(
 		"Retire a task as superseded with a durable reason. This preserves its history and does not create a new attempt.",
-		"workspace task supersede task_01 --reason \"Replacement task created\"",
-		requiredArgument("task", "Task ID or task name to supersede."),
+		"workspace task supersede task_plan-named-ids --reason \"Replacement task created\"",
+		requiredArgument("task", "Task ID (slug or legacy) or task name to supersede."),
 	),
 	"workspace message": h(
 		"Send durable notes, questions, answers or status messages to exact logical Sessions.",
@@ -433,7 +433,7 @@ var commandHelpSpecs = map[string]commandHelp{
 	),
 	"workspace handoff submit": h(
 		"Copy explicitly named artifacts and enqueue a handoff result atomically. Use --to-session for the exact parent Session; a summary file is required.",
-		"workspace handoff submit --to-session sess_parent --task task_01 --summary-file work-products/SUMMARY.md --artifact work-products/IMPLEMENTATION.md",
+		"workspace handoff submit --to-session sess_parent --task task_plan-named-ids --summary-file work-products/SUMMARY.md --artifact work-products/IMPLEMENTATION.md",
 	),
 	"workspace handoff list": h(
 		"List submitted handoffs and their review state.",
@@ -459,7 +459,7 @@ var commandHelpSpecs = map[string]commandHelp{
 	),
 	"workspace integration": h(
 		"Prepare a shared checkout of accepted implementation tasks and, after explicit user approval, land the accepted integration into the target branch.",
-		"workspace integration prepare --tasks task_01,task_02\nworkspace integration land --user-confirmed",
+		"workspace integration prepare --tasks task_plan-named-ids,task_impl-named-ids\nworkspace integration land --user-confirmed",
 	),
 	"workspace integration prepare": h(
 		"Create the integration worktree for accepted implementation tasks. Omit --tasks to include all accepted implementation tasks. With a landing workflow the default base is the current tip of the target branch.",
@@ -484,7 +484,7 @@ var commandHelpSpecs = map[string]commandHelp{
 	),
 	"workspace decision record": h(
 		"Record an orchestrator judgment that has no gate mutation, such as an autonomous assumption taken while resolving an ambiguity. Allowed only while an autonomous run is running.",
-		"workspace decision record --kind autonomous.assumption --subject task:task_01 --rationale \"Chose the conservative reading of the issue\"",
+		"workspace decision record --kind autonomous.assumption --subject task:task_plan-named-ids --rationale \"Chose the conservative reading of the issue\"",
 	),
 	"workspace release": h(
 		"Record explicit deployment or release confirmation for the workflow.",
@@ -548,7 +548,7 @@ var commandHelpSpecs = map[string]commandHelp{
 	),
 	"workspace check run": h(
 		"Execute a verification command in the assigned worktree and record its exit code and evidence.",
-		"workspace check run --session sess_01 -- go test ./...",
+		"workspace check run --session sess_planner -- go test ./...",
 		requiredArgument("-- <command> [args...]", "Command to execute; place it after -- so its flags are not parsed by workspace."),
 	),
 	"workspace check list": h(
@@ -592,11 +592,11 @@ var commandHelpSpecs = map[string]commandHelp{
 	),
 	"workspace start": h(
 		"Launch the project supervisor and workspace orchestrator in tmux. In a completed workspace this starts or resumes a conversation-only Run; it does not reopen task execution. The current terminal view is not changed.",
-		"workspace start --workspace ws_01",
+		"workspace start --workspace ws_named-ids",
 	),
 	"workspace attach": h(
 		"Attach to the selected workspace's orchestrator tmux session.",
-		"workspace attach --workspace ws_01",
+		"workspace attach --workspace ws_named-ids",
 	),
 	"workspace pause": h(
 		"Pause workflow delegation. Use --interrupt to stop active sessions while preserving their local work.",
@@ -645,7 +645,7 @@ var commandHelpSpecs = map[string]commandHelp{
 var flagHelpSpecs = map[string]map[string]string{
 	"workspace": {
 		"project":         "Project path; defaults to WORKSPACE_PROJECT_DIR or the current directory.",
-		"workspace":       "Workspace ID; defaults to WORKSPACE_ID or the workspace inferred from the current directory.",
+		"workspace":       "Workspace ID (slug or legacy ID); defaults to WORKSPACE_ID or the workspace inferred from the current directory.",
 		"tmux-socket":     "Optional isolated tmux server name.",
 		"operation-key":   "Idempotency key for a mutation; reusing it with a different payload is rejected.",
 		"json":            "Print machine-readable {ok,data} or {ok:false,error} JSON.",
@@ -656,6 +656,7 @@ var flagHelpSpecs = map[string]map[string]string{
 	"workspace skill install": {"client": "Client discovery target: codex, claude or opencode."},
 	"workspace create": {
 		"title":       "Workspace title shown in selectors and compact output.",
+		"id":          "Explicit workspace ID slug; the ws_ prefix is optional. Invalid or taken values fail with invalid_id or id_exists.",
 		"input-file":  "File containing the saved issue or task description.",
 		"issue":       "Issue URL; fetch it from the configured tracker unless intent or --input-file is supplied.",
 		"workflow":    "Configured workflow name; omit it to use plan-first.",
@@ -683,6 +684,7 @@ var flagHelpSpecs = map[string]map[string]string{
 		"autonomous":  "Start the linked Workspace in an autonomous run; the project Dispatcher is refused.",
 		"base":        "Base Git revision to freeze for the Workspace.",
 		"title":       "Workspace title override; defaults to the Issue title.",
+		"id":          "Explicit linked Workspace ID slug; the ws_ prefix is optional.",
 		"start":       "Explicitly start the linked Workspace Orchestrator after creation.",
 	},
 	"workspace autonomy enable": {
@@ -718,6 +720,7 @@ var flagHelpSpecs = map[string]map[string]string{
 	},
 	"workspace agent create": {
 		"role":              "Persona role: planner, implementer, integrator or tester (required).",
+		"id":                "Explicit agent ID slug; the agent_ prefix is optional.",
 		"profile":           "Default model profile for sessions of this persona.",
 		"prompt-template":   "Prompt template name to snapshot for this persona.",
 		"instructions-file": "File containing delegated-scope and persona instructions.",
@@ -727,17 +730,18 @@ var flagHelpSpecs = map[string]map[string]string{
 		"purpose": "Checkout purpose, such as planning or implementation.",
 	},
 	"workspace session start": {
-		"agent":           "Agent ID or persona name to launch (required).",
+		"agent":           "Agent ID (slug or legacy ID) or persona name to launch (required).",
 		"worktree":        "Worktree ID or name for the session checkout (required for worker sessions).",
 		"parent":          "Parent agent ID; defaults to the orchestrator.",
-		"parent-session":  "Exact parent logical Session ID; captured automatically for an active delegating agent.",
+		"id":              "Explicit logical Session ID slug for a new session; the sess_ prefix is optional. It is refused when resuming an existing logical session.",
+		"parent-session":  "Exact parent logical Session ID (slug or legacy ID); captured automatically for an active delegating agent.",
 		"profile":         "Override the persona's model profile.",
-		"task":            "Task ID or name assigned to the session.",
+		"task":            "Task ID (slug or legacy ID) or task name assigned to the session.",
 		"prompt-template": "Override the snapshotted prompt template.",
 		"read-only":       "Share the checkout for analysis without repository write rights.",
 	},
 	"workspace session bind-thread": {"thread-id": "Native client conversation or session ID."},
-	"workspace task create":         {"spec-file": "YAML or Markdown frontmatter task specification file (required)."},
+	"workspace task create":         {"spec-file": "YAML or Markdown frontmatter task specification file (required).", "id": "Explicit task ID slug; the task_ prefix is optional."},
 	"workspace task retry":          {"reason": "Reason recorded for starting the new attempt.", "rationale": "Autonomous-run rationale for retrying the task.", "evidence": "Audit evidence for the autonomous decision; repeat or comma-separate."},
 	"workspace task cancel":         {"reason": "Reason recorded for cancelling the task (required).", "rationale": "Autonomous-run rationale for retiring the task.", "evidence": "Audit evidence for the autonomous decision; repeat or comma-separate."},
 	"workspace task abandon":        {"reason": "Reason recorded for abandoning the task (required).", "rationale": "Autonomous-run rationale for retiring the task.", "evidence": "Audit evidence for the autonomous decision; repeat or comma-separate."},
@@ -745,18 +749,18 @@ var flagHelpSpecs = map[string]map[string]string{
 	"workspace message send": {
 		"body-file":  "File containing the message body (required).",
 		"to":         "Compatibility recipient Agent ID or persona name; accepted only when exactly one eligible Session exists.",
-		"to-session": "Exact logical recipient Session ID (preferred).",
+		"to-session": "Exact logical recipient Session ID (slug or legacy ID; preferred).",
 		"kind":       "Message kind: note, question, answer or status.",
 		"reply-to":   "Original message ID when this is a reply.",
 	},
-	"workspace inbox list": {"agent": "Explicit agent-wide historical inbox owner.", "session": "Exact logical Session to inspect.", "all": "Include acknowledged messages."},
-	"workspace inbox read": {"session": "Exact logical Session to inspect."},
-	"workspace inbox ack":  {"session": "Exact logical Session to inspect and acknowledge."},
-	"workspace inbox wait": {"timeout": "Maximum wait in seconds.", "agent": "Explicit agent-wide historical inbox owner.", "session": "Exact logical Session to await."},
+	"workspace inbox list": {"agent": "Explicit agent-wide historical inbox owner.", "session": "Exact logical Session (slug or legacy ID) to inspect.", "all": "Include acknowledged messages."},
+	"workspace inbox read": {"session": "Exact logical Session (slug or legacy ID) to inspect."},
+	"workspace inbox ack":  {"session": "Exact logical Session (slug or legacy ID) to inspect and acknowledge."},
+	"workspace inbox wait": {"timeout": "Maximum wait in seconds.", "agent": "Explicit agent-wide historical inbox owner.", "session": "Exact logical Session (slug or legacy ID) to await."},
 	"workspace handoff submit": {
 		"to":           "Compatibility parent or orchestrator Agent ID; accepted only when exactly one eligible Session exists.",
-		"to-session":   "Exact parent or orchestrator logical Session ID (preferred).",
-		"task":         "Task ID or name for the result.",
+		"to-session":   "Exact parent or orchestrator logical Session ID (slug or legacy ID; preferred).",
+		"task":         "Task ID (slug or legacy ID) or task name for the result.",
 		"session":      "Producing session; inferred for agents when omitted.",
 		"outcome":      "Result outcome: succeeded, blocked or failed.",
 		"summary-file": "Summary text file (required).",
@@ -778,7 +782,7 @@ var flagHelpSpecs = map[string]map[string]string{
 	},
 	"workspace decision record": {
 		"kind":      "Decision kind: autonomous.assumption or autonomous.question_answer.",
-		"subject":   "Decision subject, such as task:task_01, handoff:handoff_01 or phase:plan_review.",
+		"subject":   "Decision subject, such as task:task_plan-named-ids, handoff:handoff_01 or phase:plan_review.",
 		"rationale": "Recorded rationale for the decision (required).",
 		"evidence":  "Artifact IDs, check IDs or commits supporting the decision; repeat or comma-separate.",
 	},
@@ -792,7 +796,7 @@ var flagHelpSpecs = map[string]map[string]string{
 	"workspace change-request skip":     {"reason": "User's reason or evidence (required).", "url": "Existing change-request URL, when linking instead of skipping.", "user-confirmed": "Attest the explicit user decision (required in agent sessions)."},
 	"workspace change-request link":     {"reason": "User's reason or evidence.", "url": "Existing change-request URL (required).", "user-confirmed": "Attest the explicit user decision (required in agent sessions)."},
 	"workspace change-request retry":    {"reason": "User's reason or evidence (required).", "url": "Existing change-request URL.", "user-confirmed": "Attest the explicit user decision (required in agent sessions)."},
-	"workspace check run":               {"session": "Producing session; inferred for agents and must be task-bound."},
+	"workspace check run":               {"session": "Producing session (slug or legacy ID); inferred for agents and must be task-bound."},
 	"workspace service start":           {"worktree": "Assigned worktree for the service (required)."},
 	"workspace pause":                   {"interrupt": "Stop active Runs while preserving logical Sessions and local work."},
 	"workspace clean":                   {"dry-run": "Show the removal plan without changes.", "backup": "Preserve unpublished commits in verified Git bundles before removal."},

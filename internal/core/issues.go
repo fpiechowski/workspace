@@ -100,13 +100,16 @@ type IssueRefreshOptions struct {
 }
 
 type IssueDispatchOptions struct {
-	IssueID      string
-	Workflow     string
-	NoWorkflow   bool
-	Autonomous   bool
-	Base         string
-	Title        string
-	Start        bool
+	IssueID    string
+	Workflow   string
+	NoWorkflow bool
+	Autonomous bool
+	Base       string
+	Title      string
+	Start      bool
+	// ID optionally overrides the generated slug of the linked Workspace. It is
+	// omitted when empty so existing dispatch receipt digests do not change.
+	ID           string `json:",omitempty"`
 	OperationKey string
 }
 

@@ -156,6 +156,22 @@ the parent Agent ID remains an ownership and compatibility projection. Results i
 the task, attempt, Session, exact Run, and Git revision. Identifiers are immutable; names
 are used only for presentation and resource selection.
 
+Workspace, Agent, Session, and Task IDs are minted as `<prefix>_<slug>` (`ws_`, `agent_`,
+`sess_`, `task_`), where the slug is a lowercase, hyphenated form of the title or name,
+such as `ws_named-ids` or `task_plan-named-ids`. A slug is 1–48 characters, starts and
+ends with an alphanumeric, and shapes that resemble a legacy ULID or a migrated session
+ID are reserved. Creation accepts an optional explicit `--id` that overrides the
+generated slug; an invalid value fails with `invalid_id` and an already taken value with
+`id_exists`, and explicit IDs never receive an automatic suffix. Uniqueness is global per
+entity type per workspace storage root: every workspace and the project Dispatcher that
+share one root, which spans several projects when an external `workspaces_dir` is shared.
+It is enforced by a never-released reservation ledger at
+`<storage-root>/.runtime/ids/<kind>/<slug>`, so a slug is not reused even after its
+entity is deleted and stale tmux names, branches, or receipts can never point at a
+different entity. Legacy `<prefix>_<ULID>` and migrated `sess_<hex>` IDs remain valid and
+resolvable byte for byte: they are not migrated, rewritten, or given slug aliases, and a
+legacy workspace can contain new slug-ID entities. Run IDs stay random.
+
 Session status has three deliberate projections. `LifecycleState` is the logical
 conversation lifecycle (`active`, resumable `idle`, or `closed`); `RunState` is the
 concrete state of the current Run; and `State` is the operational display/decision
@@ -213,7 +229,7 @@ approval-bypass flags.
 In each workspace:
 
 ```text
-ws_ID/
+ws_<slug>/                 # or a legacy ws_<ULID> for pre-slug workspaces
 ├── WORKSPACE.md          # canonical mode, workflow, and narrative state
 ├── WORKFLOW.md           # selected workflow snapshot or manual-mode note
 ├── AGENTS.md             # orchestrator role instructions
@@ -228,6 +244,9 @@ ws_ID/
     ├── pending.json      # interrupted-write intent
     └── ...               # inbox, prompts, receipts, and supervisor state
 ```
+
+The storage root also holds `<storage-root>/.runtime/ids/<kind>/<slug>`, the
+never-released reservation ledger for slug IDs (see the identifier contract above).
 
 An explicit reopen writes the pre-reopen `WORKSPACE.md`, authorization reason, and
 previous status/revision/base metadata under `history/reopen_ID/` in the same

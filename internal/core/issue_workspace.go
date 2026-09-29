@@ -217,7 +217,7 @@ func (s *Service) dispatchIssue(ctx context.Context, opt IssueDispatchOptions) (
 	if opt.OperationKey != "" {
 		createKey = "dispatch:create:" + opt.OperationKey
 	}
-	workspace, err := workspaceService.CreateFromIssue(ctx, opt.IssueID, CreateOptions{Title: opt.Title, Workflow: opt.Workflow, NoWorkflow: opt.NoWorkflow, Autonomous: opt.Autonomous, Base: opt.Base, OperationKey: createKey})
+	workspace, err := workspaceService.CreateFromIssue(ctx, opt.IssueID, CreateOptions{Title: opt.Title, ID: opt.ID, Workflow: opt.Workflow, NoWorkflow: opt.NoWorkflow, Autonomous: opt.Autonomous, Base: opt.Base, OperationKey: createKey})
 	if err != nil {
 		return DispatchResult{}, err
 	}

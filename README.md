@@ -432,6 +432,8 @@ workspace issue dispatch issue_ID --start --operation-key dispatch-142
 workspace create --from-issue issue_ID --operation-key workspace-142
 # You can also provide the description directly as an argument or through --input-file issue.md.
 workspace create "Improve workspace creation"
+# Choose the ID explicitly; otherwise it is derived from the title as a slug:
+workspace create "Improve workspace creation" --id improve-workspace-creation
 # --input-file can optionally be combined with --issue URL to preserve the source.
 # Manual orchestration without a workflow:
 workspace create "Ad-hoc analysis" --no-workflow
@@ -450,6 +452,16 @@ and a fixed limit of 3 parallel workers. Omit `--workflow` for the common case; 
 workspace still waiting in `needs_workflow` can be resolved with `workspace workflow
 select plan-first`. `--workflow` and `--no-workflow` cannot be combined, and a manual
 workspace cannot later be converted to a workflow. [Trackers and snapshots](docs/trackers.md).
+
+Workspace, Agent, Session, and Task IDs are human-readable slugs derived from the title
+or name, such as `ws_named-ids`, `agent_planner`, `sess_planner`, and
+`task_plan-named-ids`. They are unique per entity type across the workspace storage root
+and are never reused, even after deletion. `workspace create`, `issue dispatch`,
+`agent create`, `task create`, and `session start` accept `--id <slug>` to choose the ID
+explicitly; the `<kind>_` prefix is optional, an invalid value fails with `invalid_id`, and
+an already taken value fails with `id_exists` instead of gaining a suffix. Existing ULID
+IDs stay valid and resolvable and are never migrated, so a legacy workspace can contain
+new slug-ID entities. Run IDs remain random.
 
 A workspace can run autonomously. `workspace create --autonomous` (or a user-run `issue
 dispatch --autonomous`) starts it unattended, and `workspace autonomy enable|disable`
@@ -618,10 +630,10 @@ required_artifacts: [PLAN.md]
 ```
 
 ```sh
-workspace task create --spec-file planning.yaml --operation-key planning-task
-workspace agent create planner --role planner
+workspace task create --spec-file planning.yaml --id plan-named-ids --operation-key planning-task
+workspace agent create planner --role planner --id agent_planner
 workspace worktree create planning --purpose planning
-workspace session start --agent planner --parent-session sess_ORCHESTRATOR --task task_ID --worktree planning \
+workspace session start --agent planner --id sess_planner --parent-session sess_ORCHESTRATOR --task task_ID --worktree planning \
   --operation-key planning-start-1
 workspace status
 workspace menu

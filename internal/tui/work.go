@@ -57,7 +57,7 @@ func (m *Model) taskItem(task core.Task) collectionItem {
 		execution = "No session yet"
 	}
 	return collectionItem{ID: task.ID, Kind: "task", Title: firstNonempty(task.Title, task.ID), State: task.State,
-		Subtitle: fmt.Sprintf("%s · attempt %d", execution, task.Attempt), At: at}
+		Subtitle: fmt.Sprintf("%s · attempt %d · %s", execution, task.Attempt, rowID("task", task.ID)), At: at}
 }
 
 func shortRevision(commit string) string {

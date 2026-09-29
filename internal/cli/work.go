@@ -13,6 +13,7 @@ import (
 func taskCommands(o *options) *cobra.Command {
 	group := &cobra.Command{Use: "task", Short: "Manage delegated tasks, dependencies and attempts"}
 	var file string
+	var explicitID string
 	create := command("create", "Create a task from YAML or Markdown frontmatter", func(c *cobra.Command, _ []string) error {
 		b, err := os.ReadFile(file)
 		if err != nil {
@@ -26,13 +27,14 @@ func taskCommands(o *options) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		v, err := s.CreateTask(c.Context(), id, spec, o.key)
+		v, err := s.CreateTaskWithID(c.Context(), id, spec, explicitID, o.key)
 		if err != nil {
 			return err
 		}
 		return o.emit(v)
 	})
 	create.Flags().StringVar(&file, "spec-file", "", "Task specification file")
+	create.Flags().StringVar(&explicitID, "id", "", "Explicit task ID slug, with or without the task_ prefix")
 	group.AddCommand(create)
 	group.AddCommand(command("list", "List task states and dependencies", func(c *cobra.Command, _ []string) error {
 		s, id, err := o.scope()

@@ -537,7 +537,7 @@ func (m *Model) runtimePaneRow(window core.TmuxWindow, pane core.Pane) runtimeRo
 		Window: sanitizeLine(firstNonempty(firstNonempty(window.ID, pane.WindowID), "-")),
 		Pane:   sanitizeLine(firstNonempty(pane.ID, "-")),
 		Kind:   sanitizeLine(firstNonempty(firstNonempty(pane.Kind, window.Kind), "-")),
-		Owner:  sanitizeLine(firstNonempty(shortID(pane.SessionID), "-")),
+		Owner:  sanitizeLine(firstNonempty(rowID("session", pane.SessionID), "-")),
 		Run:    sanitizeLine(firstNonempty(shortID(pane.RunID), "-")),
 		State:  sanitizeLine(firstNonempty(state, "-")),
 	}
