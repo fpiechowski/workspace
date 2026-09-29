@@ -72,8 +72,10 @@ workspace is terminal.
 
 `pause` stops new delegation. `pause --interrupt` also stops active panes, preserving
 their worktrees. `resume` permits delegation again; `agent resume NAME` starts the
-chosen persona using its prior assignment. Generic clients receive a fresh bootstrap;
-adapters with native thread support can reuse the conversation.
+chosen persona using its prior assignment. The new Run re-reads the current project
+configuration and resolves its route and client again. Generic clients receive a fresh
+bootstrap; adapters with native thread support can reuse the conversation when the
+selected route still uses the same adapter.
 An exact resume of the same idle logical Session is also allowed while its Task is
 `awaiting_review` when the attempt, input lineage and binding are unchanged. It creates
 a new Run without reopening the Task or replacing the Run provenance of the submitted

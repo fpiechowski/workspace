@@ -76,6 +76,7 @@ func (s *Service) StartDispatcher(ctx context.Context, profileOverride, operatio
 		if state.Agent.Role != "dispatcher" || state.Agent.Scope != "project" {
 			return fail("dispatcher_state_invalid", "project Dispatcher state has an invalid actor")
 		}
+		state.Agent.Profile = profile
 		request := struct {
 			Profile string
 		}{profile}
@@ -114,10 +115,7 @@ func (s *Service) StartDispatcher(ctx context.Context, profileOverride, operatio
 		} else {
 			session.AgentSnapshot = state.Agent
 		}
-		chosenProfile := session.Profile
-		if strings.TrimSpace(profileOverride) != "" || chosenProfile == "" {
-			chosenProfile = profile
-		}
+		chosenProfile := profile
 		route, err := s.chooseRoute(cfg, chosenProfile)
 		if err != nil {
 			return err

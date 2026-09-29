@@ -253,6 +253,10 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			}
 		}
 		profile := opt.Profile
+		if a.Role == "orchestrator" || d.State.WorkflowSelected() {
+			// Resumed Runs use the current project workflow/default profile.
+			profile = workflowProfile(cfg, d, a.Role, a.Profile)
+		}
 		if opt.Task != "" {
 			task, err := findTask(d, opt.Task)
 			if err != nil {
@@ -270,14 +274,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			}
 		}
 		reasoningEffort := ""
-		if resumePrior != nil {
-			reasoningEffort = resumePrior.ReasoningEffort
-			if reasoningEffort == "" && resumePrior.LastRunID != "" {
-				if priorRun, priorErr := findRun(d, resumePrior.LastRunID); priorErr == nil {
-					reasoningEffort = priorRun.ReasoningEffort
-				}
-			}
-		} else if profileCfg, profileOK := cfg.Profiles[profile]; profileOK {
+		if profileCfg, profileOK := cfg.Profiles[profile]; profileOK {
 			reasoningEffort = profileCfg.ReasoningEffort
 		}
 		thread := ""
@@ -313,47 +310,8 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 					return err
 				}
 			}
-			// A logical Session owns its client snapshot. Keep the client identity
-			// stable across Runs even if the project config has since changed; a
-			// missing executable still fails at the normal LookPath gate.
-			if prior.Route.Client != "" && prior.ClientSnapshot.Adapter != "" {
-				if cfg.Clients == nil {
-					cfg.Clients = map[string]Client{}
-				}
-				if cfg.Profiles == nil {
-					cfg.Profiles = map[string]Profile{}
-				}
-				priorClient := prior.ClientSnapshot
-				// Older registries predate native OpenCode delivery. Upgrade the
-				// default snapshot on resume; an explicit generic delivery wrapper
-				// remains backward-compatible.
-				if usesNativeOpenCodeDelivery(priorClient) {
-					priorClient.NativeDelivery = true
-				}
-				cfg.Clients[prior.Route.Client] = priorClient
-				profileCfg := cfg.Profiles[profile]
-				if prior.ClientThreadID != "" {
-					profileCfg.Routes = []Route{prior.Route}
-				} else {
-					filtered := make([]Route, 0, len(profileCfg.Routes))
-					for _, candidate := range profileCfg.Routes {
-						if candidate.Client == prior.Route.Client {
-							filtered = append(filtered, candidate)
-						}
-					}
-					if len(filtered) == 0 {
-						filtered = []Route{prior.Route}
-					}
-					profileCfg.Routes = filtered
-				}
-				cfg.Profiles[profile] = profileCfg
-			}
 			if prior.ClientThreadID != "" {
 				thread = prior.ClientThreadID
-			}
-			if profileCfg, profileOK := cfg.Profiles[profile]; profileOK {
-				profileCfg.ReasoningEffort = reasoningEffort
-				cfg.Profiles[profile] = profileCfg
 			}
 		}
 		route, err := s.chooseRoute(cfg, profile)
@@ -367,6 +325,11 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		client, ok := cfg.Clients[route.Client]
 		if !ok {
 			return fail("client_unavailable", "original client is no longer configured")
+		}
+		if resumePrior != nil && thread != "" && client.Adapter != resumePrior.ClientSnapshot.Adapter {
+			// A native thread belongs to its adapter. A route switch therefore
+			// starts a fresh conversation instead of reusing an incompatible thread.
+			thread = ""
 		}
 		if thread != "" {
 			for i := range d.Registry.Sessions {

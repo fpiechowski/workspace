@@ -69,7 +69,7 @@ func TestReasoningEffortConfigAndProfileInspection(t *testing.T) {
 	expectCode(t, err, "invalid_config")
 }
 
-func TestReasoningEffortSnapshotsAndResumeLineage(t *testing.T) {
+func TestReasoningEffortReloadsOnResume(t *testing.T) {
 	s, workspace := fixture(t)
 	ctx := context.Background()
 	saveReasoningConfig(t, s, func(cfg *Config) {
@@ -103,14 +103,16 @@ func TestReasoningEffortSnapshotsAndResumeLineage(t *testing.T) {
 	saveReasoningConfig(t, s, func(cfg *Config) {
 		profile := cfg.Profiles["frontier"]
 		profile.ReasoningEffort = "changed-effort"
+		profile.Routes[0].Model = "reloaded-model"
+		profile.Routes[0].MaxConcurrency = 1
 		cfg.Profiles["frontier"] = profile
 	})
 	resumed, err := s.ResumeAgent(ctx, workspace, a.ID, "reasoning-resume")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resumed.ID != first.ID || resumed.ReasoningEffort != "initial-effort" || resumed.RoutingDecision == nil || resumed.RoutingDecision.ReasoningEffort != "initial-effort" {
-		t.Fatalf("resume adopted changed config instead of session provenance: %+v", resumed)
+	if resumed.ID != first.ID || resumed.ReasoningEffort != "changed-effort" || resumed.RoutingDecision == nil || resumed.RoutingDecision.ReasoningEffort != "changed-effort" {
+		t.Fatalf("resume did not adopt current profile configuration: %+v", resumed)
 	}
 	status, err = s.Status(ctx, workspace)
 	if err != nil {
@@ -120,8 +122,11 @@ func TestReasoningEffortSnapshotsAndResumeLineage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resumedRun.ReasoningEffort != "initial-effort" {
+	if resumedRun.ReasoningEffort != "changed-effort" {
 		t.Fatalf("resumed Run changed reasoning effort: %+v", resumedRun)
+	}
+	if resumedRun.Route.Model != "reloaded-model" || resumedRun.Route.MaxConcurrency != 1 {
+		t.Fatalf("resumed Run did not use the current route configuration: %+v", resumedRun.Route)
 	}
 	if _, err := s.StopSession(ctx, workspace, resumed.ID); err != nil {
 		t.Fatal(err)
