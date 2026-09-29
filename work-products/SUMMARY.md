@@ -1,3 +1,45 @@
+# Integration summary — task_01M3P2ZDWEZW9727N3NCK3CCH5 (round 3)
+
+Merged both accepted heads onto `master` tip `3031ccd`, reconciled the
+overlapping resume/recovery changes, verified, and committed. Not pushed or
+landed.
+
+- **Heads**: dispatcher jump `7d4af63` (task_01M3MZD82YXFS0G5HKV46G5JNQ) then
+  recovery fix `3384ce3` (task_01M3P156JTWMYAT9TPBDMZ917B), each with
+  `git merge --no-ff`.
+- **Merge commits**: `d3eb5f1` (dispatcher jump), `4105c50` (recovery fix), plus
+  integration-resolution `99d178f`.
+- **Textual conflicts**: only shared artifact files (`docs/tui.md`,
+  `work-products/CHECKS.yaml`, `work-products/IMPLEMENTATION.md`,
+  `work-products/SUMMARY.md`). `docs/tui.md` kept master's single-client
+  auto-jump wording and appended the dispatcher paragraph; the shared
+  work-products files preserved both lineages verbatim. `session.go`
+  auto-merged, keeping both the fix's Session-owned client definition and
+  master's limit-aware resume / native-thread route affinity. Full detail in
+  `INTEGRATION.md`.
+- **Semantic conflict**: master's `3031ccd` whole-window recovery test configured
+  the long-running client in the current project config, which the accepted fix
+  overrides on resume. Per the reconciliation policy the fix's product behavior
+  wins; the test now sets the Session client snapshot before resuming
+  (`internal/core/tmux_integration_test.go`, commit `99d178f`). The test's
+  recovery intent is unchanged and routing/reasoning reload remains covered by
+  `TestResumeKeepsSessionClientSnapshotAndReloadsRoute` and
+  `TestReasoningEffortReloadsOnResume`.
+
+**Checks (all exit 0)**: `gofmt -l` clean; `go vet ./...`; `go test ./...`;
+`WORKSPACE_TMUX_TEST=1 go test -race ./... -skip TestNavigatorRealPTYAndClientSelection`;
+targeted `TestTmuxEndToEnd`, `TestDispatcherTmuxEndToEnd`, resume tests and the
+core/terminal/tui dispatcher-navigation tests. Evidence in
+`work-products/evidence-r3-*.txt`; manifest `work-products/CHECKS-r3.yaml`.
+`TestNavigatorRealPTYAndClientSelection` is a pre-existing environmental failure,
+excluded with `-skip`. Dispatcher jump behavior is intact and no existing jump
+kind, orchestrator jump or single-client auto-jump regression was observed.
+
+The reports merged below are preserved verbatim from the two head lineages; the
+per-merge working-tree copies also remain in the merge commits.
+
+---
+
 # Integration summary — task_01M3MT65B4K2EF1HHXJS7CQK3P
 
 Integrated the accepted autonomous-mode implementation I1–I5.
