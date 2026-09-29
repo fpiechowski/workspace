@@ -141,6 +141,58 @@ func TestReasoningEffortReloadsOnResume(t *testing.T) {
 	}
 }
 
+func TestResumeKeepsSessionClientSnapshotAndReloadsRoute(t *testing.T) {
+	s, workspace := fixture(t)
+	ctx := context.Background()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saveReasoningConfig(t, s, func(cfg *Config) {
+		client := cfg.Clients["test"]
+		client.LaunchArgv = []string{exe, "-test.run=TestWorkerProcess", "--", "snapshot-client", "{prompt_file}"}
+		cfg.Clients["test"] = client
+	})
+	a, w := worker(t, s, workspace, "client-snapshot-owner")
+	first, err := s.StartSession(ctx, workspace, SessionOptions{Agent: a.ID, Worktree: w.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slicesContain(first.Argv, "snapshot-client") {
+		t.Fatalf("new Run did not use the configured client: %+v", first.Argv)
+	}
+	if _, err := s.StopSession(ctx, workspace, first.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	saveReasoningConfig(t, s, func(cfg *Config) {
+		client := cfg.Clients["test"]
+		client.LaunchArgv = []string{exe, "-test.run=TestWorkerProcess", "--", "reloaded-client", "{prompt_file}"}
+		cfg.Clients["test"] = client
+		profile := cfg.Profiles["frontier"]
+		profile.Routes[0].Model = "reloaded-model"
+		cfg.Profiles["frontier"] = profile
+	})
+	resumed, err := s.ResumeAgent(ctx, workspace, a.ID, "client-snapshot-resume")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := s.Status(ctx, workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumedRun, err := findRunInStatus(status, resumed.CurrentRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slicesContain(resumedRun.Argv, "snapshot-client") || slicesContain(resumedRun.Argv, "reloaded-client") {
+		t.Fatalf("resume did not keep the session client snapshot: %+v", resumedRun.Argv)
+	}
+	if resumedRun.Route.Model != "reloaded-model" {
+		t.Fatalf("resume did not reload the current route configuration: %+v", resumedRun.Route)
+	}
+}
+
 func TestReasoningEffortCommandEnvAndOptionalArgv(t *testing.T) {
 	s, workspace := fixture(t)
 	exe, err := os.Executable()
