@@ -29,11 +29,18 @@ func ParseTaskSpec(b []byte) (TaskSpec, error) {
 	}
 	return spec, nil
 }
+
+// findTask matches an exact ID first and only then a name. The two passes keep
+// the precedence explicit even though an ID can never equal a name today.
 func findTask(d *Document, id string) (*Task, error) {
 	for i := range d.State.Tasks {
-		t := &d.State.Tasks[i]
-		if t.ID == id || t.Name == id {
-			return t, nil
+		if d.State.Tasks[i].ID == id {
+			return &d.State.Tasks[i], nil
+		}
+	}
+	for i := range d.State.Tasks {
+		if d.State.Tasks[i].Name == id {
+			return &d.State.Tasks[i], nil
 		}
 	}
 	return nil, fail("task_not_found", "unknown task %q", id)
@@ -74,6 +81,13 @@ func taskInputDigest(d *Document, t *Task) (string, error) {
 	}{t.TaskSpec, digest(b), d.State.Base.Commit, deps}), nil
 }
 func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec, key string) (Task, error) {
+	return s.CreateTaskWithID(ctx, selector, spec, "", key)
+}
+
+// CreateTaskWithID creates a task with an optional explicit ID. The explicit
+// value is only added to the idempotency payload when set, so receipts written
+// before this option existed keep the same digest.
+func (s *Service) CreateTaskWithID(ctx context.Context, selector string, spec TaskSpec, explicitID, key string) (Task, error) {
 	var out Task
 	if strings.TrimSpace(spec.Title) == "" || strings.TrimSpace(spec.Goal) == "" || len(spec.AcceptanceCriteria) == 0 {
 		return out, fail("invalid_task", "title, goal and acceptance_criteria are required")
@@ -96,6 +110,16 @@ func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec
 			return out, fail("invalid_task", "required artifacts must be filenames")
 		}
 	}
+	// The request is captured only after spec normalization, exactly as the
+	// pre-existing signature captured spec at its call site. The explicit ID is
+	// added to the payload only when set so old receipt digests are unchanged.
+	var request any = spec
+	if explicitID != "" {
+		request = struct {
+			Spec TaskSpec
+			ID   string
+		}{spec, explicitID}
+	}
 	err := s.With(ctx, selector, func(d *Document) error {
 		if err := s.requireOrchestrator(d); err != nil {
 			return err
@@ -105,7 +129,7 @@ func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec
 				return err
 			}
 		}
-		id, err := d.previous(key, spec)
+		id, err := d.previous(key, request)
 		if err != nil {
 			return err
 		}
@@ -134,11 +158,11 @@ func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec
 		}
 		seen := map[string]bool{}
 		normalized := spec
+		cfg, err := s.Config()
+		if err != nil {
+			return err
+		}
 		if normalized.Profile == "" {
-			cfg, err := s.Config()
-			if err != nil {
-				return err
-			}
 			normalized.Profile = workflowProfile(cfg, d, spec.Role, def[0])
 		}
 		normalized.DependsOn = append([]string(nil), spec.DependsOn...)
@@ -175,7 +199,41 @@ func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec
 			}
 			normalized.BaseCommit = base
 		}
-		out = Task{TaskSpec: normalized, ID: ID("task"), State: "pending", Attempt: 1}
+		storage, err := s.storageRoot(cfg)
+		if err != nil {
+			return err
+		}
+		taskIDs := idAllocator{storage: storage, kind: "task", projectID: d.State.ProjectID, workspaceID: d.State.ID, operation: reservationOperation(d.State.ProjectID, d.State.ID, "task", key)}
+		taken := func(candidate string) bool {
+			candidateID := "task_" + candidate
+			for _, existing := range d.State.Tasks {
+				if existing.ID == candidateID {
+					return true
+				}
+			}
+			return false
+		}
+		source := spec.Name
+		if source == "" {
+			source = spec.Title
+		}
+		var taskID string
+		if explicitID != "" {
+			slug, err := parseExplicitID("task", explicitID)
+			if err != nil {
+				return err
+			}
+			taskID, err = taskIDs.allocateExplicit("task", slug, taken)
+			if err != nil {
+				return err
+			}
+		} else {
+			taskID, err = taskIDs.allocate("task", baseSlug("task", source), taken)
+			if err != nil {
+				return err
+			}
+		}
+		out = Task{TaskSpec: normalized, ID: taskID, State: "pending", Attempt: 1}
 		out.InputDigest, err = taskInputDigest(d, &out)
 		if err != nil {
 			return err
@@ -188,7 +246,7 @@ func (s *Service) CreateTask(ctx context.Context, selector string, spec TaskSpec
 			return err
 		}
 		d.State.Tasks = append(d.State.Tasks, out)
-		d.remember(key, spec, out.ID)
+		d.remember(key, request, out.ID)
 		return saveResource(d, key, out)
 	})
 	return out, err

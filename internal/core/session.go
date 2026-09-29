@@ -16,6 +16,9 @@ import (
 type SessionOptions struct {
 	Agent, Worktree, Parent, ParentSession, ParentSessionID, Profile, OperationKey, Task, PromptTemplate, ResumeSession string
 	ReadOnly                                                                                                            bool
+	// ID optionally overrides the generated slug. It applies only when a new
+	// logical session is created and is omitted when empty.
+	ID string `json:",omitempty"`
 }
 type promptData struct {
 	WorkspaceID, WorkspaceDir, AgentID, SessionID, RunID, ParentAgentID, ParentSessionID, BaseCommit string
@@ -372,8 +375,39 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			}
 		}
 		if logical == nil {
-			id = ID("sess")
+			storage, err := s.storageRoot(cfg)
+			if err != nil {
+				return err
+			}
+			sessionIDs := idAllocator{storage: storage, kind: "sess", projectID: d.State.ProjectID, workspaceID: d.State.ID, operation: reservationOperation(d.State.ProjectID, d.State.ID, "sess", opt.OperationKey)}
+			taken := func(candidate string) bool {
+				candidateID := "sess_" + candidate
+				for _, existing := range d.Registry.Sessions {
+					if existing.ID == candidateID {
+						return true
+					}
+				}
+				return false
+			}
+			if opt.ID != "" {
+				slug, err := parseExplicitID("sess", opt.ID)
+				if err != nil {
+					return err
+				}
+				id, err = sessionIDs.allocateExplicit("sess", slug, taken)
+				if err != nil {
+					return err
+				}
+			} else {
+				id, err = sessionIDs.allocate("sess", baseSlug("sess", a.Name), taken)
+				if err != nil {
+					return err
+				}
+			}
 		} else {
+			if opt.ID != "" {
+				return fail("invalid_id", "--id applies only when a new logical session is created")
+			}
 			id = logical.ID
 		}
 		runID := ID("run")

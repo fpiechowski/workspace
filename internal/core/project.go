@@ -515,6 +515,9 @@ type CreateOptions struct {
 	// source=create). It is kept in the idempotency payload; omitempty keeps
 	// existing receipt digests unchanged for non-autonomous creation.
 	Autonomous bool `json:",omitempty"`
+	// ID optionally overrides the generated slug for the new workspace. It is
+	// omitted when empty so existing idempotency receipt digests do not change.
+	ID string `json:",omitempty" yaml:",omitempty"`
 }
 
 const exampleWorkflow = "plan-first"
@@ -600,11 +603,13 @@ func (s *Service) createWorkspaceLegacy(ctx context.Context, opt CreateOptions, 
 	if err != nil {
 		return Status{}, err
 	}
+	takenIDs := map[string]bool{}
 	for _, dir := range dirs {
 		d, err := loadDocument(dir)
 		if err != nil {
 			return Status{}, err
 		}
+		takenIDs[d.State.ID] = true
 		operationRequest := any(opt)
 		if opt.OperationRequest != nil {
 			operationRequest = opt.OperationRequest
@@ -656,13 +661,39 @@ func (s *Service) createWorkspaceLegacy(ctx context.Context, opt CreateOptions, 
 			baseRef = branch
 		}
 	}
-	id := ID("ws")
 	storage, err := s.storageRoot(cfg)
 	if err != nil {
 		return Status{}, err
 	}
 	if err := os.MkdirAll(storage, 0700); err != nil {
 		return Status{}, err
+	}
+	takenWorkspace := func(candidate string) bool {
+		candidateID := "ws_" + candidate
+		if takenIDs[candidateID] {
+			return true
+		}
+		if _, statErr := os.Stat(filepath.Join(storage, candidateID)); statErr == nil {
+			return true
+		}
+		return false
+	}
+	workspaceIDs := idAllocator{storage: storage, kind: "ws", projectID: cfg.ProjectID, operation: reservationOperation(cfg.ProjectID, "", "ws", opt.OperationKey)}
+	var id string
+	if opt.ID != "" {
+		slug, err := parseExplicitID("ws", opt.ID)
+		if err != nil {
+			return Status{}, err
+		}
+		id, err = workspaceIDs.allocateExplicit("ws", slug, takenWorkspace)
+		if err != nil {
+			return Status{}, err
+		}
+	} else {
+		id, err = workspaceIDs.allocate("ws", baseSlug("ws", opt.Title), takenWorkspace)
+		if err != nil {
+			return Status{}, err
+		}
 	}
 	dir, err := os.MkdirTemp(storage, ".creating-")
 	if err != nil {
@@ -675,7 +706,12 @@ func (s *Service) createWorkspaceLegacy(ctx context.Context, opt CreateOptions, 
 	}
 	d := &Document{Dir: dir, State: Workspace{SchemaVersion: 1, ID: id, ProjectID: cfg.ProjectID, Title: opt.Title, Revision: 1, Status: status, Input: Input{Source: opt.Source, Snapshot: "inputs/issue.md", IssueID: issueID, IssueRevision: issueRevision, IssueDigest: issueDigest}, Base: Base{baseRef, base}, CreatedAt: time.Now().UTC()}, Registry: Registry{SchemaVersion: registrySchemaVersion, Agents: []Agent{}, Worktrees: []Worktree{}, Sessions: []Session{}, Runs: []Run{}, Operations: map[string]Operation{}}}
 	d.State.ProjectRoot = s.Root
-	orch := Agent{ID: ID("agent"), Name: "orchestrator", Role: "orchestrator", Profile: cfg.Defaults.OrchestratorProfile, PromptTemplate: "orchestrator", Instructions: "Coordinate the workflow; delegate all code changes to workers.", Scope: "workspace"}
+	agentIDs := idAllocator{storage: storage, kind: "agent", projectID: cfg.ProjectID, workspaceID: id, operation: reservationOperation(cfg.ProjectID, id, "agent", opt.OperationKey)}
+	orchID, err := agentIDs.allocate("agent", baseSlug("agent", "orchestrator"), nil)
+	if err != nil {
+		return Status{}, err
+	}
+	orch := Agent{ID: orchID, Name: "orchestrator", Role: "orchestrator", Profile: cfg.Defaults.OrchestratorProfile, PromptTemplate: "orchestrator", Instructions: "Coordinate the workflow; delegate all code changes to workers.", Scope: "workspace"}
 	d.State.OrchestratorAgentID = orch.ID
 	d.Registry.Agents = append(d.Registry.Agents, orch)
 	for _, sub := range []string{"inputs", "prompts", "tasks", "artifacts", "worktrees", ".runtime"} {
@@ -731,6 +767,9 @@ func (s *Service) createWorkspaceLegacy(ctx context.Context, opt CreateOptions, 
 	}
 	final := filepath.Join(storage, id)
 	if err := os.Rename(dir, final); err != nil {
+		if _, statErr := os.Stat(final); statErr == nil {
+			return Status{}, fail("id_exists", "workspace %s already exists", id)
+		}
 		return Status{}, err
 	}
 	if err := syncDirectory(filepath.Dir(final)); err != nil {
