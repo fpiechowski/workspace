@@ -22,12 +22,13 @@ profiles:
     reasoning_effort: high
     routes:
       - {id: orchestrator, client: opencode, provider: zai-coding-plan, model: zai-coding-plan/glm-5.3-flash, max_concurrency: 20}
+      - {id: luna, client: opencode, provider: openai, model: openai/gpt-6-luna, max_concurrency: 50}
   supervisor:
     reasoning_effort: low
     routes:
       - {id: glm, client: opencode, provider: zai-coding-plan, model: zai-coding-plan/glm-5.3, max_concurrency: 3}
       #- {id: sol, client: opencode, provider: openai, model: openai/gpt-6.sol, max_concurrency: 1}
-      - {id: opus, client: claude, provider: anthropic, model: claude-opus-5-5, max_concurrency: 1}
+      - {id: opus, client: claude, provider: anthropic, model: claude-opus-5-5, max_concurrency: 3}
   worker:
     reasoning_effort: medium
     routes:
