@@ -61,3 +61,52 @@ later refreshes never rewrite it. Omitting `--workflow` selects `plan-first`; `d
 may also use `--no-workflow`, but workflow and manual flags are mutually exclusive. The
 project-scoped Dispatcher is allowed to perform these local operations but cannot
 implement code, advance Workspace state, or mutate the external tracker.
+
+## Automatic Issue evaluation on Workspace completion
+
+Completing a Workspace whose input carries `issue_id` records a durable Issue evaluation
+in the same `WORKSPACE.md` revision: `issue_evaluation.state` starts as `pending`, and its
+id is a fresh `ieval_...` for every completion cycle. Completion then tries, best effort
+and only after the commit, to start a conversation-only orchestrator Run whose prompt
+carries an evaluation notice. A failed launch never rolls back the committed completion;
+it stores `issue_evaluation.launch_error`, and `workspace start` or a replayed `complete`
+retries while no orchestrator Session is active. `workspace complete
+--no-issue-evaluation-start` suppresses the launch and leaves the evaluation `pending`. An
+unlinked Workspace never gets an `issue_evaluation`.
+
+The completed Workspace's orchestrator judges whether the Issue's acceptance criteria were
+delivered. It reads the frozen `inputs/issue.md` snapshot and compares it with the accepted
+handoffs and artifacts, `INTEGRATION.md`, the landing commit, and the completion reason,
+then records the outcome with the narrow, Workspace-scoped operation:
+
+```sh
+workspace issue-evaluation record --outcome delivered|not_delivered \
+  --reason "<per-criterion evidence>" --expected-revision <revision> \
+  --operation-key issue-evaluation:<ieval id>
+```
+
+Only that Workspace's orchestrator (including a conversation-only Run) or the user
+terminal as recovery can record the evaluation; the project Dispatcher and worker actors
+are refused, and the operation can change only the Issue named by the Workspace input. The
+Dispatcher may still close local Issues, but it must not close an Issue whose linked
+Workspace has a pending evaluation: that decision belongs to the Workspace orchestrator.
+
+The outcome changes only the local Issue; its `status_reason` carries the judgment:
+
+| Issue status | `delivered` | `not_delivered` |
+|---|---|---|
+| `open` | `closed` (`closed`) | stays `open` (`left_open`) |
+| `deferred` | `closed` (`closed`) | `open` (`left_open`) |
+| `closed` by this Workspace's earlier evaluation | unchanged (`unchanged_closed`) | `open` (`reopened`) |
+| `closed` by another actor | unchanged (`unchanged_closed`) | unchanged (`unchanged_closed`) |
+
+The reason is prefixed `<Delivered|Not delivered> by workspace <ws_id> (evaluation
+<ieval>)` and bounded to 2000 bytes. `issue show`, `issue list`, and the TUI display the
+resulting `status_reason`. A `delivered` judgement is refused with `issue_revised` when the
+current Issue content digest no longer matches the snapshot the Workspace froze, so a
+Workspace cannot close an Issue whose requirements changed afterwards; the orchestrator
+records `not_delivered` with the gap instead. A recorded evaluation cannot be edited:
+`workspace reopen` clears it (the Issue is not changed) and the next completion records a
+new `pending` evaluation. Workspaces completed by an earlier binary have no
+`issue_evaluation` and are not migrated; the existing `workspace issue update` path still
+applies to them. No step of this flow writes to the external tracker.

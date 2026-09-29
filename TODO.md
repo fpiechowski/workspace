@@ -18,6 +18,12 @@ List of planned improvements. Items are ordered by priority.
 - [x] **Project Dispatcher** — add a project-scoped Dispatcher lifecycle with durable
   state, profile fallback/override, verified runtime ownership, Issue-to-Workspace
   dispatch, and idempotent start/stop operations.
+- [x] **Automatic Issue evaluation on Workspace completion** — completing a linked
+  Workspace durably records a pending evaluation and starts a conversation-only
+  orchestrator Run; the orchestrator records `delivered`/`not_delivered` through the
+  Workspace-scoped `issue-evaluation record`, which closes or leaves open only the local
+  Issue with a stale-digest guard and an idempotent, crash-convergent two-file write, and
+  never touches the external tracker.
 - [ ] **Concurrency monitoring statistics** — add monitoring for the number of agents and sessions running in parallel.
 - [ ] **Wait-for-reset route mode** — v1 fails an all-limited profile fast with `route_limited`. Optionally add `usage_limits.when_all_limited: wait` that durably queues the launch and starts it after the earliest reset instead of failing.
 - [x] **Refresh indicator in the TUI** — replace the current refresh notification with an icon indicating that a refresh is in progress.

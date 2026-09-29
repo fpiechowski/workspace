@@ -469,9 +469,12 @@ create or enable an autonomous workspace.
 Issue operations are project-scoped and local. `workspace issue refresh` reads the
 configured tracker but never changes it; `issue update` changes only local status.
 `workspace dispatcher start|status|stop|attach` manages the separate project-scoped
-Dispatcher runtime. A Dispatcher may route Issues and create linked Workspaces, but
-workspace actors cannot mutate project Issues. Every linked Workspace records the
-Issue ID, revision, and digest in its durable input.
+Dispatcher runtime. A Dispatcher may route Issues and create linked Workspaces, but it
+cannot implement code or write the tracker. Every linked Workspace records the Issue ID,
+revision, and digest in its durable input. When such a Workspace completes, its own
+orchestrator, or the user terminal as recovery, evaluates the linked Issue with
+`workspace issue-evaluation record`; other Workspace actors, including workers, cannot
+mutate project Issues. [Issues and tracker input](docs/trackers.md).
 
 Returning to an existing workspace does not require remembering its ID:
 
@@ -695,6 +698,24 @@ workspace integration land --expected-revision 12 --user-confirmed --operation-k
 workspace complete --expected-revision 13 --user-confirmed --operation-key complete-2
 workspace archive
 ```
+
+When the Workspace was created from an Issue, `complete` records a pending Issue
+evaluation in the same revision and, after the commit, starts a conversation-only
+orchestrator Run to record it. `--no-issue-evaluation-start` skips that launch and leaves
+the evaluation pending for a later `workspace start`. The completed Workspace's
+orchestrator (or the user terminal) records the judgement:
+
+```sh
+workspace issue-evaluation record --outcome delivered \
+  --reason "All acceptance criteria met" --expected-revision 14 \
+  --operation-key issue-evaluation:ieval_01
+```
+
+`delivered` closes the linked local Issue with a reason that names the Workspace;
+`not_delivered` leaves it `open`, or reopens an Issue this Workspace had closed, with the
+reason in `status_reason`. The command is refused with `issue_revised` when the Issue
+content changed since the Workspace snapshot, and it never writes the external tracker.
+[docs/trackers.md](docs/trackers.md) has the outcomes table and the retry contract.
 
 After a workflow or manual workspace is completed, `workspace start` and
 `agent resume orchestrator` reopen the existing compatible orchestrator Session for

@@ -141,6 +141,9 @@ The current scope includes:
 - a durable inbox, handoffs, immutable artifacts, and captured command results;
 - durable project-scoped Issues with immutable revision snapshots, source provenance,
   refresh/status history, and guarded Workspace links;
+- automatic evaluation of a linked Issue when a Workspace created from it completes: the
+  completed Workspace's orchestrator records `delivered` or `not_delivered`, which closes
+  or leaves open only that local Issue and never touches the external tracker;
 - a project-scoped Dispatcher that can inspect Issues and create linked Workspaces
   through the same durable, idempotent operations as the CLI;
 - client, provider, and model routing through profiles;
@@ -264,6 +267,14 @@ input and cannot expand project mutation authority. While its Run is live the Di
 page is jump-capable: `g` moves the chosen attached client to the verified Dispatcher
 pane, and the shortcut is hidden and inert when the Dispatcher is not running.
 `workspace dispatcher attach` is unchanged.
+
+When a linked Workspace completes, evaluation of its Issue starts automatically: the
+Workspace orchestrator judges the frozen acceptance criteria against the accepted results
+and records `delivered` or `not_delivered`, which closes the local Issue or leaves it
+`open` with the reason in `status_reason`. The evaluation is durable, idempotent, and
+revision-guarded, is refused for a `delivered` judgement once the Issue content changed
+since the snapshot, and never writes the external tracker. The Dispatcher leaves an Issue
+with a pending evaluation to that Workspace's orchestrator.
 
 Worktrees appear as a revision tree, with source revisions and related task names.
 Creation records the parent when the selected local branch identifies a registered
