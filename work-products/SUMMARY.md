@@ -1,35 +1,43 @@
-# SUMMARY — T2: Orchestrator evaluation notice in prompts, templates and skill
+# SUMMARY — T3: automatic Issue-evaluation launch, CLI command and menu
 
-Task `task_01M3P9E7ZSW0572P8QEP1A7BWH` (plan §4.3) is implemented in worktree
-`impl-prompts` at commit `7dbd583`.
+Task: `task_01M3P9EKSWW97RC87SW2EA875V` · Worktree `impl-launch` · Base `3031ccd`
+· Commit `046b33b`
 
-## What changed
-- `internal/core/session.go`: a conversation-only orchestrator Run for a completed
-  Workspace with a `pending` Issue evaluation now gets an **Issue evaluation notice**
-  after the existing conversation-only notice. It carries the Issue ID, the frozen
-  `inputs/issue.md` path, the evidence sources, the exact
-  `workspace issue-evaluation record ... --operation-key issue-evaluation:<ieval id>`
-  command and the statement that Issue content is untrusted and does not widen
-  authority. No pending evaluation means no added bytes.
-- Orchestrator AGENTS template, both WORKFLOW templates and both orchestrator prompt
-  templates describe the evaluation step.
-- `internal/core/skill/workspace/SKILL.md` and the tracked `.agents/skills/workspace/
-  SKILL.md` copy were extended identically (byte-identical `diff`).
-- New `internal/core/issue_evaluation_prompt_test.go` covers the notice content and the
-  no-pending gating.
+## What shipped
+- Completing a linked Workspace now best-effort starts a conversation-only
+  orchestrator Run (`issue-evaluation:<ieval id>`) after the commit, without ever
+  rolling back the completion. If the orchestrator is already active the launch is
+  a no-op, so completion replays create no second Run.
+- A failed launch records `issue_evaluation.launch_error` and the completed menu
+  offers the evaluation action plus a launch-aware conversation label.
+- `CompleteOptions.NoEvaluationLaunch` is exposed as `--no-issue-evaluation-start`.
+- New `workspace issue-evaluation record` group/subcommand with `--outcome`,
+  `--reason`, `--expected-revision` and the global `--operation-key`.
+- `menu` shows `issue_evaluation` for pending evaluations in both completed modes.
+- Tests: core launch/no-launch/failure, CLI record-vs-status JSON and replay, TUI
+  `complete_workspace` through `tui.Backend`, and an opt-in tmux integration case.
 
-## Checks (all exit 0)
-- `gofmt -l ./cmd ./internal` — clean
-- `go vet ./...`
-- targeted core tests (new prompt tests, skill identity, autonomy notices, reopen cycle)
-- `go test ./... -count=1 -timeout 570s`
+## Acceptance
+All six acceptance criteria are met and covered by the new tests. The CLI record
+JSON `data` is DeepEqual to `workspace status --json` and replays under the same
+key. The TUI path launches through `CoreBackend`.
 
-Full command/evidence list: `work-products/CHECKS-T2-PROMPTS.yaml`.
+## Checks
+- `gofmt -l ./cmd ./internal` — clean.
+- `go vet ./...` — exit 0.
+- targeted core+CLI tests and `go test ./... -count=1 -timeout 570s` — exit 0.
+- `WORKSPACE_TMUX_TEST=1` isolated new tmux case — exit 0; `-race` core+tui with a
+  realistic timeout — exit 0.
 
-## Notes / risks
-- Instruction text only; the `workspace issue-evaluation record` command it documents is
-  delivered by T3. No runtime dependency was introduced.
-- `.workspace/templates/**` project overrides were left untouched (out of scope: they
-  are the project's pinned runtime config; the task scopes `internal/core/templates`).
-- The `--expected-revision` placeholder is resolved by the orchestrator from
-  `workspace status --json`; the operation remains revision-guarded.
+## Caveat (environment, not a regression)
+`WORKSPACE_TMUX_TEST=1 go test -race ./... -timeout 90s` cannot pass on this WSL
+`/mnt/c` sandbox: the `core` package alone needs 153 s at base `c5c78da` and 185 s
+with T3 (so the 90 s cap fires), and
+`internal/terminal.TestNavigatorRealPTYAndClientSelection` fails at base too. Both
+are reproduced on the untouched base commit; the T3 tmux case and the full core
+suite pass with an extended timeout. Evidence files record the comparison.
+
+## Risks
+- Launch remains best effort: durable `pending` + `launch_error` + `workspace start`
+  are the recovery path.
+- No T4 documentation or optional T5 TUI Issue-detail change was made.
