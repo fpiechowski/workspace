@@ -311,6 +311,21 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				thread = prior.ClientThreadID
 			}
 		}
+		if resumePrior != nil && thread != "" && resumePrior.Route.ID != "" {
+			// A native client thread belongs to one route. Keep the resume on
+			// that route so a usage limit on it fails fast with route_limited
+			// guidance instead of silently switching routes and dropping the
+			// thread. The route definition is reloaded from current config.
+			if profileCfg, ok := cfg.Profiles[profile]; ok {
+				for _, candidate := range profileCfg.Routes {
+					if candidate.ID == resumePrior.Route.ID {
+						profileCfg.Routes = []Route{candidate}
+						cfg.Profiles[profile] = profileCfg
+						break
+					}
+				}
+			}
+		}
 		route, decision, err := s.chooseRoute(cfg, profile)
 		if err != nil {
 			// A resume must never drop a native client thread to dodge a
