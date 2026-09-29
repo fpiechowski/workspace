@@ -117,6 +117,43 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 		}
 		return send("turn/start", map[string]any{"threadId": thread, "input": []any{map[string]any{"type": "text", "text": text}}}, "turn", ids)
 	}
+	// Usage-limit signals are advisory: recording one is best effort and never
+	// interrupts the running turn (Q3). The route and account come from the
+	// Run inside recordRouteLimit, never from client-supplied fields.
+	limitState := codexBridgeLimitState{}
+	recordLimit := func(obs RouteLimitObservation) {
+		if _, err := s.recordRouteLimit(ctx, selector, session.CurrentRunID, obs); err != nil && !isContextError(err) {
+			fmt.Fprintln(errOut, "workspace: cannot record Codex usage limit:", err)
+		}
+	}
+	handleSnapshot := func(snapshot codexRateLimitSnapshot) {
+		obs, ok := codexRateLimitObservation(snapshot)
+		if !ok {
+			return
+		}
+		if obs.ResetAt != nil {
+			limitState.ResetAt = obs.ResetAt
+		}
+		recordLimit(obs)
+	}
+	handleTurnError := func(turnError codexTurnError) {
+		class := classifyCodexTurnError(turnError)
+		if class.Kind == "" {
+			return
+		}
+		obs := RouteLimitObservation{Kind: class.Kind, Source: "codex_turn_error", Message: class.Message}
+		if limitState.ResetAt != nil && limitState.ResetAt.After(nowUTC()) {
+			reset := *limitState.ResetAt
+			obs.ResetAt = &reset
+		}
+		recordLimit(obs)
+		// A usageLimitExceeded without a reset first records the default
+		// backoff and then asks the app-server once for the real window.
+		if class.UsageLimit && !limitState.ReadSent && (limitState.ResetAt == nil || !limitState.ResetAt.After(nowUTC())) {
+			limitState.ReadSent = true
+			_ = send("account/rateLimits/read", map[string]any{}, "rateLimitsRead", nil)
+		}
+	}
 	fmt.Fprintf(out, "workspace · %s · %s\nType a message; /quit closes this session. /help lists controls.\n", session.AgentSnapshot.Name, session.Route.Model)
 	ticker := time.NewTicker(300 * time.Millisecond)
 	defer ticker.Stop()
@@ -141,8 +178,12 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 					if request.Kind == "initialize" || request.Kind == "thread" {
 						return fail("client_error", "%s", message.Error.Message)
 					}
-					busy = false
-					_ = s.clientState(ctx, selector, session.CurrentRunID, "", "idle")
+					// A failed rateLimits/read is best effort and must not
+					// change the turn or client state.
+					if request.Kind != "rateLimitsRead" {
+						busy = false
+						_ = s.clientState(ctx, selector, session.CurrentRunID, "", "idle")
+					}
 					fmt.Fprintln(errOut, "Codex:", message.Error.Message)
 					continue
 				}
@@ -193,6 +234,22 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 							return err
 						}
 					}
+				case "rateLimitsRead":
+					limitState.ReadSent = false
+					snapshot, ok := parseCodexRateLimitSnapshot(message.Result)
+					if !ok {
+						continue
+					}
+					obs, observed := codexRateLimitObservation(snapshot)
+					if !observed {
+						continue
+					}
+					if obs.ResetAt != nil {
+						limitState.ResetAt = obs.ResetAt
+					}
+					if obs.Kind != "usage_pressure" {
+						recordLimit(obs)
+					}
 				}
 				continue
 			}
@@ -226,6 +283,17 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 				if p.Item.Command != "" {
 					fmt.Fprintln(out, "\n$", p.Item.Command)
 				}
+			case "account/rateLimits/updated":
+				if snapshot, ok := parseCodexRateLimitSnapshot(message.Params); ok {
+					handleSnapshot(snapshot)
+				}
+			case "error":
+				var p struct {
+					Error codexTurnError `json:"error"`
+				}
+				if err := json.Unmarshal(message.Params, &p); err == nil {
+					handleTurnError(p.Error)
+				}
 			case "turn/completed":
 				busy = false
 				turnID = ""
@@ -239,6 +307,14 @@ func (s *Service) runCodex(ctx context.Context, selector string, session Session
 				_ = json.Unmarshal(message.Params, &p)
 				if p.Turn.Status == "failed" {
 					fmt.Fprintf(errOut, "\nTurn failed: %v\n", p.Turn.Error)
+					var failed struct {
+						Turn struct {
+							Error codexTurnError `json:"error"`
+						} `json:"turn"`
+					}
+					if err := json.Unmarshal(message.Params, &failed); err == nil {
+						handleTurnError(failed.Turn.Error)
+					}
 				}
 				fmt.Fprintln(out, "\n[ready]")
 				if err := s.clientState(ctx, selector, session.CurrentRunID, "", "idle"); err != nil {

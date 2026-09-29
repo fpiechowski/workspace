@@ -632,6 +632,14 @@ func (s *Service) observeOpenCodeActivity(ctx context.Context, selector string, 
 		// Persistence re-checks the exact current Run, thread and endpoint under
 		// the project lock. A replacement Run therefore cannot inherit a stale
 		// network observation.
-		_ = s.persistOpenCodeObservation(ctx, selector, session, observed)
+		_ = s.persistOpenCodeObservation(ctx, selector, session, observed.Type)
+		// A limit-classified retry is recorded through recordRouteLimit, which
+		// repeats the same current-Run guard, so a stale observation stays a
+		// no-op. Recording never interrupts the running Run (Q3).
+		if observed.Type == "retry" {
+			if obs, ok := openCodeRetryLimitObservation(observed, nowUTC()); ok {
+				_, _ = s.recordRouteLimit(ctx, selector, session.CurrentRunID, obs)
+			}
+		}
 	}
 }
