@@ -404,6 +404,27 @@ Session keeps its identity and compatible native thread, while its new Run uses 
 current profile setting. If the selected route changes client adapter, the incompatible
 native thread is discarded and a fresh conversation is launched.
 
+Observed account and provider usage limits live in a project-scoped route-limit ledger,
+`.workspace/route-limits.json`, read and written only under the project lock. A record
+matches every route of a client account (`client`), a client and provider (`provider`),
+or one exact route (`route`); limits reported for Codex and Claude default to `client`,
+others to `provider`. Each record has a kind (`rate_limited`, `quota_exhausted`, or
+`usage_pressure`) and an `until` time. That time is the reset reported by the client,
+capped at seven days, or a backoff that doubles on repeated observations up to the
+configured maximum. The latest observation for a key replaces earlier ones, and records
+are pruned seven days after they end. A missing ledger is empty. A corrupt ledger is
+reported as a `route_limits_invalid` warning and never blocks a launch. The router
+excludes a route with an active hard limit (`usage limit: …`, `limited_until`) and ranks
+routes whose usage pressure is at or above `soft_limit_percent` after other eligible
+routes. The persisted decision is exactly the assessment that selected the route. When
+every route is blocked by a usage limit rather than by configuration or capability,
+selection fails fast with `route_limited` and `retry_after` set to the earliest reset;
+nothing waits inside the lock. `usage_limits` on a profile or route sets the mode:
+`avoid` (default), `observe` (show records without affecting selection), or `ignore`.
+It also sets the backoff and soft threshold. Records come from a run-scoped
+`workspace profile limit report`, which can only record for the calling Run's route,
+and from manual `profile limit set|clear` by the user or orchestrator.
+
 ## Workflow and Delegation
 
 The workflow is a versioned template describing phases, entry conditions, required

@@ -38,17 +38,14 @@ func workerParallelLimit(cfg Config, d *Document) int {
 }
 
 // Selection occurs under the project lock, including all workspace reservations.
-func (s *Service) chooseRoute(cfg Config, profile string) (Route, error) {
+// The returned decision is exactly the assessment that selected the route.
+func (s *Service) chooseRoute(cfg Config, profile string) (Route, RoutingDecision, error) {
 	decision, err := s.assessRoutes(cfg, profile)
 	if err != nil {
-		return Route{}, err
+		return Route{}, decision, err
 	}
-	for _, candidate := range decision.Candidates {
-		if candidate.Route.ID == decision.Selected {
-			return candidate.Route, nil
-		}
-	}
-	return Route{}, fail("no_route", "no eligible route in profile %q; use workspace profile explain", profile)
+	route, err := selectedRoute(decision)
+	return route, decision, err
 }
 func (s *Service) StartSession(ctx context.Context, selector string, opt SessionOptions) (Session, error) {
 	if err := s.requireWorkspaceScope(); err != nil {
@@ -314,11 +311,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 				thread = prior.ClientThreadID
 			}
 		}
-		route, err := s.chooseRoute(cfg, profile)
-		if err != nil {
-			return err
-		}
-		decision, err := s.assessRoutes(cfg, profile)
+		route, decision, err := s.chooseRoute(cfg, profile)
 		if err != nil {
 			return err
 		}

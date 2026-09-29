@@ -2,9 +2,11 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"os/exec"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -39,6 +41,14 @@ type RouteAssessment struct {
 	Launches      int        `json:"launches" yaml:"launches"`
 	ProviderScore float64    `json:"provider_score" yaml:"provider_score"`
 	CooldownUntil *time.Time `json:"cooldown_until,omitempty" yaml:"cooldown_until,omitempty"`
+	// LimitedUntil is the end of the strongest active hard usage limit that
+	// matches this route; Limit is the matching ledger record.
+	LimitedUntil *time.Time  `json:"limited_until,omitempty" yaml:"limited_until,omitempty"`
+	Limit        *RouteLimit `json:"limit,omitempty" yaml:"limit,omitempty"`
+	UsedPercent  *int        `json:"used_percent,omitempty" yaml:"used_percent,omitempty"`
+	// SoftLimited routes rank after every eligible route without usage pressure.
+	SoftLimited    bool   `json:"soft_limited,omitempty" yaml:"soft_limited,omitempty"`
+	UsageLimitMode string `json:"usage_limit_mode,omitempty" yaml:"usage_limit_mode,omitempty"`
 }
 type RoutingDecision struct {
 	Profile         string            `json:"profile" yaml:"profile"`
@@ -47,11 +57,14 @@ type RoutingDecision struct {
 	Candidates      []RouteAssessment `json:"candidates" yaml:"candidates"`
 	MeasuredAt      time.Time         `json:"measured_at" yaml:"measured_at"`
 	Metric          string            `json:"metric" yaml:"metric"`
+	Warnings        []string          `json:"warnings,omitempty" yaml:"warnings,omitempty"`
 }
+
+const usageLimitReasonPrefix = "usage limit: "
 
 func (s *Service) assessRoutes(cfg Config, profile string) (RoutingDecision, error) {
 	now := nowUTC()
-	out := RoutingDecision{Profile: profile, MeasuredAt: now, Metric: "project launches and active reservations over 24h; not tokens or account usage"}
+	out := RoutingDecision{Profile: profile, MeasuredAt: now, Metric: "project launches and active reservations over 24h plus observed route usage limits; not tokens or account usage"}
 	p, ok := cfg.Profiles[profile]
 	if !ok {
 		return out, fail("no_route", "configure model profile %q", profile)
@@ -103,8 +116,14 @@ func (s *Service) assessRoutes(cfg Config, profile string) (RoutingDecision, err
 			}
 		}
 	}
+	// The ledger is advisory: a corrupt file is reported and treated as empty.
+	limits, limitsErr := loadRouteLimits(s.Root)
+	if limitsErr != nil {
+		out.Warnings = append(out.Warnings, limitsErr.Error())
+	}
 	bestScore := math.Inf(1)
 	bestActive, bestCount := math.MaxInt, math.MaxInt
+	bestSoft := true
 	for _, r := range p.Routes {
 		key := r.Client + "/" + r.Provider + "/" + r.Model
 		weight := p.ProviderWeights[r.Provider]
@@ -124,6 +143,7 @@ func (s *Service) assessRoutes(cfg Config, profile string) (RoutingDecision, err
 				break
 			}
 		}
+		configBlocked := a.Reason != ""
 		cooldown := p.CooldownSeconds
 		if cooldown == 0 {
 			cooldown = 30
@@ -138,10 +158,40 @@ func (s *Service) assessRoutes(cfg Config, profile string) (RoutingDecision, err
 		if r.MaxLaunches24h > 0 && a.Launches >= r.MaxLaunches24h {
 			a.Reason = "24h launch budget exhausted"
 		}
+		// Configuration and capability failures keep their reason; a usage
+		// limit outranks transient load reasons because it outlasts them.
+		settings, err := effectiveUsageLimits(p, r)
+		if err != nil {
+			return out, fail("invalid_config", "usage_limits in route %q of profile %q: %v", r.ID, profile, err)
+		}
+		if settings.Mode != usageLimitModeAvoid {
+			a.UsageLimitMode = settings.Mode
+		}
+		if settings.Mode != usageLimitModeIgnore {
+			match := limits.match(r, now)
+			if match.hard != nil {
+				until := match.hard.Until
+				a.LimitedUntil = &until
+				a.Limit = match.hard
+				if settings.Mode == usageLimitModeAvoid && !configBlocked {
+					a.Reason = usageLimitReasonPrefix + match.hard.Kind + " until " + until.Format(time.RFC3339)
+				}
+			}
+			if match.pressure != nil {
+				a.UsedPercent = match.pressure.UsedPercent
+				if a.Limit == nil {
+					a.Limit = match.pressure
+				}
+				if settings.Mode == usageLimitModeAvoid && settings.SoftLimitPercent > 0 && usedPercent(*match.pressure) >= settings.SoftLimitPercent {
+					a.SoftLimited = true
+				}
+			}
+		}
 		a.Eligible = a.Reason == ""
 		out.Candidates = append(out.Candidates, a)
-		if a.Eligible && (a.ProviderScore < bestScore || (a.ProviderScore == bestScore && (a.Active < bestActive || (a.Active == bestActive && a.Launches < bestCount)))) {
+		if a.Eligible && routeBetter(a.SoftLimited, a.ProviderScore, a.Active, a.Launches, bestSoft, bestScore, bestActive, bestCount) {
 			out.Selected = r.ID
+			bestSoft = a.SoftLimited
 			bestScore = a.ProviderScore
 			bestActive = a.Active
 			bestCount = a.Launches
@@ -149,6 +199,42 @@ func (s *Service) assessRoutes(cfg Config, profile string) (RoutingDecision, err
 	}
 	return out, nil
 }
+
+// routeBetter orders eligible routes: no usage pressure first, then the
+// weighted provider score, active Runs and route launches.
+func routeBetter(soft bool, score float64, active, launches int, bestSoft bool, bestScore float64, bestActive, bestLaunches int) bool {
+	if soft != bestSoft {
+		return !soft
+	}
+	if score != bestScore {
+		return score < bestScore
+	}
+	if active != bestActive {
+		return active < bestActive
+	}
+	return launches < bestLaunches
+}
+
+// selectedRoute returns the chosen route or the selection error. When nothing
+// is eligible and some route is blocked only by a usage limit, the error is
+// route_limited with the earliest reset; otherwise it stays no_route.
+func selectedRoute(decision RoutingDecision) (Route, error) {
+	var earliest *time.Time
+	for _, candidate := range decision.Candidates {
+		if candidate.Route.ID == decision.Selected && candidate.Eligible {
+			return candidate.Route, nil
+		}
+		if candidate.LimitedUntil != nil && strings.HasPrefix(candidate.Reason, usageLimitReasonPrefix) && (earliest == nil || candidate.LimitedUntil.Before(*earliest)) {
+			earliest = candidate.LimitedUntil
+		}
+	}
+	if earliest != nil {
+		reset := earliest.UTC().Format(time.RFC3339)
+		return Route{}, &Error{Code: "route_limited", Message: fmt.Sprintf("all eligible routes in profile %q are usage-limited; earliest reset %s; use workspace profile limit list", decision.Profile, reset), Options: []string{"retry_after=" + reset}}
+	}
+	return Route{}, fail("no_route", "no eligible route in profile %q; use workspace profile explain", decision.Profile)
+}
+
 func (s *Service) ExplainProfile(ctx context.Context, profile string) (RoutingDecision, error) {
 	unlock, err := lockProject(ctx, s.Root)
 	if err != nil {

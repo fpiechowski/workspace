@@ -237,7 +237,7 @@ var commandHelpSpecs = map[string]commandHelp{
 		"workspace input update --input-file revised-issue.md --expected-revision 3",
 	),
 	"workspace profile": h(
-		"Inspect model-routing profiles configured for this project.",
+		"Inspect model-routing profiles configured for this project and the route usage limits that affect their selection.",
 		"workspace profile list",
 	),
 	"workspace profile list": h(
@@ -248,6 +248,28 @@ var commandHelpSpecs = map[string]commandHelp{
 		"Explain route eligibility, provider balancing and recent launch pressure for one profile.",
 		"workspace profile explain worker",
 		requiredArgument("name", "Configured profile name to explain."),
+	),
+	"workspace profile limit": h(
+		"Inspect and manage the project route-limit ledger (.workspace/route-limits.json). Active hard limits make matching routes ineligible; usage pressure ranks them after other eligible routes. When every route of a profile is limited, launches fail with route_limited and retry_after.",
+		"workspace profile limit list",
+	),
+	"workspace profile limit list": h(
+		"List active route usage limits with scope, kind, source and until. Use --all to include cleared and expired records that are still retained (up to 7 days after they end).",
+		"workspace profile limit list --all",
+	),
+	"workspace profile limit set": h(
+		"Record a manual usage limit for a configured route. The record matches by scope: client (every route of the client account), provider (the client and provider) or route (exact model); the default is client for Codex and Claude, provider otherwise. Only the user or a workspace orchestrator may set limits.",
+		"workspace profile limit set worker/deepseek --kind quota_exhausted --for 5h",
+		requiredArgument("target", "Configured route as <profile>/<route-id>, such as worker/deepseek."),
+	),
+	"workspace profile limit clear": h(
+		"Clear the active usage limits that match a configured route so it becomes eligible again. Only the user or a workspace orchestrator may clear limits.",
+		"workspace profile limit clear worker/deepseek",
+		requiredArgument("target", "Configured route as <profile>/<route-id>, such as worker/deepseek."),
+	),
+	"workspace profile limit report": h(
+		"Report a usage limit from inside a Run, for example from a client hook or wrapper. The route and account come from WORKSPACE_RUN_ID; outside a Run the command fails with run_required. Without --reset-at or --retry-after the configured backoff applies and doubles on repeated reports.",
+		"workspace profile limit report --kind quota_exhausted --retry-after 2h --message \"usage limit reached\"",
 	),
 	"workspace client": h(
 		"Inspect client adapters configured for this project.",

@@ -325,6 +325,20 @@ func ValidateConfig(cfg Config) (Config, error) {
 				return cfg, fail("invalid_config", "unknown client %q", r.Client)
 			}
 		}
+		if err := validateUsageLimits(p.UsageLimits); err != nil {
+			return cfg, fail("invalid_config", "usage_limits in profile %q: %v", name, err)
+		}
+		if _, err := effectiveUsageLimits(p, Route{}); err != nil {
+			return cfg, fail("invalid_config", "usage_limits in profile %q: %v", name, err)
+		}
+		for _, r := range p.Routes {
+			if err := validateUsageLimits(r.UsageLimits); err != nil {
+				return cfg, fail("invalid_config", "usage_limits in route %q of profile %q: %v", r.ID, name, err)
+			}
+			if _, err := effectiveUsageLimits(p, r); err != nil {
+				return cfg, fail("invalid_config", "usage_limits in route %q of profile %q: %v", r.ID, name, err)
+			}
+		}
 		for _, w := range p.ProviderWeights {
 			if w <= 0 || math.IsNaN(w) || math.IsInf(w, 0) {
 				return cfg, fail("invalid_config", "provider weights must be positive")

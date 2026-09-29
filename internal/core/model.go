@@ -70,6 +70,7 @@ type Profile struct {
 	ReasoningEffort      string             `yaml:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty"`
 	Routes               []Route            `yaml:"routes" json:"routes"`
 	Strategy             string             `yaml:"strategy,omitempty" json:"strategy,omitempty"`
+	UsageLimits          *UsageLimits       `yaml:"usage_limits,omitempty" json:"usage_limits,omitempty"`
 }
 type Route struct {
 	MaxLaunches24h int    `yaml:"max_launches_24h,omitempty" json:"max_launches_24h,omitempty"`
@@ -78,6 +79,19 @@ type Route struct {
 	Provider       string `yaml:"provider" json:"provider"`
 	Model          string `yaml:"model" json:"model"`
 	MaxConcurrency int    `yaml:"max_concurrency" json:"max_concurrency"`
+	// UsageLimits overrides the profile's usage_limits for this route only.
+	UsageLimits *UsageLimits `yaml:"usage_limits,omitempty" json:"usage_limits,omitempty"`
+}
+
+// UsageLimits controls how recorded route usage limits affect selection. Zero
+// or omitted fields inherit from the profile block, then from the defaults.
+type UsageLimits struct {
+	Mode                  string `yaml:"mode,omitempty" json:"mode,omitempty"`
+	DefaultBackoffSeconds int    `yaml:"default_backoff_seconds,omitempty" json:"default_backoff_seconds,omitempty"`
+	MaxBackoffSeconds     int    `yaml:"max_backoff_seconds,omitempty" json:"max_backoff_seconds,omitempty"`
+	// SoftLimitPercent is a pointer because 0 explicitly disables the soft
+	// preference while an omitted value inherits.
+	SoftLimitPercent *int `yaml:"soft_limit_percent,omitempty" json:"soft_limit_percent,omitempty"`
 }
 type Workspace struct {
 	ChangeRequestMode   string          `yaml:"change_request_mode,omitempty" json:"change_request_mode,omitempty"`

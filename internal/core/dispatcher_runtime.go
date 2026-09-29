@@ -116,11 +116,7 @@ func (s *Service) StartDispatcher(ctx context.Context, profileOverride, operatio
 			session.AgentSnapshot = state.Agent
 		}
 		chosenProfile := profile
-		route, err := s.chooseRoute(cfg, chosenProfile)
-		if err != nil {
-			return err
-		}
-		decision, err := s.assessRoutes(cfg, chosenProfile)
+		route, decision, err := s.chooseRoute(cfg, chosenProfile)
 		if err != nil {
 			return err
 		}
