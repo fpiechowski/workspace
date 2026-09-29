@@ -137,14 +137,19 @@ on this line (submitted with the accepted handoff).
 ## Checks on the integrated tree
 
 Run from the integration worktree at merge HEAD `2ce38ae` with a clean tree and
-the exact acceptance commands. Recorded as `workspace check run` receipts bound
-to that HEAD:
+the exact acceptance commands; all three passed and were captured as
+`workspace check run` receipts at that HEAD (`check_01M3PAJB10PY9ESCASQH4A48K9`
+gofmt, `check_01M3PAJDQJ2TVYGJ87S6T66D3X` vet,
+`check_01M3PAJSEQGYTM4N8H172AZXMC` full suite). The same three commands are
+re-run at the submitted reporting HEAD (this commit) and recorded as the handoff
+check receipts; they pass identically because the only change between the merge
+HEAD and the reporting HEAD is this report.
 
-| # | Check | Command | Exit | Receipt |
-| --- | --- | --- | --- | --- |
-| 1 | Format | `gofmt -l ./internal ./cmd` | 0 (empty output) | `check_01M3PAJB10PY9ESCASQH4A48K9` |
-| 2 | Vet | `env -i PATH HOME go vet ./...` | 0 | `check_01M3PAJDQJ2TVYGJ87S6T66D3X` |
-| 3 | Full suite | `env -i PATH HOME go test ./...` | 0 | `check_01M3PAJSEQGYTM4N8H172AZXMC` |
+| # | Check | Command | Exit |
+| --- | --- | --- | --- |
+| 1 | Format | `gofmt -l ./internal ./cmd` | 0 (empty output) |
+| 2 | Vet | `env -i PATH HOME go vet ./...` | 0 |
+| 3 | Full suite | `env -i PATH HOME go test ./...` | 0 |
 
 `env -i PATH HOME` is used (as required) because this worktree exports
 `WORKSPACE_SESSION_ID` and the other `WORKSPACE_*` actor variables, which leak
