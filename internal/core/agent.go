@@ -7,7 +7,12 @@ import (
 	"strings"
 )
 
-type AgentOptions struct{ Name, Role, Profile, PromptTemplate, Instructions, OperationKey string }
+type AgentOptions struct {
+	Name, Role, Profile, PromptTemplate, Instructions, OperationKey string
+	// ID optionally overrides the generated slug. It is omitted when empty so
+	// existing idempotency receipt digests do not change.
+	ID string `json:",omitempty"`
+}
 
 func (s *Service) CreateAgent(ctx context.Context, selector string, opt AgentOptions) (Agent, error) {
 	var out Agent
@@ -61,24 +66,62 @@ func (s *Service) CreateAgent(ctx context.Context, selector string, opt AgentOpt
 		if _, err := os.Stat(filepath.Join(d.Dir, "prompts", opt.PromptTemplate+".md.tmpl")); err != nil {
 			return fail("template_not_found", "%s", opt.PromptTemplate)
 		}
+		cfg, err := s.Config()
+		if err != nil {
+			return err
+		}
 		profile := opt.Profile
 		if profile == "" {
-			cfg, err := s.Config()
+			profile = workflowProfile(cfg, d, opt.Role, def[0])
+		}
+		storage, err := s.storageRoot(cfg)
+		if err != nil {
+			return err
+		}
+		agentIDs := idAllocator{storage: storage, kind: "agent", projectID: d.State.ProjectID, workspaceID: d.State.ID, operation: reservationOperation(d.State.ProjectID, d.State.ID, "agent", opt.OperationKey)}
+		taken := func(candidate string) bool {
+			candidateID := "agent_" + candidate
+			for _, existing := range d.Registry.Agents {
+				if existing.ID == candidateID {
+					return true
+				}
+			}
+			return false
+		}
+		var agentID string
+		if opt.ID != "" {
+			slug, err := parseExplicitID("agent", opt.ID)
 			if err != nil {
 				return err
 			}
-			profile = workflowProfile(cfg, d, opt.Role, def[0])
+			agentID, err = agentIDs.allocateExplicit("agent", slug, taken)
+			if err != nil {
+				return err
+			}
+		} else {
+			agentID, err = agentIDs.allocate("agent", baseSlug("agent", opt.Name), taken)
+			if err != nil {
+				return err
+			}
 		}
-		out = Agent{ID: ID("agent"), Name: opt.Name, Role: opt.Role, Profile: profile, PromptTemplate: opt.PromptTemplate, Instructions: opt.Instructions, Scope: "workspace"}
+		out = Agent{ID: agentID, Name: opt.Name, Role: opt.Role, Profile: profile, PromptTemplate: opt.PromptTemplate, Instructions: opt.Instructions, Scope: "workspace"}
 		d.Registry.Agents = append(d.Registry.Agents, out)
 		d.remember(opt.OperationKey, opt, out.ID)
 		return saveResource(d, opt.OperationKey, out)
 	})
 	return out, err
 }
+
+// findAgent matches an exact ID first and only then a name. The two passes keep
+// the precedence explicit even though an ID can never equal a name today.
 func findAgent(d *Document, id string) (Agent, error) {
 	for _, a := range d.Registry.Agents {
-		if a.ID == id || a.Name == id {
+		if a.ID == id {
+			return a, nil
+		}
+	}
+	for _, a := range d.Registry.Agents {
+		if a.Name == id {
 			return a, nil
 		}
 	}

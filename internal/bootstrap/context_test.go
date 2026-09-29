@@ -9,7 +9,7 @@ import (
 	"workspace/internal/core"
 )
 
-func bootstrapProject(t *testing.T) (string, string, string) {
+func bootstrapProject(t *testing.T, title string) (string, string, string) {
 	t.Helper()
 	root := t.TempDir()
 	for _, args := range [][]string{{"init"}, {"-c", "user.name=Workspace Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"}} {
@@ -23,7 +23,7 @@ func bootstrapProject(t *testing.T) (string, string, string) {
 		t.Fatal(err)
 	}
 	s := &core.Service{Root: root, Runtime: core.Tmux{}, Executable: "workspace"}
-	created, err := s.Create(context.Background(), core.CreateOptions{Title: "Example", Input: "intent", Workflow: "plan-first"})
+	created, err := s.Create(context.Background(), core.CreateOptions{Title: title, Input: "intent", Workflow: "plan-first"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func bootstrapProject(t *testing.T) (string, string, string) {
 }
 
 func TestResolveUsesSharedFlagEnvironmentAndCWDPrecedence(t *testing.T) {
-	root, workspaceID, directory := bootstrapProject(t)
+	root, workspaceID, directory := bootstrapProject(t, "Example")
 	fromWorkspace, err := Resolve(Request{Project: root, CWD: filepath.Join(directory, "inputs"), Env: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestResolveUsesSharedFlagEnvironmentAndCWDPrecedence(t *testing.T) {
 }
 
 func TestResolveReturnsProjectOnlyAndRejectsForeignWorkspace(t *testing.T) {
-	root, workspaceID, _ := bootstrapProject(t)
+	root, workspaceID, _ := bootstrapProject(t, "Example")
 	projectOnly, err := Resolve(Request{Project: root, CWD: root, Env: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestResolveReturnsProjectOnlyAndRejectsForeignWorkspace(t *testing.T) {
 	if _, err := Resolve(Request{Project: root, Workspace: workspaceID, CWD: root, Env: map[string]string{"WORKSPACE_PROJECT_DIR": "wrong"}}); err != nil {
 		t.Fatalf("explicit project should override its environment value: %v", err)
 	}
-	otherRoot, otherWorkspace, _ := bootstrapProject(t)
+	otherRoot, otherWorkspace, _ := bootstrapProject(t, "Foreign workspace")
 	if otherRoot == root {
 		t.Fatal("test projects unexpectedly share a root")
 	}

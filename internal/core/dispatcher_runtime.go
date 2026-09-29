@@ -70,8 +70,17 @@ func (s *Service) StartDispatcher(ctx context.Context, profileOverride, operatio
 			if err != nil {
 				return err
 			}
+			storage, err := s.storageRoot(cfg)
+			if err != nil {
+				return err
+			}
+			agentIDs := idAllocator{storage: storage, kind: "agent", projectID: cfg.ProjectID, operation: reservationOperation(cfg.ProjectID, "", "agent", operationKey)}
+			dispatcherAgentID, err := agentIDs.allocate("agent", baseSlug("agent", "Dispatcher"), nil)
+			if err != nil {
+				return err
+			}
 			state = defaultDispatcherState(cfg.ProjectID)
-			state.Agent = Agent{ID: ID("agent"), Name: "Dispatcher", Role: "dispatcher", Profile: profile, PromptTemplate: "dispatcher", Instructions: instructions, Scope: "project"}
+			state.Agent = Agent{ID: dispatcherAgentID, Name: "Dispatcher", Role: "dispatcher", Profile: profile, PromptTemplate: "dispatcher", Instructions: instructions, Scope: "project"}
 		}
 		if state.Agent.Role != "dispatcher" || state.Agent.Scope != "project" {
 			return fail("dispatcher_state_invalid", "project Dispatcher state has an invalid actor")
@@ -109,7 +118,25 @@ func (s *Service) StartDispatcher(ctx context.Context, profileOverride, operatio
 		state.StopRequested = false
 		session := latestDispatcherSession(state)
 		if session == nil || session.ClosedAt != nil || session.AgentID != state.Agent.ID {
-			session = &Session{ID: ID("sess"), AgentID: state.Agent.ID, AgentSnapshot: state.Agent, Scope: "project", ProjectID: cfg.ProjectID, ClientThreadID: "", CreatedAt: nowUTC(), LifecycleState: "idle"}
+			storage, err := s.storageRoot(cfg)
+			if err != nil {
+				return err
+			}
+			sessionIDs := idAllocator{storage: storage, kind: "sess", projectID: cfg.ProjectID, operation: reservationOperation(cfg.ProjectID, "", "sess", operationKey)}
+			taken := func(candidate string) bool {
+				candidateID := "sess_" + candidate
+				for _, existing := range state.Sessions {
+					if existing.ID == candidateID {
+						return true
+					}
+				}
+				return false
+			}
+			dispatcherSessionID, err := sessionIDs.allocate("sess", baseSlug("sess", "dispatcher"), taken)
+			if err != nil {
+				return err
+			}
+			session = &Session{ID: dispatcherSessionID, AgentID: state.Agent.ID, AgentSnapshot: state.Agent, Scope: "project", ProjectID: cfg.ProjectID, ClientThreadID: "", CreatedAt: nowUTC(), LifecycleState: "idle"}
 			state.Sessions = append(state.Sessions, *session)
 			session = &state.Sessions[len(state.Sessions)-1]
 		} else {
