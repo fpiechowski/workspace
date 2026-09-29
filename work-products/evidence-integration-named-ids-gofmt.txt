@@ -1,0 +1,3 @@
+$ gofmt -l internal/ cmd/
+(no files listed)
+exit 0

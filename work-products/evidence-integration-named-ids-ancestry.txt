@@ -1,0 +1,6 @@
+$ git merge-base --is-ancestor <head> HEAD
+T1 41fa1241480d5b84eb3bcfe6daa440b5fbfc99d1: exit 0
+T2 97a819cd00caf14098e05ef8466ba9fa13d51717: exit 0
+base 2fb9f0b03d03776ffff9ba6a92f59395a308cf5d: exit 0
+git rev-list --parents -n 1 HEAD:
+6c879936b43f0622b7e27c3c5f8558934e097eae 0d3f781f9752d29b7e42c305a2e3e36b4f9236e1 97a819cd00caf14098e05ef8466ba9fa13d51717

@@ -9,16 +9,16 @@ and the documentation link check.
   one config commit beyond the previous base `d373e61`).
 - Merged heads, in manifest order:
   1. T1 `41fa1241480d5b84eb3bcfe6daa440b5fbfc99d1` (core: slug IDs, reservation ledger) →
-     merge commit __T1MERGE__.
+     merge commit `0d3f781f9752d29b7e42c305a2e3e36b4f9236e1`.
   2. T2 `97a819cd00caf14098e05ef8466ba9fa13d51717` (CLI `--id`, TUI slugs, docs) →
-     merge commit __T2MERGE__.
+     merge commit `6c879936b43f0622b7e27c3c5f8558934e097eae`.
 - Strategy: `git merge --no-ff` per head. T2 contains T1, so the second merge
   integrated only the T2 delta.
 - Conflicts: the two shared artifact paths (`work-products/IMPLEMENTATION.md`,
   `work-products/SUMMARY.md`); resolved by preserving the base and incoming lineages
   verbatim. All are listed in `work-products/INTEGRATION.md`; the final tree has no
   conflict markers.
-- Verification HEAD: __VERIFYHEAD__ (see `work-products/INTEGRATION.md` for the full
+- Verification HEAD: `6c879936b43f0622b7e27c3c5f8558934e097eae` (see `work-products/INTEGRATION.md` for the full
   check table and evidence). Target branch `master` was not moved; landing is out of
   scope and requires the user's explicit integration land confirmation.
 

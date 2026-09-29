@@ -1,0 +1,18 @@
+# Integration checks for task_01M3Q9PCVERT0JG19E3QPXJ9BA
+# Merged result: 6c879936b43f0622b7e27c3c5f8558934e097eae
+# WORKSPACE_* actor variables unset for each command (sandbox artifact).
+- command: gofmt -l internal/ cmd/
+  exit_code: 0
+  evidence: evidence-integration-named-ids-gofmt.txt
+- command: go vet ./...
+  exit_code: 0
+  evidence: evidence-integration-named-ids-vet.txt
+- command: go build ./...
+  exit_code: 0
+  evidence: evidence-integration-named-ids-build.txt
+- command: go test ./... -count=1 -timeout 600s
+  exit_code: 0
+  evidence: evidence-integration-named-ids-go-test-all.txt
+- command: python3 work-products/check-doc-links.py
+  exit_code: 0
+  evidence: evidence-integration-named-ids-doc-links.txt
