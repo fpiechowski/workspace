@@ -78,9 +78,13 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 		}
 		// A worker process can finish without the supervisor getting a chance
 		// to persist the final Run transition. Reconcile dead or missing worker
-		// panes before ownership and parallel-limit checks so completed workers
-		// release their slots automatically.
-		if changed := s.reconcileCompletedWorkerRuns(ctx, d); changed {
+		// panes, and converge any pending auto-close, before ownership and
+		// parallel-limit checks so completed workers release their slots.
+		changed := s.reconcileCompletedWorkerRuns(ctx, d)
+		if s.settleClosingSessionsLocked(ctx, d) {
+			changed = true
+		}
+		if changed {
 			if err := saveDocument(d); err != nil {
 				return err
 			}
@@ -202,7 +206,7 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			if parentLogical.DeletedAt != nil {
 				return fail("session_deleted", "parent Session %s was deleted", parentLogical.ID)
 			}
-			if parentLogical.ClosedAt != nil {
+			if parentLogical.ClosedAt != nil || parentLogical.CloseRequestedAt != nil {
 				return fail("session_closed", "parent Session %s is closed", parentLogical.ID)
 			}
 		}
@@ -283,6 +287,9 @@ func (s *Service) StartSession(ctx context.Context, selector string, opt Session
 			}
 			if prior.ClosedAt != nil {
 				return fail("session_closed", "logical session is closed")
+			}
+			if prior.CloseRequestedAt != nil {
+				return fail("session_closed", "logical session is closing")
 			}
 			if prior.WorktreeID != wtID || prior.TaskID != opt.Task || prior.ParentAgentID != parent || prior.ParentSessionID != parentSession || prior.ReadOnly != opt.ReadOnly {
 				return fail("invalid_resume", "resume context differs from the logical session")
@@ -861,6 +868,9 @@ func (s *Service) CloseSession(ctx context.Context, selector, id, reason string,
 			now := nowUTC()
 			p.ClosedAt, p.CloseReason = &now, strings.TrimSpace(reason)
 		}
+		// A manual close also converges a pending auto-close intent.
+		p.CloseRequestedAt = nil
+		p.CloseError = ""
 		d.syncSession(p)
 		out = *p
 		return saveDocument(d)
@@ -922,6 +932,165 @@ func releaseCompletedRun(d *Document, p *Session, r *Run) {
 	d.syncSession(p)
 }
 
+// requestWorkerSessionClose records a durable intent to close a worker Session
+// after its handoff was accepted. It is intentionally a no-op for a missing,
+// deleted, already closed or orchestrator Session, for the acting Session
+// itself, and when an intent is already pending. The caller commits it in the
+// same mutation as the acceptance, so it is atomic and replay-safe.
+func (s *Service) requestWorkerSessionClose(d *Document, sessionID, reason string, now time.Time) {
+	if sessionID == "" {
+		return
+	}
+	p, err := findSession(d, sessionID)
+	if err != nil || p.DeletedAt != nil || p.ClosedAt != nil || p.AgentSnapshot.Role == "orchestrator" {
+		return
+	}
+	if s.Actor.SessionID != "" && s.Actor.SessionID == p.ID {
+		return
+	}
+	if p.CloseRequestedAt != nil {
+		return
+	}
+	requested := now
+	p.CloseRequestedAt = &requested
+	p.CloseReason = strings.TrimSpace(reason)
+}
+
+// settleClosingSessionsLocked converges every Session with a pending close
+// intent. It runs inside an existing With and returns whether the Document
+// changed. A runtime failure never clears the intent: the error is recorded in
+// CloseError and a later Reconcile or StartSession retries. A pane that is not
+// verified as owned is never stopped.
+func (s *Service) settleClosingSessionsLocked(ctx context.Context, d *Document) bool {
+	changed := false
+	for i := range d.Registry.Sessions {
+		p := &d.Registry.Sessions[i]
+		if p.CloseRequestedAt == nil || p.ClosedAt != nil || p.DeletedAt != nil || p.AgentSnapshot.Role == "orchestrator" {
+			continue
+		}
+		if s.Runtime == nil {
+			if setCloseError(p, fail("runtime_unavailable", "no runtime is available to verify the worker pane")) {
+				changed = true
+			}
+			continue
+		}
+		run, runErr := currentRun(d, p)
+		if runErr != nil || !run.Active() {
+			// Idle: no current Run, or a Run that already terminated.
+			p.CurrentRunID = ""
+			if settleSessionClosed(p) {
+				changed = true
+			}
+			d.syncSession(p)
+			continue
+		}
+		if run.PaneID == "" {
+			if setCloseError(p, fail("launch_uncertain", "no pane recorded; inspect tmux and run reconcile")) {
+				changed = true
+			}
+			continue
+		}
+		pane, inspectErr := s.Runtime.Inspect(ctx, run.PaneID)
+		missing := false
+		if inspectErr != nil {
+			var runtimeErr *Error
+			missing = errors.As(inspectErr, &runtimeErr) && runtimeErr.Code == "pane_missing"
+			if !missing {
+				if setCloseError(p, inspectErr) {
+					changed = true
+				}
+				continue
+			}
+		}
+		if missing || pane.Dead {
+			finishClosingRun(p, run, "exited")
+			if settleSessionClosed(p) {
+				changed = true
+			}
+			d.syncSession(p)
+			continue
+		}
+		if !paneOwns(pane, p.ID, run.ID) {
+			if setCloseError(p, fail("pane_mismatch", "pane is not owned by the current run")) {
+				changed = true
+			}
+			continue
+		}
+		if stopErr := s.Runtime.Stop(ctx, run.PaneID); stopErr != nil {
+			var runtimeErr *Error
+			if errors.As(stopErr, &runtimeErr) && runtimeErr.Code == "pane_missing" {
+				// The pane disappeared between inspect and stop.
+				finishClosingRun(p, run, "exited")
+				if settleSessionClosed(p) {
+					changed = true
+				}
+				d.syncSession(p)
+				continue
+			}
+			if setCloseError(p, stopErr) {
+				changed = true
+			}
+			continue
+		}
+		finishClosingRun(p, run, "stopped")
+		if settleSessionClosed(p) {
+			changed = true
+		}
+		d.syncSession(p)
+	}
+	return changed
+}
+
+// settleClosingSessions is the With wrapper for settleClosingSessionsLocked.
+func (s *Service) settleClosingSessions(ctx context.Context, selector string) error {
+	return s.With(ctx, selector, func(d *Document) error {
+		if s.settleClosingSessionsLocked(ctx, d) {
+			return saveDocument(d)
+		}
+		return nil
+	})
+}
+
+// finishClosingRun records the terminal Run state and releases the Session's
+// current-run pointer. Unlike releaseCompletedRun it adds no "without a
+// handoff" error, because the task result was already accepted.
+func finishClosingRun(p *Session, r *Run, state string) {
+	now := nowUTC()
+	r.State = state
+	r.FinishedAt = &now
+	p.CurrentRunID = ""
+}
+
+// settleSessionClosed sets the closed projection and clears a stale settle
+// error. It reports whether anything changed.
+func settleSessionClosed(p *Session) bool {
+	changed := false
+	if p.ClosedAt == nil {
+		now := nowUTC()
+		p.ClosedAt = &now
+		changed = true
+	}
+	if p.CloseError != "" {
+		p.CloseError = ""
+		changed = true
+	}
+	return changed
+}
+
+// setCloseError records the latest settle failure without retrying a stable
+// message on every supervisor tick.
+func setCloseError(p *Session, err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	if p.CloseError == message {
+		return false
+	}
+	p.CloseError = message
+	return true
+}
+
 func (s *Service) ResumeAgent(ctx context.Context, selector, agent, key string) (Session, error) {
 	var opt SessionOptions
 	err := s.With(ctx, selector, func(d *Document) error {
@@ -949,7 +1118,7 @@ func (s *Service) ResumeAgent(ctx context.Context, selector, agent, key string) 
 			opt.Task = session.TaskID
 			opt.ResumeSession = session.ID
 			opt.ReadOnly = session.ReadOnly
-			if session.ClosedAt != nil {
+			if session.ClosedAt != nil || session.CloseRequestedAt != nil {
 				opt.ResumeSession = ""
 			}
 			if session.TaskID != "" {
@@ -1067,6 +1236,9 @@ func (s *Service) Reconcile(ctx context.Context, selector string, keys ...string
 				blockInterruptedTask(d, p, run)
 				changed = true
 			}
+		}
+		if s.settleClosingSessionsLocked(ctx, d) {
+			changed = true
 		}
 		for i := range d.Registry.Worktrees {
 			w := &d.Registry.Worktrees[i]

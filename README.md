@@ -648,7 +648,11 @@ workspace task supersede task_ID --reason "Replaced by task_ID_v2"
 
 `check run` returns a receipt; read its `exit_code` and `expected_exit`. Recording a
 receipt does not mean the test succeeded. Acceptance checks workflow criteria, required
-artifacts, and declared check outcomes. Use `task retry` for a new attempt of the same
+artifacts, and declared check outcomes. Accepting a handoff also stops the submitting
+worker Run and closes its Session automatically, so no manual `session stop` or
+`session close` is needed before archive, completion, or the next `session start`; pass
+`--keep-session` to keep that worker Session resumable for consultation.
+Use `task retry` for a new attempt of the same
 contract; use `task cancel`, `task abandon`, or `task supersede` with a reason to retire
 work that will not run. Retired tasks remain in history and do not block phase gates.
 `workspace workflow advance` applies only to a workspace with a selected workflow;
@@ -711,6 +715,8 @@ Session output separates `state` (operational projection), `lifecycle_state`,
 agent/worktree, and eligible for delivery. The compact machine-readable view includes
 `client_state`; an observation failure keeps the last known value rather than guessing.
 `session close sess_ID --reason ...` closes a resumable idle context and blocks further resume.
+`handoff accept` closes the submitting worker Session automatically (see below); use
+`handoff accept --keep-session` to keep it resumable for consultation.
 `pause` suspends delegation, `pause --interrupt` stops active runs, and `resume` unblocks
 the work; `workspace resume` applies only to paused workspaces and never reactivates a
 completed workspace. `reconcile` reconciles lost panes and interrupted operations.

@@ -64,13 +64,13 @@ func TestAutonomyHandoffRationaleAndPlanDecision(t *testing.T) {
 	p, w := startTask(t, s, ws, plan)
 	h := submitPlanForGate(t, s, ws, p, w, "gate-plan-result")
 
-	if _, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "", nil); err == nil {
+	if _, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "", nil, false); err == nil {
 		t.Fatal("accept without rationale was allowed under autonomy")
 	} else {
 		expectCode(t, err, "rationale_required")
 	}
 
-	accepted, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "PLAN maps each criterion to a section", []string{"art_evidence"})
+	accepted, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "PLAN maps each criterion to a section", []string{"art_evidence"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestAutonomyAdvanceRationaleAndDecision(t *testing.T) {
 	plan := plannedTask(t, s, ws, "advance-plan", "planner", nil)
 	p, w := startTask(t, s, ws, plan)
 	h := submitPlanForGate(t, s, ws, p, w, "advance-plan-result")
-	if _, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "accepted planner result", nil); err != nil {
+	if _, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "accepted planner result", nil, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,7 +124,7 @@ func TestAutonomyStatePhaseRationaleAndDecision(t *testing.T) {
 	plan := plannedTask(t, s, ws, "state-plan", "planner", nil)
 	p, w := startTask(t, s, ws, plan)
 	h := submitPlanForGate(t, s, ws, p, w, "state-plan-result")
-	if _, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "accepted planner result", nil); err != nil {
+	if _, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "accepted planner result", nil, false); err != nil {
 		t.Fatal(err)
 	}
 	revision := currentRevision(t, s, ws)
@@ -214,20 +214,20 @@ func TestAutonomyRejectionBound(t *testing.T) {
 	p, w := startTask(t, s, ws, plan)
 
 	first := submitPlanForGate(t, s, ws, p, w, "reject-result-1")
-	if _, err := agent.ReviewHandoffAudited(ctx, ws, first.ID, false, "", "", nil); err == nil {
+	if _, err := agent.ReviewHandoffAudited(ctx, ws, first.ID, false, "", "", nil, false); err == nil {
 		t.Fatal("reject without rationale was allowed under autonomy")
 	} else {
 		expectCode(t, err, "rationale_required")
 	}
-	if _, err := agent.ReviewHandoffAudited(ctx, ws, first.ID, false, "missing edge cases", "first rejection", nil); err != nil {
+	if _, err := agent.ReviewHandoffAudited(ctx, ws, first.ID, false, "missing edge cases", "first rejection", nil, false); err != nil {
 		t.Fatal(err)
 	}
 	second := submitPlanForGate(t, s, ws, p, w, "reject-result-2")
-	if _, err := agent.ReviewHandoffAudited(ctx, ws, second.ID, false, "still missing edge cases", "second rejection", nil); err != nil {
+	if _, err := agent.ReviewHandoffAudited(ctx, ws, second.ID, false, "still missing edge cases", "second rejection", nil, false); err != nil {
 		t.Fatal(err)
 	}
 	third := submitPlanForGate(t, s, ws, p, w, "reject-result-3")
-	if _, err := agent.ReviewHandoffAudited(ctx, ws, third.ID, false, "again", "third rejection", nil); err == nil {
+	if _, err := agent.ReviewHandoffAudited(ctx, ws, third.ID, false, "again", "third rejection", nil, false); err == nil {
 		t.Fatal("third rejection was allowed under autonomy")
 	} else {
 		expectCode(t, err, "autonomy_bound_exceeded")
@@ -250,7 +250,7 @@ func TestAutonomyGateSaveFailureIsAtomic(t *testing.T) {
 
 	flushDocumentTestHook = func(*Document) error { return errors.New("injected save failure") }
 	defer func() { flushDocumentTestHook = nil }()
-	_, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "would accept", nil, "atomic-key")
+	_, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "would accept", nil, false, "atomic-key")
 	flushDocumentTestHook = nil
 	if err == nil {
 		t.Fatal("injected save failure was not reported")
@@ -346,7 +346,7 @@ func TestAutonomyGateWithoutAutonomyNeedsNoRationale(t *testing.T) {
 	p, w := startTask(t, s, ws, plan)
 	h := submitPlanForGate(t, s, ws, p, w, "nonauto-result")
 
-	if _, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "", nil); err != nil {
+	if _, err := agent.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "", nil, false); err != nil {
 		t.Fatalf("non-autonomous accept required a rationale: %v", err)
 	}
 	st := workspaceStatus(t, s, ws)
@@ -370,7 +370,7 @@ func TestAutonomyGateReceiptDigestsUnchanged(t *testing.T) {
 	if _, err := s.ReviewHandoff(ctx, ws, h.ID, true, "", "digest-review"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "", nil, "digest-review"); err != nil {
+	if _, err := s.ReviewHandoffAudited(ctx, ws, h.ID, true, "", "", nil, false, "digest-review"); err != nil {
 		t.Fatalf("review replay conflicted: %v", err)
 	}
 	if _, err := s.AdvanceWorkflow(ctx, ws, "plan_review", "digest-advance"); err != nil {

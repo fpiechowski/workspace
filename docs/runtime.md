@@ -102,7 +102,9 @@ the compatible idle orchestrator Session where possible and mark the successor R
 `conversation_only`; the Codex app-server bridge continues polling so questions and
 exact Session-addressed messages can be delivered without reopening task execution.
 An existing accepted worker Session can be resumed for consultation only when its task,
-attempt, worktree, input digest, and base lineage still match. The prompt explicitly
+attempt, worktree, input digest, and base lineage still match, and only when it was kept
+open with `workspace handoff accept --keep-session`. A default accept closes the worker
+Session and ends consultation resume. The prompt explicitly
 instructs that Run not to claim work or submit a result. New worker Sessions and all
 ordinary resource/task/result mutations require `workspace reopen`.
 
@@ -110,7 +112,8 @@ ordinary resource/task/result mutations require `workspace reopen`.
 |---|---|
 | `lifecycle_state=active` | `current_run_id` points to the single starting/running Run; the Session owns its runtime and operational `state` follows that Run |
 | `lifecycle_state=idle` | no active current Run; the Session can be resumed when lineage is unchanged |
-| `lifecycle_state=closed` | explicitly closed logical context; no further Runs are allowed |
+| `lifecycle_state=closed` | explicitly closed or auto-closed logical context; no further Runs are allowed |
+| `close_requested_at` / `close_error` | a pending auto-close intent and its last settle failure; both clear when the Session closes |
 | `state=starting` / `state=running` | the current Run is starting/running; this remains the operational state regardless of the client observation |
 | `client_state=idle` | the adapter's latest explicit observation; it does not release ownership or make a live Session idle |
 
@@ -121,6 +124,14 @@ ended without a handoff is marked blocked for inspection. `session close` applie
 same evidence check, so a completed worker Session can be closed without a redundant
 `session stop`. An unavailable runtime remains inconclusive and preserves the active
 reservation.
+
+Accepting a worker handoff records a durable close intent (`close_requested_at`) on the
+submitting worker Session in the same commit as the acceptance, then a best-effort settle
+verifies pane ownership, stops the owned Run, and marks the Session `closed`. A runtime
+failure never fails the acceptance: it is stored in `close_error` and the settle is
+retried by `workspace reconcile`, every supervisor tick, and the next `session start`.
+A pane that is not verified as owned is never stopped, and orchestrator Sessions,
+rejected handoffs, and `--keep-session` accepts are unaffected.
 
 `state` is the operational display and decision projection. It normally follows
 `run_state`, including for a current starting/running Run whose adapter reports `idle`.

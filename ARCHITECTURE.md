@@ -163,7 +163,10 @@ projection. When the current Run is `starting` or `running`, a positive adapter
 observation of client `idle` projects `State` to `idle` without changing lifecycle,
 ownership, delivery eligibility, or `RunState`. Observation is never inferred from pane
 focus, output silence, elapsed time, or failures. If `RunState` is absent in a legacy
-record, helpers may use the legacy `State` value as a compatibility fallback.
+record, helpers may use the legacy `State` value as a compatibility fallback. Accepting a
+worker handoff records a durable `close_requested_at` intent that converges the Session
+to `closed` once its owned Run is stopped; a settle failure is stored in `close_error`
+and retried by reconcile, the supervisor tick, and the next session start.
 
 Deleting a Task or Session from the TUI is logical: the record receives `deleted_at` and
 remains in persisted state as a tombstone for receipts and historical references, but

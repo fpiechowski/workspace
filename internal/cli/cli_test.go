@@ -457,6 +457,32 @@ func useHasPositionalArguments(use string) bool {
 	return false
 }
 
+// TestHandoffAcceptHasKeepSessionFlagOnly verifies --keep-session exists on the
+// accept command, not on reject, and is documented in the flag help map.
+func TestHandoffAcceptHasKeepSessionFlagOnly(t *testing.T) {
+	root := newRoot(&options{})
+	accept := commandAtPath(root, "workspace handoff accept")
+	if accept == nil {
+		t.Fatal("handoff accept command missing")
+	}
+	if accept.Flags().Lookup("keep-session") == nil {
+		t.Fatal("handoff accept lacks --keep-session")
+	}
+	if accept.Flags().Lookup("keep-session").Usage == "" {
+		t.Fatal("--keep-session has no usage text")
+	}
+	reject := commandAtPath(root, "workspace handoff reject")
+	if reject == nil {
+		t.Fatal("handoff reject command missing")
+	}
+	if reject.Flags().Lookup("keep-session") != nil {
+		t.Fatal("handoff reject unexpectedly exposes --keep-session")
+	}
+	if flagHelpSpecs["workspace handoff accept"]["keep-session"] == "" {
+		t.Fatal("--keep-session is not documented in flagHelpSpecs")
+	}
+}
+
 func TestHelpFormsAreEquivalentAndDoNotRunCommands(t *testing.T) {
 	forms := [][]string{
 		{"session", "start", "help"},

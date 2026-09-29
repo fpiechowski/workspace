@@ -124,7 +124,8 @@ remains operationally starting/running even when the client reports `idle`; the 
 still owns its agent/worktree and continues to receive delivery. The supervisor never
 infers idleness from tmux focus, output silence, elapsed time, or a failed observation.
 Codex and native OpenCode provide the positive observations, which are shown separately
-from the concrete operational state.
+from the concrete operational state. Accepting a worker handoff closes that worker Session
+once its owned Run is stopped, unless the acceptance uses `handoff accept --keep-session`.
 
 ## Product Scope
 
