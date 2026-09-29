@@ -102,7 +102,9 @@ Tests proving each side:
 
 All commands below were run with the harness `WORKSPACE_*` environment cleared
 (the sandbox exports worker variables that otherwise break the CLI/core fixtures);
-`WORKSPACE_TMUX_TEST=1` re-set only for the tmux runs. Real evidence files:
+`WORKSPACE_TMUX_TEST=1` re-set only for the tmux runs. Real evidence files.
+
+Declared checks (all exit 0):
 
 | Command | Exit | Evidence |
 |---|---|---|
@@ -112,9 +114,15 @@ All commands below were run with the harness `WORKSPACE_*` environment cleared
 | `WORKSPACE_TMUX_TEST=1 go test -race ./internal/core/ -run TestTmuxEndToEnd -count=1` | 0 | `evidence-fix-recovery-tmux-e2e.txt` |
 | `WORKSPACE_TMUX_TEST=1 go test -race ./... -count=1 -skip TestNavigatorRealPTYAndClientSelection` | 0 | `evidence-fix-recovery-tmux-all.txt` |
 | `go test ./internal/core/ -run TestResumeKeepsSessionClientSnapshotAndReloadsRoute` | 0 | `evidence-fix-recovery-regression-pass.txt` |
-| Base `2a72e3a` + same regression test | 1 | `evidence-fix-recovery-regression-base.txt` |
-| Base `2a72e3a` + `TestTmuxEndToEnd` | 1 | `evidence-fix-recovery-tmux-e2e-base.txt` |
-| `WORKSPACE_TMUX_TEST=1 go test -race ./internal/terminal/ -run TestNavigatorRealPTYAndClientSelection` | 1 | `evidence-fix-recovery-terminal-known-red.txt` |
+
+Documented evidence, NOT declared checks (intentional-failure proofs and the known
+environmental failure):
+
+| Command | Exit | Kind | Evidence |
+|---|---|---|---|
+| Base `2a72e3a` + the new regression test | 1 | Intentional-failure proof (catches the regression) | `evidence-fix-recovery-regression-base.txt` |
+| Base `2a72e3a` + `TestTmuxEndToEnd` | 1 | Intentional-failure proof (reproduces the report at `tmux_integration_test.go:343`) | `evidence-fix-recovery-tmux-e2e-base.txt` |
+| `WORKSPACE_TMUX_TEST=1 go test -race ./internal/terminal/ -run TestNavigatorRealPTYAndClientSelection` | 1 | Known environmental failure, pre-existing | `evidence-fix-recovery-terminal-known-red.txt` |
 
 `TestNavigatorRealPTYAndClientSelection` is a pre-existing environmental failure
 (`pseudo-TTY client did not attach`); it fails identically on the base and the
