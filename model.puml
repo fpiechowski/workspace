@@ -1,0 +1,80 @@
+@startuml model
+
+class Project {
+    id
+    name
+}
+
+class Repository {
+    id
+    url
+}
+
+class Branch {
+    name
+}
+
+class Workspace {
+    id
+    name
+}
+
+class Worktree {
+    id
+}
+
+class ChangeRequest {
+    id
+}
+
+class Agent {
+    id
+    name
+    prompt
+}
+
+class Session {
+    id
+}
+
+interface SessionScope
+
+class Task {
+    id
+    name
+    status
+    acceptanceCriteria
+}
+
+
+
+Project ..|> SessionScope
+Project "1" o-- "0..*" Agent
+Project "1" o-- "0..*" Repository
+Project "1" *-- "0..*" Workspace
+
+Repository "1" *-- "0..*" Branch
+
+Workspace "1" *-- "0..*" Task
+Workspace ..|> SessionScope
+Workspace "1" *-- "0..*" ChangeRequest
+Workspace "1" *-- "0..*" Worktree
+
+ChangeRequest "0..*" --> "1" Branch : source
+ChangeRequest "0..*" --> "1" Branch : target
+
+Task "0..*" --> "0..* " Task : depends on
+note on link
+  acyclic
+end note
+Task "0..*" --> "0..*" Worktree : worked on in
+Task "0..*" --> "0..*" ChangeRequest : delivered by
+
+Worktree ..|> SessionScope
+Worktree "0..1" --> "1" Branch : checks out
+
+SessionScope "1" *-- "0..*" Session
+
+Session "0..*" --> "1" Agent
+
+@enduml
