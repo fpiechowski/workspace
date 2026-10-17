@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research techniczny: T3 Code — fork czy budowa od zera (Workspace)</title><style>
+:root{--bg:#fbfbfa;--fg:#1d1f21;--muted:#5d6166;--card:#fff;--line:#e3e3df;--accent:#2f5d8a;
+--ok:#1f6f43;--okbg:#e3f3e8;--med:#7a5b00;--medbg:#fbf1d1;--low:#8a3b12;--lowbg:#fbe4d6;--unv:#9b1c1c;--unvbg:#fde2e2;--dis:#6b2c91;--disbg:#efe2f7}
+@media (prefers-color-scheme:dark){:root{--bg:#141618;--fg:#e6e6e3;--muted:#a3a7ab;--card:#1c1f22;--line:#30343a;--accent:#7fb0e0;
+--ok:#8fd6a8;--okbg:#1d3326;--med:#f0d27a;--medbg:#3a3118;--low:#f3ad85;--lowbg:#3d2418;--unv:#ff9c9c;--unvbg:#4a1c1c;--dis:#d7a8f2;--disbg:#35213f}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{display:grid;grid-template-columns:260px minmax(0,1fr);gap:40px;max-width:1280px;margin:0 auto;padding:32px 24px}
+nav{position:sticky;top:16px;align-self:start;max-height:calc(100vh - 32px);overflow:auto;font-size:14px}
+nav ol{list-style:none;padding:0;margin:0}nav li{margin:2px 0}nav a{color:var(--muted);text-decoration:none;display:block;padding:3px 8px;border-radius:6px}
+nav a:hover{background:var(--card);color:var(--accent)}
+main{min-width:0}header{margin-bottom:24px}.kicker{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:12px;margin:0}
+h1{font-size:28px;line-height:1.25;margin:6px 0 16px}h2{font-size:21px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--line)}h3{font-size:17px;margin:24px 0 8px}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 20px;margin:0}.meta dt{font-size:12px;color:var(--muted)}.meta dd{margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:4px 24px 16px;margin:16px 0 8px}
+.card h2{border-top:0;margin-top:12px}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:6px 9px;vertical-align:top;text-align:left}th{background:var(--card)}
+blockquote{margin:12px 0;padding:8px 16px;border-left:3px solid var(--line);color:var(--muted)}
+code{font-size:.9em;background:var(--card);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+a{color:var(--accent)}a.cite{text-decoration:none;font-size:.85em}
+.badge{display:inline-block;font-size:12px;font-weight:600;line-height:1.4;padding:1px 7px;border-radius:999px;white-space:nowrap}
+.badge.verified{color:var(--ok);background:var(--okbg)}.badge.medium{color:var(--med);background:var(--medbg)}
+.badge.low{color:var(--low);background:var(--lowbg);outline:1px solid var(--low)}
+.badge.unverified{color:var(--unv);background:var(--unvbg);outline:2px solid var(--unv)}
+.badge.disputed{color:var(--dis);background:var(--disbg);outline:2px solid var(--dis)}
+details{margin:12px 0}summary{cursor:pointer;font-weight:600;color:var(--accent)}
+tr:target{outline:2px solid var(--accent)}
+.chart{margin:12px 0 20px}.chart svg{width:100%;max-width:680px;height:auto}.chart .bar{fill:var(--muted);opacity:.55}.chart .bar.top{fill:var(--accent);opacity:1}
+.chart .lbl,.chart .val,.chart .tick{fill:var(--fg);font-size:13px}.chart .tick{fill:var(--muted);font-size:11px}.chart .grid{stroke:var(--line)}
+figcaption{font-size:13px;color:var(--muted)}
+@media (max-width:860px){.wrap{grid-template-columns:1fr;gap:12px;padding:16px}nav{position:static;max-height:none}h1{font-size:23px}}
+</style></head>
+<body><div class="wrap"><nav aria-label="Spis treści"><ol><li><a href="#streszczenie">Streszczenie</a></li><li><a href="#1-ramy-wyboru">1. Ramy wyboru</a></li><li><a href="#2-czym-jest-t3-code-i-jak-jest-zbudowany-pytanie-1">2. Czym jest T3 Code i jak jest zbudowany (pytanie 1)</a></li><li><a href="#3-model-pojec-t3-code-a-model-workspace-pytanie-2">3. Model pojęć T3 Code a model Workspace (pytanie 2)</a></li><li><a href="#4-wykonalnosc-wymagan-v1-w-forku-pytanie-3">4. Wykonalność wymagań v1 w forku (pytanie 3)</a></li><li><a href="#5-licencja-i-zasady-pytanie-4">5. Licencja i zasady (pytanie 4)</a></li><li><a href="#6-koszt-utrzymania-forka-pytanie-5">6. Koszt utrzymania forka (pytanie 5)</a></li><li><a href="#7-dojrzaosc-i-ryzyka-pytanie-6">7. Dojrzałość i ryzyka (pytanie 6)</a></li><li><a href="#8-budowa-od-zera-zakres-i-gotowe-klocki-pytanie-7">8. Budowa od zera: zakres i gotowe klocki (pytanie 7)</a></li><li><a href="#9-trzecia-droga-c-sidecar-na-niezmodyfikowanym-t3-code">9. Trzecia droga C: sidecar na niezmodyfikowanym T3 Code</a></li><li><a href="#10-alternatywy-pytanie-8">10. Alternatywy (pytanie 8)</a></li><li><a href="#11-wazona-macierz-decyzyjna">11. Ważona macierz decyzyjna</a></li><li><a href="#12-wnioski-przekrojowe">12. Wnioski przekrojowe</a></li><li><a href="#13-dowody-przeciwne-red-team">13. Dowody przeciwne (red team)</a></li><li><a href="#14-rekomendacja">14. Rekomendacja</a></li><li><a href="#15-czego-siec-nie-rozstrzygnie-lista-spikeow">15. Czego sieć nie rozstrzygnie: lista spike'ów</a></li><li><a href="#16-pytania-otwarte-i-miejsca-o-cienkich-dowodach">16. Pytania otwarte i miejsca o cienkich dowodach</a></li><li><a href="#zrodla">Źródła</a></li><li><a href="#mapa-nieaktualnosci">Mapa nieaktualności</a></li></ol></nav>
+<main>
+<header>
+  <p class="kicker">Deep Recon · research technical · kształt: wybór</p>
+  <h1>Research techniczny: T3 Code — fork czy budowa od zera (Workspace)</h1>
+  <dl class="meta">
+    <div><dt>Decyzja</dt><dd>Budować Workspace jako fork T3 Code, od zera, czy trzecią drogą</dd></div>
+    <div><dt>Data</dt><dd>2026-10-12</dd></div>
+    <div><dt>Głębokość</dt><dd>deep</dd></div>
+    <div><dt>Weryfikacja</dt><dd>high, red team: on (2 passes)</dd></div>
+    <div><dt>Twierdzenia</dt><dd><span class="badge verified">zweryfikowane 23</span>
+      <span class="badge unverified">niezweryfikowane 11</span>
+      <span class="badge disputed">obalone 1</span></dd></div>
+    <div><dt>Stan upstreamu</dt><dd>pingdotgg/t3code@0e7346c (2026-10-12)</dd></div>
+    <div><dt>Sprawdź ponownie</dt><dd>2026-11-06</dd></div>
+  </dl>
+</header><p><strong>Decyzja, której służy ten research:</strong> czy produkt Workspace budować jako fork T3 Code (A), od zera (B), czy trzecią drogą (C).</p>
+<section class="card summary"><h2 id="streszczenie">Streszczenie</h2>
+<p><strong>Werdykt: nie forkuj T3 Code. Buduj własną aplikację (B2).</strong> Rdzeń domeny (Workspace, Task z zależnościami, ChangeRequest, Artifact, Handoff) z własnym serwerem MCP zrób jako niezależny serwis. Sesje agentów schowaj za portem <code>SessionHost</code>, z domyślnym hostem strukturalnym: Claude Agent SDK z Twoją lokalną subskrypcją oraz <code>opencode serve</code> z SSE.</p>
+<p><strong>Drugi wybór: C</strong>, czyli Twoja aplikacja steruje niezmodyfikowanym T3 Code z zewnątrz. Wybierz ją dopiero wtedy, gdy interfejs T3 dla zewnętrznych agentów trafi do stabilnego wydania, a Twoje spike'i pokażą, że własny host sesji na Windows jest za drogi.</p>
+<p><strong>Wynik ważony</strong> (Twoje wagi): B2 3,63 · B1 3,50 · C 3,13 · A 2,50 (rozdz. 11).</p>
+<p><strong>Trzy ustalenia, które o tym decydują:</strong></p>
+<ol>
+<li><strong>Twojego wyróżnika nie ma w żadnym kandydacie na bazę.</strong> Model T3 to „wątek = jeden projekt, najwyżej jeden worktree” <a class="cite" href="#src-3">[3]</a><a class="cite" href="#src-4">[4]</a>. Nie ma w nim Workspace obejmującego kilka repo, zależności zadań, kolejności merge'a, artefaktów ani handoffów <a class="cite" href="#src-8">[8]</a><a class="cite" href="#src-29">[29]</a>. Ten rdzeń piszesz w każdej opcji. Fork oszczędza tylko warstwę wykonawczą.</li>
+<li><strong>Fork wiąże Cię z najszybciej zmieniającą się częścią upstreamu.</strong>
+   - Upstream: ok. 1 500–1 600 commitów miesięcznie, przepisanie orkiestratora 2026-10-02 (+380K/−204K linii) <a class="cite" href="#src-22">[22]</a><a class="cite" href="#src-23">[23]</a>.
+   - Pliki, w które fork wpina hooki, zmieniają się co tydzień albo codziennie <a class="cite" href="#src-22">[22]</a>.
+   - Realne forki synchronizują się kilka razy w tygodniu <a class="cite" href="#src-26">[26]</a><a class="cite" href="#src-28">[28]</a>, najlepiej utrzymany z pomocą agenta <a class="cite" href="#src-28">[28]</a>. Przy przepisaniach porzucają funkcje <a class="cite" href="#src-26">[26]</a>.
+   - Do tego Effect-TS importowany w 67–99% plików, a upstream zakłada, że każda funkcja działa na wszystkich platformach <a class="cite" href="#src-1">[1]</a><a class="cite" href="#src-22">[22]</a>. To kłóci się z kryterium kontroli nad architekturą.</li>
+<li><strong>Na Windows o wyborze hosta decydują dowody z issues, nie z dokumentacji.</strong>
+   - Wariant PTY ma zmierzone awarie wejścia i detekcji stanu <a class="cite" href="#src-77">[77]</a><a class="cite" href="#src-79">[79]</a><a class="cite" href="#src-80">[80]</a>.
+   - Interfejs T3 dla zewnętrznych agentów ma 6 dni i istnieje tylko w wersjach nightly, a korzystający z niego klienci już trafiali na błędy protokołu <a class="cite" href="#src-88">[88]</a><a class="cite" href="#src-89">[89]</a>. GUI T3 potrafi też skasować dołączony z zewnątrz worktree <a class="cite" href="#src-34">[34]</a><a class="cite" href="#src-90">[90]</a>.
+   - Host strukturalny omija oba problemy, ale ma własne otwarte błędy na Windows <a class="cite" href="#src-45">[45]</a>. Dlatego przed wyborem potrzebne są spike'i.</li>
+</ol>
+<p><strong>Największe zastrzeżenie.</strong> Wysiłek każdej opcji to ocena pośrednia (historia repo, liczba plików), bez danych o godzinach. Najmocniejszy argument przeciw rekomendacji: odtwarzasz samotnie warstwę, którą T3 już ma i utrzymuje, a fork t3kanban pokazał, że tablicę zadań da się wpiąć w T3 i wydać na trzy systemy <a class="cite" href="#src-82">[82]</a> (rozdz. 14). Werdykt B2 kontra C jest bliski i odwracalny dzięki portowi <code>SessionHost</code>. Odrzucenie A ma wysoką pewność.</p>
+<p><strong>Następny krok.</strong> Przeprowadź spike'i S1, S7 i S2 (rozdz. 15) przed uruchomieniem <code>bmad-architecture</code>. Terminy ponownego sprawdzenia podaje mapa nieaktualności na końcu raportu.</p>
+</section>
+<h2 id="1-ramy-wyboru">1. Ramy wyboru</h2>
+<p>Kryteria zatwierdzone przy akceptacji planu 2026-10-12. Źródłem wymagań jest brief i addendum inicjatywy, a nie research z sieci.</p>
+<p><strong>Warunki konieczne (gates):</strong></p>
+<ul>
+<li><strong>G1.</strong> Licencja pozwala na prywatny fork i modyfikacje.</li>
+<li><strong>G2.</strong> Działa na Windows.</li>
+<li><strong>G3.</strong> Integruje się z Claude Code i z OpenCode.</li>
+</ul>
+<p>Wszystkie trzy opcje przechodzą bramki. Przy A i C zastrzeżenie do G2 brzmi tak: Windows nie jest objęty CI T3 Code, które blokuje scalenie, a na Windows jest otwarty błąd z utratą danych przy usuwaniu worktree <a class="cite" href="#src-33">[33]</a><a class="cite" href="#src-34">[34]</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Kryterium</th>
+<th>Waga</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dopasowanie modelu domenowego i wymagań v1</td>
+<td>30</td>
+</tr>
+<tr>
+<td>Kontrola nad architekturą</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Wysiłek do działającego v1 (jedna osoba, po godzinach)</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Koszt utrzymania i synchronizacji z upstreamem</td>
+<td>15</td>
+</tr>
+<tr>
+<td>Droga do trybu serwera i dostępu z telefonu</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Ryzyko organizacyjne</td>
+<td>5</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Opcje:</strong></p>
+<ul>
+<li><strong>A</strong> — fork T3 Code, w najlepszym znanym wariancie: zmiany w osobnych plikach, podpięte jednolinijkowymi hookami (tzw. fork w kształcie pluginu).</li>
+<li><strong>B</strong> — własna aplikacja od zera. Plan zakładał wariant terminal-first, ale po red teamie rozdzieliłem ją na dwa warianty hosta sesji (rozdz. 11 i 13):</li>
+<li><strong>B1</strong> — terminal-first: niezmodyfikowane CLI <code>claude</code> i <code>opencode</code> w osadzonym terminalu (PTY);</li>
+<li><strong>B2</strong> — host strukturalny: Claude Agent SDK oraz <code>opencode serve</code> z SSE; terminal tylko jako wyjście awaryjne.</li>
+<li><strong>C</strong> — „sidecar”: własna aplikacja domenowa z własnym MCP, która steruje niezmodyfikowanym T3 Code jako hostem sesji, przez jego interfejs MCP dla zewnętrznych agentów.</li>
+</ul>
+<p>Opcję C wyłoniła runda 1. Nie była założona z góry.</p>
+<h2 id="2-czym-jest-t3-code-i-jak-jest-zbudowany-pytanie-1">2. Czym jest T3 Code i jak jest zbudowany (pytanie 1)</h2>
+<p><strong>Stack</strong>
+- TypeScript w całości, monorepo na pnpm, budowane narzędziem Vite+ <a class="cite" href="#src-1">[1]</a>.
+- Effect-TS v4 (<code>effect</code> 4.0.2 z lokalnym patchem) we wszystkich pakietach. Importuje go 67% plików serwera i 99% plików <code>contracts</code> <a class="cite" href="#src-22">[22]</a>.
+- Desktop: Electron 44. Web: React 19 i TanStack Router. Mobile: Expo / React Native. Strona marketingowa: Astro <a class="cite" href="#src-1">[1]</a>.
+- Skala: ok. 840 tys. linii kodu bez testów <a class="cite" href="#src-22">[22]</a> (pomiar zgrubny, z fiksturami).</p>
+<p><strong>Procesy</strong>
+- Jeden serwer Node (<code>t3</code>, także jako <code>npx t3</code>) zarządza procesami agentów, gitem, terminalami i SQLite <a class="cite" href="#src-1">[1]</a><a class="cite" href="#src-2">[2]</a>.
+- Web, desktop i mobile to cienkie klienty. Komunikują się z serwerem przez typowane Effect RPC po WebSocket (<code>/ws</code>) <a class="cite" href="#src-2">[2]</a>.
+- Desktop uruchamia serwer jako proces potomny i ładuje UI przez schemat <code>t3code://</code> <a class="cite" href="#src-2">[2]</a>.
+- Serwer wystawia też uwierzytelniony endpoint HTTP MCP pod <code>/mcp</code> <a class="cite" href="#src-8">[8]</a><a class="cite" href="#src-9">[9]</a>.</p>
+<p><strong>Integracja z agentami</strong></p>
+<p>Wszystkie integracje łączy wspólny interfejs <code>ProviderAdapterV2</code> w <code>packages/provider-core</code> oraz warstwa driverów (ustawienia, konta, status) <a class="cite" href="#src-7">[7]</a>. Transport zależy od dostawcy:</p>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Sposób integracji</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Claude Code</td>
+<td>Claude Agent SDK w procesie, korzysta z lokalnego logowania Claude Code użytkownika <a class="cite" href="#src-5">[5]</a><a class="cite" href="#src-74">[74]</a></td>
+</tr>
+<tr>
+<td>Codex</td>
+<td><code>codex app-server</code>, JSON-RPC po stdio <a class="cite" href="#src-7">[7]</a></td>
+</tr>
+<tr>
+<td>OpenCode</td>
+<td>uruchomiony <code>opencode serve</code> + SDK; v1 i v2, osobne adaptery <a class="cite" href="#src-7">[7]</a><a class="cite" href="#src-75">[75]</a></td>
+</tr>
+<tr>
+<td>Grok, Antigravity, rejestr ACP</td>
+<td>wspólny adapter ACP <a class="cite" href="#src-7">[7]</a></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Persystencja</strong>
+- SQLite (<code>node:sqlite</code>, plik <code>statev2.sqlite</code>) z 61+ migracjami w jednym rejestrze <a class="cite" href="#src-10">[10]</a>.
+- Orkiestracja jest event-sourcingowa: czysty <code>Orchestrator</code> (11,6 tys. linii) zamienia komendy na zdarzenia. Zdarzenia, projekcje i efekty trafiają do jednej transakcji, a efekty uboczne wykonuje osobny worker <a class="cite" href="#src-2">[2]</a><a class="cite" href="#src-6">[6]</a>.
+- Każda tura kończy się checkpointem zapisanym jako ukryty ref gita <a class="cite" href="#src-2">[2]</a>.</p>
+<p><strong>Dokumentacja architektury</strong> jest obszerna i aktualna: 86 plików, w tym 9 dokumentów o Orchestration V2 (ok. 3,3 tys. linii) <a class="cite" href="#src-6">[6]</a>.</p>
+<h2 id="3-model-pojec-t3-code-a-model-workspace-pytanie-2">3. Model pojęć T3 Code a model Workspace (pytanie 2)</h2>
+<p>Najważniejsze założenie T3 Code: <strong>wątek należy do dokładnie jednego projektu i ma najwyżej jeden worktree i jedną gałąź</strong>.</p>
+<ul>
+<li>Katalog roboczy agenta to <code>thread.worktreePath ?? project.workspaceRoot</code> <a class="cite" href="#src-3">[3]</a><a class="cite" href="#src-4">[4]</a>.</li>
+<li>Projekt to jeden katalog (<code>workspaceRoot</code>) bez listy repozytoriów <a class="cite" href="#src-3">[3]</a>.</li>
+<li>Adapter Claude przekazuje jako <code>additionalDirectories</code> tylko <code>[cwd, attachmentsDir]</code> <a class="cite" href="#src-5">[5]</a>.</li>
+</ul>
+<p>Potwierdzają to trzy niezależne odczyty kodu oraz otwarta prośba społeczności o obsługę wielu repo. Dyskusja #7041 ma 62 głosy i nie ma odpowiedzi maintainera <a class="cite" href="#src-29">[29]</a>. PR #15752, który to częściowo dodaje, wisi bez recenzji <a class="cite" href="#src-30">[30]</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Pojęcie Workspace</th>
+<th>Odpowiednik w T3 Code</th>
+<th>Dopasowanie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Project (zbiór repo)</td>
+<td>Project = jeden katalog. Grupowanie po <code>repositoryIdentity</code> jest tylko w UI <a class="cite" href="#src-3">[3]</a></td>
+<td><strong>Kolizja.</strong> Zbiór repo trzeba zbudować jako nowy byt albo jako N projektów T3</td>
+</tr>
+<tr>
+<td>Repository / Branch</td>
+<td>Project + <code>RepositoryIdentity</code>; <code>thread.branch</code> <a class="cite" href="#src-3">[3]</a></td>
+<td><strong>~1:1</strong> (repo ≈ projekt T3)</td>
+</tr>
+<tr>
+<td>Workspace (katalog z <code>intent</code>, status, ponowne otwarcie)</td>
+<td>Brak. Najbliżej jest projekt z niegitowym katalogiem głównym albo wątek „scratch” <a class="cite" href="#src-16">[16]</a></td>
+<td><strong>Nowy byt</strong></td>
+</tr>
+<tr>
+<td>Worktree (kilka na repo w jednym Workspace)</td>
+<td>Atrybut wątku (<code>worktreePath</code>); strategie <code>worktree</code> / <code>existing_worktree</code> / <code>root</code>; współdzielone worktree są możliwe <a class="cite" href="#src-11">[11]</a><a class="cite" href="#src-16">[16]</a></td>
+<td><strong>Rozszerzenie.</strong> W T3 worktree należy do wątku, nie do Workspace</td>
+</tr>
+<tr>
+<td>Task (zależności bez cykli, kryteria akceptacji)</td>
+<td><code>delegate_task</code>, zadania zaplanowane, <code>todo_list</code> agenta. Nie ma żadnego modelu zależności ani kolejności merge'a <a class="cite" href="#src-8">[8]</a></td>
+<td><strong>Nowy byt</strong></td>
+</tr>
+<tr>
+<td>ChangeRequest</td>
+<td><code>thread.pullRequests[]</code> (linki, także między repo na tym samym hoście), <code>watch_pull_request</code>, stacki GitHuba w obrębie jednego repo; pakiet <code>source-control-gitlab</code> <a class="cite" href="#src-3">[3]</a><a class="cite" href="#src-8">[8]</a></td>
+<td><strong>Rozszerzenie.</strong> CR jest linkiem wątku, nie bytem; brak kolejności cross-repo</td>
+</tr>
+<tr>
+<td>Artifact (wersjonowany)</td>
+<td>Brak publicznego bytu</td>
+<td><strong>Nowy byt</strong></td>
+</tr>
+<tr>
+<td>Handoff (raport agenta)</td>
+<td><code>ContextHandoff</code> to przeniesienie kontekstu rozmowy przy zmianie dostawcy lub forku wątku <a class="cite" href="#src-13">[13]</a></td>
+<td><strong>Kolizja nazw.</strong> Inne znaczenie; Twój Handoff to nowy byt</td>
+</tr>
+<tr>
+<td>Agent (profil: prompt, dostawca, model)</td>
+<td>Instancja dostawcy (driver + konto) + <code>modelSelection</code>; brak promptu profilu <a class="cite" href="#src-7">[7]</a></td>
+<td><strong>Rozszerzenie</strong></td>
+</tr>
+<tr>
+<td>Session (zakres Workspace / Worktree)</td>
+<td><code>AppThread</code> + <code>ProviderSession</code> + <code>Run</code> <a class="cite" href="#src-3">[3]</a><a class="cite" href="#src-6">[6]</a></td>
+<td><strong>~1:1 dla zakresu Worktree.</strong> Zakres Workspace = wątek w projekcie z niegitowym katalogiem; działa, ale bez funkcji gita dla zagnieżdżonych repo <a class="cite" href="#src-31">[31]</a></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wniosek.</strong> Mechanika sesji T3 Code (wątek, sesja dostawcy, checkpointy, MCP) pasuje do Twojej warstwy <em>Session/Agent</em>. Rdzeń domeny Workspace nie ma odpowiedników i trzeba go napisać w każdej opcji: Workspace, Task z zależnościami, ChangeRequest jako byt, Artifact i Handoff. Dowody: wysoka pewność, kod upstreamu plus issues.</p>
+<h2 id="4-wykonalnosc-wymagan-v1-w-forku-pytanie-3">4. Wykonalność wymagań v1 w forku (pytanie 3)</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Wymaganie</th>
+<th>Ocena w forku</th>
+<th>Uzasadnienie i punkt rozszerzenia</th>
+<th>Źródła</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Aplikacja desktopowa</td>
+<td><strong>Łatwo</strong> (z zastrzeżeniem)</td>
+<td>Electron, podpisane instalatory Windows, <code>winget</code>. Windows nie jest objęty CI blokującym scalenie („nothing in the suite passes on Windows yet”), a błąd #14990 (usunięcie worktree podąża za junction i kasuje pliki) jest otwarty</td>
+<td><a class="cite" href="#src-33">[33]</a><a class="cite" href="#src-34">[34]</a></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Sesje w zakresie Workspace i Worktree</td>
+<td><strong>Worktree: łatwo. Workspace: średnio-trudno</strong></td>
+<td>Wątek w niegitowym katalogu działa, ale funkcje gita nie widzą zagnieżdżonych repo (#12902, #10553). Pełna obsługa wielu repo wymaga zmian w skali PR #15752 (ok. 2,2 tys. linii, 54 pliki, tylko repo wewnątrz katalogu projektu). Zmiana założenia „wątek = jeden cwd” dotyka 86 plików serwera i pakietów oraz 68 plików web. Tańszy hook: <code>additionalDirectories</code> w adapterach</td>
+<td><a class="cite" href="#src-5">[5]</a><a class="cite" href="#src-22">[22]</a><a class="cite" href="#src-30">[30]</a><a class="cite" href="#src-31">[31]</a></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Agenci czytają i zmieniają stan przez CLI/MCP, GUI go pokazuje</td>
+<td><strong>Łatwo (najlepsze dopasowanie)</strong></td>
+<td>T3 wstrzykuje własny <code>/mcp</code> (ok. 80 narzędzi w 11 toolkitach) do sesji każdego dostawcy, z tokenem ograniczonym do sesji. Własny toolkit to ok. 3 nowe pliki + 1 linia rejestracji. CLI <code>t3</code> nie ma komend wątków ani zadań. Nie ma systemu pluginów: toolkity są wkompilowane w źródło</td>
+<td><a class="cite" href="#src-8">[8]</a><a class="cite" href="#src-9">[9]</a><a class="cite" href="#src-16">[16]</a></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Taski z zależnościami i kolejność merge'a CR w wielu repo</td>
+<td><strong>Średnio-trudno</strong></td>
+<td>Brak modelu zależności (grep <code>dependsOn</code>/<code>mergeOrder</code> = 0 trafień). Wzorzec nowej funkcji domenowej (commit „guided reviews”) to ok. 50 plików: migracja, persystencja, kontrakt, RPC, client-runtime, web, toolkit MCP. Migracje forka muszą iść osobnym rejestrem</td>
+<td><a class="cite" href="#src-10">[10]</a><a class="cite" href="#src-21">[21]</a><a class="cite" href="#src-69">[69]</a></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Kilka repo i kilka worktree tego samego repo w jednym Workspace</td>
+<td><strong>Łatwo-średnio</strong></td>
+<td>Wiele worktree jednego repo działa (strategie <code>worktree</code> / <code>existing_worktree</code>, współdzielenie). Brakuje bytu grupującego, który wraca do wymagania 2</td>
+<td><a class="cite" href="#src-11">[11]</a><a class="cite" href="#src-16">[16]</a></td>
+</tr>
+<tr>
+<td>6</td>
+<td>Integracja z Claude Code i OpenCode</td>
+<td><strong>Łatwo, OpenCode z otwartymi błędami</strong></td>
+<td>Adapter Claude jest dojrzały (9,3 tys. linii). OpenCode działa, ale ma otwarte błędy utraty narzędzi MCP T3 (#16141, #16768, #15736, #10485) i wyścigów o współdzieloną bazę (#9065, #17806)</td>
+<td><a class="cite" href="#src-5">[5]</a><a class="cite" href="#src-32">[32]</a><a class="cite" href="#src-75">[75]</a></td>
+</tr>
+<tr>
+<td>7</td>
+<td>Stan przeżywa zmianę sesji i dostawcy</td>
+<td><strong>Łatwo dla rozmowy; Twój stan domenowy i tak jest nowy</strong></td>
+<td>Przełączanie dostawcy w wątku jest wbudowane (wznowienie z deltą albo przekazanie kontekstu (ContextHandoff) z budżetem). Uwaga: wymaganie 7 dotyczy stanu <em>pracy</em> (Taski, Artefakty, Handoffy), a ten trzeba napisać</td>
+<td><a class="cite" href="#src-13">[13]</a></td>
+</tr>
+<tr>
+<td>8</td>
+<td>Tryb serwera, telefon, przeglądarka</td>
+<td><strong>Łatwo</strong></td>
+<td>Gotowe: aplikacja mobilna, web, parowanie w sieci LAN, Tailscale, SSH, T3 Connect. T3 Connect zależy od hostowanego relaya (Cloudflare + Clerk), więc fork musi go postawić u siebie albo używać Tailscale</td>
+<td><a class="cite" href="#src-12">[12]</a></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Ogólnie.</strong> Fork daje za darmo wymagania 1, 3, 6, 7 i 8, czyli warstwę wykonawczą. Wymagania 2, 4 i 5 to Twój wyróżnik i w forku są średnio-trudne. Dochodzi koszt utrzymania (rozdz. 6) i norma upstreamu, że każda funkcja ma działać na webie, desktopie i mobile <a class="cite" href="#src-1">[1]</a>.</p>
+<h2 id="5-licencja-i-zasady-pytanie-4">5. Licencja i zasady (pytanie 4)</h2>
+<ul>
+<li><strong>Licencja:</strong> MIT, „Copyright (c) 2026 T3 Tools Inc.” <a class="cite" href="#src-18">[18]</a><a class="cite" href="#src-24">[24]</a>. Bez dodatkowych ograniczeń forkowania i dystrybucji poza zachowaniem informacji o licencji. Zależności natywne (libghostty-vt, fonty, dźwięki) są na MIT, Apache-2.0 lub CC0. Build generuje noty licencyjne i przerywa się, jeśli którejś brakuje <a class="cite" href="#src-21">[21]</a>.</li>
+<li><strong>Marka:</strong> w repo nie ma pliku TRADEMARK ani NOTICE i nie ma polityki nazwy czy logo. Rejestru znaków towarowych nie sprawdzono, więc to dowód z braku dowodu. Forki publiczne zmieniają nazwę, app id i schemat URL, żeby instalować się obok oryginału <a class="cite" href="#src-25">[25]</a>.</li>
+<li><strong>Stanowisko autorów wobec forków</strong> (cytaty):</li>
+<li>README: „If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.” <a class="cite" href="#src-19">[19]</a></li>
+<li>AGENTS.md: „A large number of our users run forks.” <a class="cite" href="#src-1">[1]</a></li>
+<li><strong>Kontrybucje z zewnątrz:</strong> „We are not actively seeking outside contributions and have limited review capacity.” <a class="cite" href="#src-20">[20]</a> Mimo to ok. 36% PR-ów scalonych w ostatnich 30 dniach pochodziło spoza listy maintainerów <a class="cite" href="#src-24">[24]</a>. To przybliżenie z API wyszukiwania, pewność średnia.</li>
+<li><strong>Dla forka z bazą danych:</strong> „There is no safe id range for a fork inside this ledger … fork schema changes belong in a separate migration table or outside the migrator entirely.” <a class="cite" href="#src-21">[21]</a> Mechanizm istnieje: <code>Migrator.make({ table })</code> w Effect <a class="cite" href="#src-76">[76]</a>. Precedens: TrogonStack prowadził osobny rejestr migracji przez 2 miesiące <a class="cite" href="#src-70">[70]</a>.</li>
+</ul>
+<p><strong>Ryzyko licencyjne: niskie.</strong> Ryzyka organizacyjne opisuje rozdz. 7.</p>
+<h2 id="6-koszt-utrzymania-forka-pytanie-5">6. Koszt utrzymania forka (pytanie 5)</h2>
+<p><strong>Tempo upstreamu</strong> (git na klonie, pomiar z 2026-10-12) <a class="cite" href="#src-22">[22]</a>:</p>
+<table>
+<thead>
+<tr>
+<th>Okres</th>
+<th>Wartość</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wrzesień 2026</td>
+<td>1 595 commitów</td>
+</tr>
+<tr>
+<td>1–12 października</td>
+<td>866 commitów</td>
+</tr>
+<tr>
+<td>Po przepisaniu orkiestratora</td>
+<td>ok. 80 commitów dziennie</td>
+</tr>
+<tr>
+<td>Autorzy</td>
+<td>ponad 125 różnych autorów miesięcznie</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Ok. połowa commitów ma współautora-agenta AI.</li>
+<li>Jedna osoba (Julius Marminge) zrobiła ok. 38–47% commitów, zależnie od okna czasowego.</li>
+<li>Wydania: 2–4 nightly dziennie i ok. 6 wersji stabilnych miesięcznie. Wciąż 0.0.x, bez obietnicy stabilności API <a class="cite" href="#src-19">[19]</a><a class="cite" href="#src-22">[22]</a>.</li>
+</ul>
+<p><strong>Stabilność wewnętrznych API: niska.</strong>
+- 2026-10-02 wszedł PR #2829 (+380K/−204K linii, 1 907 plików) z nowym orkiestratorem, nowym plikiem bazy i protokołem v2 <a class="cite" href="#src-23">[23]</a>.
+- <span class="badge disputed">Korekta po weryfikacji</span> przepisanie <em>zachowało dane użytkowników</em> (importer V1→V2). Zgodność zerwał protokół klient–serwer (aplikacja mobilna ze sklepu nie łączy się z nowym serwerem <a class="cite" href="#src-72">[72]</a>) oraz wewnętrzne API.
+- Dokumentacja V2, jako opis architektury docelowej, wprost deklaruje: „intentionally ignores migration/backward compatibility” <a class="cite" href="#src-6">[6]</a>.
+- W tygodniu po przepisaniu wydzielono providery i source-control do nowych pakietów <a class="cite" href="#src-22">[22]</a>.</p>
+<p><strong>Częstotliwość zmian w plikach, w które fork wpina hooki</strong> (30 dni) <a class="cite" href="#src-22">[22]</a>:</p>
+<table>
+<thead>
+<tr>
+<th>Plik</th>
+<th>Commity / zmiany</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ws.ts</code></td>
+<td>81 commitów, 2 prawie całkowite przepisania</td>
+</tr>
+<tr>
+<td><code>Sidebar.tsx</code></td>
+<td>60</td>
+</tr>
+<tr>
+<td><code>ClaudeAdapterV2.ts</code></td>
+<td>41 w 10 dni istnienia</td>
+</tr>
+<tr>
+<td><code>rpc.ts</code></td>
+<td>29</td>
+</tr>
+<tr>
+<td><code>RpcAuthorization.ts</code></td>
+<td>35</td>
+</tr>
+</tbody>
+</table>
+<p>Spokojne pozostały tylko <code>orchestrationProject.ts</code>, <code>RuntimePolicy.ts</code> i <code>Sqlite.ts</code>.</p>
+<p><strong>Jak radzą sobie realne forki:</strong></p>
+<ul>
+<li><strong>7 162 forki</strong>; większość jest setki lub tysiące commitów z tyłu <a class="cite" href="#src-24">[24]</a><a class="cite" href="#src-25">[25]</a>.</li>
+<li><strong>travisjneuman.</strong> Kod forka w 182 własnych plikach, hooki w 86 plikach upstreamu (ok. 186 linii). 48 synchronizacji w 30 dni, z czego ok. 6–8 commitów naprawczych i 2 zapisane konflikty. Synchronizację automatyzuje agent co 30 minut. Fork ma też kontrolę liczby markerów, bo hook potrafi „zniknąć” w czystym merge'u <a class="cite" href="#src-28">[28]</a>.</li>
+<li><strong>TrogonStack.</strong> 20 PR-ów synchronizacji w 30 dni. Przy przepisaniu porzucił ok. 6 funkcji forka zamiast je portować; część z nich upstream zastąpił własnymi <a class="cite" href="#src-26">[26]</a>.</li>
+<li><strong>aaditagrawal.</strong> Mały fork (27 gwiazdek) zarchiwizowany 2026-10-09, bo „Upstream T3 Code now ships everything this fork added” <a class="cite" href="#src-27">[27]</a>. <span class="badge disputed">Korekta po weryfikacji</span> to nie jest przykład porażki z powodu częstych zmian upstreamu, tylko wchłonięcia funkcji przez upstream.</li>
+</ul>
+<p><strong>Luka w dowodach.</strong> Żaden fork nie publikuje godzin poświęcanych na synchronizację. Koszt widać tylko przez częstotliwość i naprawy. Oba dobrze utrzymane forki opierają się na automatyzacji agentami.</p>
+<p><strong>Wniosek.</strong> Utrzymanie forka z własną domeną oznacza w praktyce synchronizację kilka razy w tygodniu, z ryzykiem utraty funkcji przy każdym przepisaniu. Alternatywa „zamrozić fork” odcina od poprawek adapterów, które zmieniają się najszybciej (adapter Claude: ok. 4 commity dziennie <a class="cite" href="#src-22">[22]</a>). Recenzja zewnętrzna wskazuje właśnie utrzymanie poprawności adapterów jako najtrudniejszą część <a class="cite" href="#src-38">[38]</a>.</p>
+<h2 id="7-dojrzaosc-i-ryzyka-pytanie-6">7. Dojrzałość i ryzyka (pytanie 6)</h2>
+<p><strong>Jakość</strong>
+- Ok. 1 790 własnych plików testów (plus kod zewnętrznych repo dołączony do T3 Code) <a class="cite" href="#src-22">[22]</a>.
+- CI na Linuksie: lint, knip, typecheck, build desktopu, testy shardowane z budżetem wydajności, smoke release <a class="cite" href="#src-33">[33]</a>.
+- Własne reguły oxlint. Kategorie poprawności lintera mają poziom „warn” <a class="cite" href="#src-33">[33]</a>.
+- Windows poza CI blokującym scalenie <a class="cite" href="#src-33">[33]</a>.</p>
+<p><strong>Issues</strong> <a class="cite" href="#src-24">[24]</a>:
+- 1 327 otwartych (804 z etykietą bug), 1 383 otwartych PR-ów, 1 711 nowych issues w 30 dni.
+- Triage jest w dużej mierze robiony przez AI („Grok responding on behalf of Julius”) <a class="cite" href="#src-34">[34]</a>.</p>
+<p><strong>Otwarte błędy istotne dla Ciebie:</strong>
+- utrata danych na Windows przy usuwaniu worktree (#14990; PR naprawczy #17076 ma CHANGES_REQUESTED) <a class="cite" href="#src-34">[34]</a>;
+- uszkodzenie SQLite po twardym wyłączeniu na macOS (#13544) <a class="cite" href="#src-35">[35]</a>;
+- regresje stanu po wdrożeniu V2 (#15017, #15001, #10517) <a class="cite" href="#src-36">[36]</a>;
+- błędy MCP w OpenCode <a class="cite" href="#src-32">[32]</a>.</p>
+<p><strong>Koncentracja i model biznesowy</strong>
+- Top-3 autorów robi ok. 61% commitów <a class="cite" href="#src-22">[22]</a>.
+- Brak strony cennika. T3 Connect używa hostowanej infrastruktury <a class="cite" href="#src-12">[12]</a>.
+- Wypowiedź Theo, że nie będzie płatnego planu, potwierdza tylko źródło wtórne. <strong>Niezweryfikowane.</strong></p>
+<p><strong>Odbiór zewnętrzny</strong>
+- Pozytywny, ale cienki: „genuinely pleasant to use day to day” <a class="cite" href="#src-37">[37]</a>; „expect bugs, unfinished edges, and frequent changes” <a class="cite" href="#src-38">[38]</a>.
+- Na HN tylko pojedyncze komentarze <a class="cite" href="#src-39">[39]</a>.
+- <span class="badge low">Dowody cienkie</span> nie znaleziono wątków retrospektywnych z ruchem ani relacji z YouTube czy X.</p>
+<p><strong>Ryzyko porzucenia: niskie w horyzoncie roku.</strong> Projekt jest bardzo aktywny (27 tys. gwiazdek, firma za nim). Większe ryzyko to <strong>kierunek</strong>: upstream może dodać multi-repo albo zadania na swój sposób. Dla forka oznacza to konflikt koncepcji przy kolejnej synchronizacji. W opcji C nowych narzędzi T3 można po prostu zacząć używać.</p>
+<h2 id="8-budowa-od-zera-zakres-i-gotowe-klocki-pytanie-7">8. Budowa od zera: zakres i gotowe klocki (pytanie 7)</h2>
+<p><strong>Co T3 Code daje gotowe, czego w B nie ma:</strong>
+- strumień wiadomości i strukturalne UI rozmowy (diffy, zatwierdzenia, plan);
+- checkpointy i cofanie;
+- przełączanie dostawcy w wątku;
+- dojrzałe adaptery sześciu dostawców;
+- tryb zdalny i aplikacja mobilna;
+- pakowanie i podpisy na trzy systemy;
+- terminal (libghostty) <a class="cite" href="#src-1">[1]</a><a class="cite" href="#src-7">[7]</a><a class="cite" href="#src-12">[12]</a><a class="cite" href="#src-13">[13]</a>.</p>
+<p><strong>Co i tak trzeba napisać w każdej opcji (A, B i C):</strong>
+- Workspace, Task z zależnościami i wyliczaniem kolejności merge'a, ChangeRequest (CR) jako byt, Artifact z wersjami, Handoff, profil Agenta;
+- narzędzia MCP do tego wszystkiego;
+- widoki GUI zbudowane wokół Tasków, worktree i CR.</p>
+<p>To jest Twój wyróżnik i jednocześnie większość pracy nad v1.</p>
+<p><strong>Gotowe klocki dla B (stan na 2026-10):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Warstwa</th>
+<th>Klocek</th>
+<th>Uwagi</th>
+<th>Źródła</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sesje Claude (strukturalnie)</td>
+<td>Claude Agent SDK TS 0.3.296</td>
+<td>Wznawianie i fork sesji, <code>cwd</code> + <code>additionalDirectories</code>, <code>canUseTool</code>, hooki, MCP w procesie, <code>claude.exe</code> dla Windows. Otwarte błędy na Windows (#444, #359)</td>
+<td><a class="cite" href="#src-40">[40]</a><a class="cite" href="#src-45">[45]</a></td>
+</tr>
+<tr>
+<td>Sesje Claude (terminal-first)</td>
+<td>Niezmodyfikowane <code>claude</code> w PTY</td>
+<td>Per sesję: <code>--mcp-config</code>, <code>--strict-mcp-config</code>, <code>--add-dir</code>, <code>--session-id</code>, <code>--settings</code>, <code>--plugin-dir</code>, <code>--append-system-prompt-file</code>. 33 zdarzenia hooków (np. <code>Stop</code>, <code>PermissionRequest</code>, <code>Notification</code> z <code>notification_type</code>), typy hooków command/http</td>
+<td><a class="cite" href="#src-61">[61]</a><a class="cite" href="#src-62">[62]</a></td>
+</tr>
+<tr>
+<td>Sesje OpenCode</td>
+<td><code>opencode serve</code> / TUI z serwerem + SDK 1.19.0; SDK 2.x w procesie (istnieje od ok. 6 tygodni)</td>
+<td>Konfiguracja per sesję przez <code>OPENCODE_CONFIG_CONTENT</code> (scalana z konfiguracją użytkownika). Zdarzenia przez SSE <code>/event</code> lub pluginy (<code>session.status</code>, <code>session.idle</code>, <code>permission.asked</code>). Trwa przejście na v2</td>
+<td><a class="cite" href="#src-46">[46]</a><a class="cite" href="#src-47">[47]</a><a class="cite" href="#src-63">[63]</a><a class="cite" href="#src-64">[64]</a></td>
+</tr>
+<tr>
+<td>Protokół wspólny</td>
+<td>ACP 1.25.0, <code>@agentclientprotocol/sdk</code> 1.8.0</td>
+<td><code>opencode acp</code> wbudowany; Claude przez adapter <code>claude-agent-acp</code> (rozszerzenia <code>_meta</code> JetBrains); <code>session/fork</code> niestabilny</td>
+<td><a class="cite" href="#src-48">[48]</a><a class="cite" href="#src-49">[49]</a></td>
+</tr>
+<tr>
+<td>Serwer MCP w aplikacji</td>
+<td><code>@modelcontextprotocol/server</code> 2.3.1 (linia stabilna v2)</td>
+<td>stdio i Streamable HTTP</td>
+<td><a class="cite" href="#src-50">[50]</a></td>
+</tr>
+<tr>
+<td>Terminal</td>
+<td>node-pty 1.1.0 (ConPTY) + xterm.js 6</td>
+<td>Moduł natywny przebudowywany pod ABI Electrona. Znane problemy ConPTY: kolejność sekwencji, resize, Shift+Enter</td>
+<td><a class="cite" href="#src-51">[51]</a><a class="cite" href="#src-67">[67]</a><a class="cite" href="#src-68">[68]</a></td>
+</tr>
+<tr>
+<td>Powłoka desktopowa</td>
+<td>Electron (Node w procesie) vs Tauri 2 (Node tylko jako sidecar)</td>
+<td>Dla tej klasy aplikacji Electron jest prostszy</td>
+<td><a class="cite" href="#src-52">[52]</a><a class="cite" href="#src-53">[53]</a></td>
+</tr>
+<tr>
+<td>Worktree</td>
+<td>wywołania <code>git</code></td>
+<td>Biblioteki (simple-git, isomorphic-git) nie mają API worktree. Emdash dodaje retry, walidację ścieżek i rollback</td>
+<td><a class="cite" href="#src-53">[53]</a></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Warunki Anthropic.</strong>
+- Twórcy aplikacji zewnętrznych nie mogą oferować logowania claude.ai. Produkty na Agent SDK mają używać kluczy API.
+- Użytkownik <em>może</em> zalogować się do <strong>niezmodyfikowanego</strong> binarnego Claude Code własną subskrypcją <a class="cite" href="#src-41">[41]</a>.
+- Potwierdzają to niezależnie <a class="cite" href="#src-42">[42]</a> i <a class="cite" href="#src-43">[43]</a>; ten drugi opisuje egzekwowanie i działania prawne wobec OpenCode w 2026.
+- Korekta rozliczeń: planowaną zmianę rozliczania Agent SDK wstrzymano. Na 2026-10-07 użycie SDK, <code>claude -p</code> i aplikacji zewnętrznych liczy się do limitów subskrypcji <a class="cite" href="#src-44">[44]</a>.
+- Dla narzędzia osobistego <strong>ścieżka przez CLI jest wprost dozwolona</strong>.
+- SDK z własną subskrypcją w narzędziu, które sam piszesz i którego sam używasz lokalnie, <strong>wygląda na wspierane</strong>. Za tym przemawiają: artykuł Anthropic „Use the Claude Agent SDK with your Claude plan” <a class="cite" href="#src-44">[44]</a> oraz cytat pracownika Anthropic zachęcający do „local development and experimentation with the Agent SDK” <a class="cite" href="#src-42">[42]</a>. Zakaz z <a class="cite" href="#src-40">[40]</a><a class="cite" href="#src-41">[41]</a> dotyczy twórców, którzy <em>oferują</em> logowanie claude.ai w swoich produktach. To interpretacja: Anthropic nie wypowiedział się jednoznacznie o osobistych narzędziach. Pewność średnia.
+- T3 Code korzysta z lokalnie zalogowanego Claude Code przez SDK <a class="cite" href="#src-74">[74]</a>.</p>
+<p><strong>Realny zakres B (terminal-first).</strong> Elementy:
+- powłoka Electron;
+- menedżer procesów PTY;
+- hooki statusu dla Claude i plugin lub SSE dla OpenCode;
+- operacje git worktree;
+- SQLite i serwer MCP;
+- GUI domeny.</p>
+<p>Wcześniejsze projekty tego typu:
+- Superset i Emdash produkcyjnie stosują wzorzec PTY + hooki <a class="cite" href="#src-53">[53]</a><a class="cite" href="#src-65">[65]</a>.
+- Crystal: v0.1 w 7 dni od utworzenia repo, jeden autor robił 92% commitów; projekt wycofany po ok. 9 miesiącach <a class="cite" href="#src-54">[54]</a>.</p>
+<p><strong>Brak danych o godzinach:</strong> nie znaleziono żadnej retrospektywy z liczbami. Ceną wariantu terminal-first jest brak strukturalnych diffów i zatwierdzeń dla Claude, chyba że parsuje się transkrypt (<code>transcript_path</code> jest w każdym hooku) <a class="cite" href="#src-62">[62]</a>. Wymagania v1 tego nie obejmują.</p>
+<h2 id="9-trzecia-droga-c-sidecar-na-niezmodyfikowanym-t3-code">9. Trzecia droga C: sidecar na niezmodyfikowanym T3 Code</h2>
+<p>Runda 2 sprawdziła w kodzie, że osobna aplikacja może sterować T3 Code przez udokumentowany <code>/mcp</code> jako „outside agent” <a class="cite" href="#src-14">[14]</a><a class="cite" href="#src-15">[15]</a><a class="cite" href="#src-16">[16]</a>. <strong>Ocena: wykonalne, z lukami.</strong></p>
+<p><strong>Co działa:</strong>
+- <code>t3_project_create</code> dla dowolnego katalogu, także niegitowego. Dla takiego katalogu checkpointy są pomijane <a class="cite" href="#src-16">[16]</a>.
+- <code>t3_thread_launch</code> przyjmuje projekt, instancję dostawcy i model, pierwszy prompt oraz <code>existing_worktree</code>. Worktree może leżeć w dowolnym miejscu, pod warunkiem że jest w <code>git worktree list</code> repo projektu <a class="cite" href="#src-16">[16]</a>. Opiera się to na jednym odczycie kodu i wymaga potwierdzenia w spike'u.
+- <code>t3_thread_read</code>, <code>t3_thread_wait</code>, <code>t3_thread_send</code> (tryby auto/queue/steer/restart), <code>t3_thread_interrupt</code>, a także <code>t3_pending_request_*</code>, czyli zatwierdzenia <a class="cite" href="#src-16">[16]</a>.
+- Deep link <code>t3code://threads/&lt;env&gt;/&lt;thread&gt;</code> otwiera wątek w GUI; <code>t3 app &lt;path&gt;</code> otwiera projekt <a class="cite" href="#src-17">[17]</a>.
+- Własny serwer MCP aplikacji trafia do agentów przez ich natywną konfigurację. OpenCode zachowuje konfigurację użytkownika (potwierdzone w kodzie). W Claude, według zgłoszenia użytkownika, działają serwery z <code>~/.claude.json</code> <a class="cite" href="#src-73">[73]</a>. Projektowy <code>.mcp.json</code> w sesjach T3 jest <strong>niezweryfikowany</strong>.</p>
+<p><strong>Luki:</strong>
+1. <strong>Logowanie.</strong> Tylko OAuth z PKCE, bez refresh tokena, sesja ważna 30 dni. Każde logowanie zatwierdzasz kodem parowania. Tworzenie projektów wymaga uprawnień full-access <a class="cite" href="#src-15">[15]</a>. Czy <code>t3 auth session issue</code> daje długoterminowy token honorowany przez <code>/mcp</code>, jest <strong>niezweryfikowane</strong>.
+2. <strong>Interfejs jest nowy i bez wersji.</strong> Narzędzia wątków i projektów powstały 2026-10-02, OAuth dla zewnętrznych agentów 2026-10-06. Było 57 commitów w toolkitach w 60 dni. Serwer MCP raportuje jedynie wersję aplikacji <a class="cite" href="#src-9">[9]</a><a class="cite" href="#src-22">[22]</a>.
+3. <strong>Dwa GUI.</strong> Rozmowa z agentem toczy się w T3, a stan domeny w Twojej aplikacji. Spina je deep link.
+4. <strong>Model.</strong> Jeden projekt T3 to jeden katalog, więc Workspace obejmujący kilka repo staje się jednym projektem T3 na każde repo, plus projektem dla katalogu Workspace. Ktoś, kto budował zewnętrzną aplikację do wybierania pracy, trafił na to samo: każdy wątek wymaga projektu, a wątki pomocnicze zaśmiecają listę wątków repo <a class="cite" href="#src-86">[86]</a>.</p>
+<p><strong>Luki znalezione przez red team 2</strong> (rozdz. 13):</p>
+<ol start="5">
+<li><strong>Interfejs istnieje tylko w nightly.</strong>
+   - OAuth dla zewnętrznych agentów wszedł 2026-10-06, a ostatnie stabilne wydanie to v0.0.45 z 2026-10-02 <a class="cite" href="#src-88">[88]</a>.
+   - Klient OAuth, który nie wysyłał nagłówka <code>MCP-Protocol-Version</code>, dostawał 400 na wywołania narzędzi. Serwer akceptuje tylko jedną wersję protokołu. Naprawiono to 2026-10-09 <a class="cite" href="#src-89">[89]</a>. Pokazuje to kruchość interfejsu, nie jego stałą awarię.
+   - <code>t3_thread_launch</code> nie ma klucza ponowienia; PR dodający go jest otwarty <a class="cite" href="#src-91">[91]</a>.
+   - Deep linki <code>t3code://</code> nie działały na desktopie od 0.0.38 aż do 2026-10-12 <a class="cite" href="#src-87">[87]</a>.</li>
+<li><strong>Ryzyko utraty danych.</strong> Okno usuwania wątku w GUI T3 proponuje usunięcie <em>dowolnego</em> worktree wątku, także dołączonego przez <code>existing_worktree</code>. Nie sprawdza, czy worktree leży w katalogu zarządzanym przez T3 <a class="cite" href="#src-90">[90]</a>. Na Windows usuwanie worktree podąża za junction i kasuje ich cele (#14990) <a class="cite" href="#src-34">[34]</a>. Automatyczny cleanup T3 omija worktree spoza swojego katalogu <a class="cite" href="#src-90">[90]</a>.</li>
+<li><strong>Kierunek upstreamu.</strong> Upstream buduje system pluginów: 19 PR-ów w recenzji, narzędzia pluginów przez MCP, panele, zatwierdzenia <a class="cite" href="#src-81">[81]</a>. Starszy RFC opisywał integrację jako „Twoja aplikacja renderuje się wewnątrz T3” <a class="cite" href="#src-92">[92]</a>. Sidecar celuje więc w interfejs, w który upstream inwestuje mniej.</li>
+</ol>
+<h2 id="10-alternatywy-pytanie-8">10. Alternatywy (pytanie 8)</h2>
+<p>Żaden inny otwarty projekt nie jest wyraźnie lepszą bazą do forka.</p>
+<table>
+<thead>
+<tr>
+<th>Projekt</th>
+<th>Licencja</th>
+<th>Windows</th>
+<th>Multi-repo</th>
+<th>Stan aplikacji dla agentów</th>
+<th>Werdykt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vibe Kanban</td>
+<td>Apache-2.0</td>
+<td>Prawdopodobnie</td>
+<td><strong>Tak</strong></td>
+<td><strong>Tak</strong> (lokalny MCP)</td>
+<td>Najlepsze dopasowanie funkcji, ale firma zamknięta 2026-04-10, ostatni release 2026-04-24, brak roadmapy społeczności. Stack: Rust + TS web <a class="cite" href="#src-55">[55]</a><a class="cite" href="#src-56">[56]</a></td>
+</tr>
+<tr>
+<td>Pane</td>
+<td>AGPL-3.0</td>
+<td>Tak</td>
+<td>Repo w Workspace, ale „1 feature = 1 worktree”</td>
+<td>Tak (CLI <code>runpane</code> + MCP)</td>
+<td>Aktywny, ale copyleft i bez zadań obejmujących kilka repo <a class="cite" href="#src-57">[57]</a></td>
+</tr>
+<tr>
+<td>Emdash</td>
+<td>Apache-2.0</td>
+<td>Tak</td>
+<td>Nie</td>
+<td>Nie</td>
+<td>Dobre źródło wzorców (PTY, worktree), nie baza <a class="cite" href="#src-53">[53]</a></td>
+</tr>
+<tr>
+<td>Superset</td>
+<td>ELv2 (nie OSI)</td>
+<td><strong>Nie</strong></td>
+<td>—</td>
+<td>Tak</td>
+<td>Odpada <a class="cite" href="#src-58">[58]</a></td>
+</tr>
+<tr>
+<td>Conductor</td>
+<td>zamknięty</td>
+<td><strong>Nie</strong> (macOS)</td>
+<td>—</td>
+<td>—</td>
+<td>Odpada <a class="cite" href="#src-60">[60]</a></td>
+</tr>
+<tr>
+<td>ivar</td>
+<td>Apache-2.0</td>
+<td><strong>Nie</strong></td>
+<td><strong>Tak</strong> (rdzeń idei)</td>
+<td>CLI</td>
+<td>Odpada jako baza; dobry wzorzec modelu „View Dir” <a class="cite" href="#src-59">[59]</a></td>
+</tr>
+</tbody>
+</table>
+<p>Vibe Kanban warto potraktować jako <strong>wzorzec projektowy</strong> dla multi-repo i MCP, nie jako bazę.</p>
+<h2 id="11-wazona-macierz-decyzyjna">11. Ważona macierz decyzyjna</h2><figure class="chart"><svg viewBox="0 0 650 188" role="img" aria-label="Wynik ważony opcji (skala 0–5)"><line x1="230.0" y1="6" x2="230.0" y2="154" class="grid"/><text x="230.0" y="168" text-anchor="middle" class="tick">0</text><line x1="302.0" y1="6" x2="302.0" y2="154" class="grid"/><text x="302.0" y="168" text-anchor="middle" class="tick">1</text><line x1="374.0" y1="6" x2="374.0" y2="154" class="grid"/><text x="374.0" y="168" text-anchor="middle" class="tick">2</text><line x1="446.0" y1="6" x2="446.0" y2="154" class="grid"/><text x="446.0" y="168" text-anchor="middle" class="tick">3</text><line x1="518.0" y1="6" x2="518.0" y2="154" class="grid"/><text x="518.0" y="168" text-anchor="middle" class="tick">4</text><line x1="590.0" y1="6" x2="590.0" y2="154" class="grid"/><text x="590.0" y="168" text-anchor="middle" class="tick">5</text><text x="222" y="28" text-anchor="end" class="lbl">B2: od zera, host strukturalny</text><rect x="230" y="10" width="261.4" height="26" rx="4" class="bar top"/><text x="497.4" y="28" class="val">3.63</text><text x="222" y="64" text-anchor="end" class="lbl">B1: od zera, PTY</text><rect x="230" y="46" width="252.0" height="26" rx="4" class="bar"/><text x="488.0" y="64" class="val">3.50</text><text x="222" y="100" text-anchor="end" class="lbl">C: sidecar na T3</text><rect x="230" y="82" width="225.4" height="26" rx="4" class="bar"/><text x="461.4" y="100" class="val">3.13</text><text x="222" y="136" text-anchor="end" class="lbl">A: fork T3 Code</text><rect x="230" y="118" width="180.0" height="26" rx="4" class="bar"/><text x="416.0" y="136" class="val">2.50</text><text x="410.0" y="184" text-anchor="middle" class="tick">wynik ważony (0–5)</text></svg><figcaption>Wynik ważony według Twoich wag (rozdz. 11). Oceny to osąd z dowodów, nie pomiar.</figcaption></figure>
+<p>Skala 1–5 (5 = najlepiej). Oceny to <strong>mój osąd na podstawie dowodów</strong> z rozdziałów 2–10 i dwóch przebiegów red teamu (rozdz. 13), a nie pomiar. Macierz jest po to, żebyś mógł zmienić wagi i sprawdzić, czy werdykt się utrzyma.</p>
+<p>Warianty B1 i B2 definiuje rozdz. 1.</p>
+<table>
+<thead>
+<tr>
+<th>Kryterium (waga)</th>
+<th>A: fork T3 Code</th>
+<th>B1: od zera, PTY</th>
+<th>B2: od zera, host strukturalny</th>
+<th>C: sidecar na T3 Code</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dopasowanie domeny i wymagań v1 (30)</td>
+<td><strong>3.</strong> Warstwa sesji, MCP, worktree i tryb zdalny są gotowe; rdzeń domeny trzeba dopisać; zakres Workspace koliduje z „wątek = jeden cwd” <a class="cite" href="#src-3">[3]</a><a class="cite" href="#src-22">[22]</a><a class="cite" href="#src-30">[30]</a></td>
+<td><strong>4.</strong> Domena w 100%; sesje PTY na Windows ucinają wejście, a detekcja stanu jest zawodna <a class="cite" href="#src-77">[77]</a><a class="cite" href="#src-79">[79]</a><a class="cite" href="#src-80">[80]</a></td>
+<td><strong>4,5.</strong> Domena w 100%; zdarzenia i zatwierdzenia strukturalne <a class="cite" href="#src-40">[40]</a><a class="cite" href="#src-46">[46]</a>; otwarte błędy SDK na Windows <a class="cite" href="#src-45">[45]</a></td>
+<td><strong>3.</strong> Domena Twoja, ale dwa GUI, deep linki naprawione dopiero 2026-10-12, projekt T3 wymagany dla każdego wątku <a class="cite" href="#src-16">[16]</a><a class="cite" href="#src-86">[86]</a><a class="cite" href="#src-87">[87]</a></td>
+</tr>
+<tr>
+<td>Kontrola nad architekturą (20)</td>
+<td><strong>1.</strong> Effect-TS importowany w 67–99% plików, event sourcing upstreamu, wewnętrzne API bez wersji <a class="cite" href="#src-1">[1]</a><a class="cite" href="#src-6">[6]</a><a class="cite" href="#src-22">[22]</a></td>
+<td><strong>5</strong></td>
+<td><strong>5</strong></td>
+<td><strong>4.</strong> Domena pełna; host sesji poza kontrolą, ale wymienny</td>
+</tr>
+<tr>
+<td>Wysiłek do v1 (20)</td>
+<td><strong>3.</strong> Dużo gotowe; funkcja domenowa ≈ 50 plików w obcym idiomie <a class="cite" href="#src-69">[69]</a>; fork t3kanban wydał tablicę zadań w dniu utworzenia repo (czas pracy nieznany) <a class="cite" href="#src-82">[82]</a></td>
+<td><strong>1,5.</strong> PTY, hooki, worktree, SQLite, MCP, GUI + utwardzanie PTY na Windows <a class="cite" href="#src-77">[77]</a><a class="cite" href="#src-78">[78]</a></td>
+<td><strong>1,5.</strong> Minimalne adaptery dla 2 dostawców + prosty widok rozmowy (adapter Claude w T3 ma 9,3 tys. linii, ale obsługuje wszystko <a class="cite" href="#src-5">[5]</a>)</td>
+<td><strong>3,5.</strong> Bez warstwy sesji; OAuth i narzędzia dostępne tylko w nightly i już raz zepsute <a class="cite" href="#src-88">[88]</a><a class="cite" href="#src-89">[89]</a></td>
+</tr>
+<tr>
+<td>Koszt utrzymania (15)</td>
+<td><strong>1.</strong> 50–80 commitów dziennie; hooki w plikach zmienianych codziennie; przepisania kasują funkcje forków <a class="cite" href="#src-22">[22]</a><a class="cite" href="#src-26">[26]</a><a class="cite" href="#src-28">[28]</a></td>
+<td><strong>4.</strong> Dryf flag i hooków dwóch CLI <a class="cite" href="#src-66">[66]</a></td>
+<td><strong>3,5.</strong> Dryf API SDK (Agent SDK 0.3.x co kilka dni; OpenCode w trakcie przejścia na v2) <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-47">[47]</a></td>
+<td><strong>2.</strong> Interfejs ma 6 dni, nie ma wersji, a upstream inwestuje w pluginy zamiast integracji z zewnątrz <a class="cite" href="#src-81">[81]</a><a class="cite" href="#src-88">[88]</a></td>
+</tr>
+<tr>
+<td>Droga do trybu serwera i telefonu (10)</td>
+<td><strong>5.</strong> Gotowe <a class="cite" href="#src-12">[12]</a></td>
+<td><strong>2.</strong> Do zbudowania; terminal na telefonie to słaby UX</td>
+<td><strong>2,5.</strong> Do zbudowania; strukturalne zdarzenia łatwo przesłać do zdalnego klienta</td>
+<td><strong>3.</strong> Sesje zdalnie przez T3 <a class="cite" href="#src-12">[12]</a>; GUI domeny trzeba udostępnić samemu</td>
+</tr>
+<tr>
+<td>Ryzyko organizacyjne (5)</td>
+<td><strong>3.</strong> MIT i poparcie forków <a class="cite" href="#src-18">[18]</a><a class="cite" href="#src-19">[19]</a>, ale alfa i Windows poza CI <a class="cite" href="#src-33">[33]</a></td>
+<td><strong>4.</strong> Ścieżka CLI jest zgodna z warunkami Anthropic <a class="cite" href="#src-41">[41]</a></td>
+<td><strong>4.</strong> Osobiste lokalne użycie SDK z własnym planem wygląda na wspierane <a class="cite" href="#src-42">[42]</a><a class="cite" href="#src-44">[44]</a></td>
+<td><strong>2,5.</strong> Zależność od kierunku i jakości nightly T3; ryzyko utraty danych worktree <a class="cite" href="#src-34">[34]</a><a class="cite" href="#src-90">[90]</a></td>
+</tr>
+<tr>
+<td><strong>Wynik ważony (maks. 5)</strong></td>
+<td><strong>2,50</strong></td>
+<td><strong>3,50</strong></td>
+<td><strong>3,63</strong></td>
+<td><strong>3,13</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Jak liczony jest wynik:</strong> Σ(ocena × waga) / 100. Przykład dla B2: (4,5·30 + 5·20 + 1,5·20 + 3,5·15 + 2,5·10 + 4·5) / 100 = 3,625.</p>
+<p><strong>Historia ocen (dla przejrzystości):</strong>
+- <strong>Przed red teamem:</strong> B (wtedy tylko PTY) = 3,90, C = 3,55.
+- <strong>Po red teamie 1:</strong> problemy PTY na Windows obniżyły B1 do 3,50. Wariant B2 ominął te problemy.
+- <strong>Po red teamie 2:</strong> niedojrzałość i nightly-only interfejsu T3 dla zewnętrznych agentów obniżyły C do 3,13.</p>
+<p><strong>Wrażliwość werdyktu:</strong>
+- <strong>B2 i B1 różnią się mało.</strong> Wybór hosta wewnątrz B rozstrzygają spike'i S2 i S7, nie research.
+- <strong>C wyprzedza B2</strong>, gdy waga wysiłku sięga ok. 40, a waga kontroli spada do ok. 10, albo gdy interfejs T3 dla zewnętrznych agentów trafi do stabilnego wydania, a jego ocena utrzymania wzrośnie do ≥3,5.
+- <strong>A wyprzedza B2</strong> dopiero wtedy, gdy tryb serwera i telefon dostaną wagę porównywalną z dopasowaniem domeny, a koszt utrzymania zniknie. Tak byłoby przy zamrożonym forku, który traci jednak poprawki adapterów.
+- <strong>Rozstrzyga kryterium wysiłku</strong>, które opiera się na wskaźnikach pośrednich. Weryfikują je spike'i S2, S5 i S7.</p>
+<h2 id="12-wnioski-przekrojowe">12. Wnioski przekrojowe</h2>
+<ol>
+<li><strong>Twojego wyróżnika nie ma w żadnym kandydacie na bazę.</strong> Workspace, Task z zależnościami i kolejnością merge'a, Artifact i Handoff trzeba napisać w A, B i C <a class="cite" href="#src-3">[3]</a><a class="cite" href="#src-8">[8]</a>. Fork oszczędza warstwę wykonawczą, nie domenową. A to domena jest większością pracy nad v1 i jedynym powodem istnienia produktu.</li>
+<li><strong>Warstwa wykonawcza jest w T3 najmocniejsza i właśnie tam zmienia się najszybciej.</strong> Adapter Claude ma ok. 4 commity dziennie <a class="cite" href="#src-22">[22]</a>, a autor recenzji wskazuje adaptery jako najtrudniejszą część <a class="cite" href="#src-38">[38]</a>. Fork wiąże Cię dokładnie z tą częścią, która wymaga ciągłej synchronizacji.</li>
+<li><strong>Wymaganie 7 dotyczy stanu pracy, nie rozmowy.</strong> Przełączanie dostawcy w T3 <a class="cite" href="#src-13">[13]</a> jest zaletą UX, ale nie spełnia wymagania samo z siebie. Spełnia je trwały stan domeny (Taski, Artefakty, Handoffy) dostępny przez MCP. Ten stan jest niezależny od hosta sesji.</li>
+<li><strong>Rdzeń domeny z MCP jest identyczny w B1, B2 i C.</strong> Wybór hosta sesji (PTY, strukturalny, T3 z zewnątrz, w przyszłości plugin T3) można więc <strong>odłożyć</strong>. Wystarczy zbudować najpierw rdzeń domeny i serwer MCP, a host sesji schować za portem <code>SessionHost</code>. To najtańsze zabezpieczenie odwracalności w tym raporcie.</li>
+<li><strong>Model T3 nie jest wrogi Twojemu w zakresie Worktree.</strong> Sesja Worktree ≈ wątek T3 z <code>existing_worktree</code>. Kolizja dotyczy tylko zakresu Workspace i grupy repo <a class="cite" href="#src-3">[3]</a><a class="cite" href="#src-16">[16]</a><a class="cite" href="#src-31">[31]</a>. Tłumaczy to, czemu C jest wykonalne mimo „wątek = jeden cwd”.</li>
+<li><strong>Ryzyko kierunku upstreamu działa w dwie strony.</strong> Jeśli T3 doda multi-repo i zadania, fork wpada w konflikt koncepcji, a historia forków pokazuje porzucanie funkcji przy przepisaniach <a class="cite" href="#src-26">[26]</a><a class="cite" href="#src-27">[27]</a>. Red team nie znalazł jednak żadnych planów T3 dotyczących multi-repo ani zależności zadań <a class="cite" href="#src-29">[29]</a>.</li>
+<li><strong>Najlepsza przyszła ścieżka integracji z T3 to nie fork ani sidecar, tylko plugin.</strong> Jeśli system pluginów <a class="cite" href="#src-81">[81]</a> zostanie scalony i ustabilizowany, warstwę domenową da się wpiąć w T3 bez forka: jako narzędzia MCP dla agentów, panel i statusy wątków. To realna opcja D, ale <strong>dziś niedostępna</strong>. Rdzeń domeny napisany jako niezależna biblioteka i serwis zachowuje tę możliwość.</li>
+<li><strong>Windows przesądza o wariancie hosta.</strong> Problemy PTY <a class="cite" href="#src-77">[77]</a><a class="cite" href="#src-79">[79]</a>, błędy Agent SDK <a class="cite" href="#src-45">[45]</a> i błąd #14990 w T3 <a class="cite" href="#src-34">[34]</a> dotyczą właśnie Twojej platformy. Stąd przewaga hosta strukturalnego i potrzeba spike'ów przed wyborem.</li>
+</ol>
+<h2 id="13-dowody-przeciwne-red-team">13. Dowody przeciwne (red team)</h2>
+<p>Były dwa przebiegi. Każdy prowadził sceptyk bez kontekstu tego badania, który dostał tylko tezę do obalenia. Oba zmieniły werdykt, nie tylko go skomentowały.</p>
+<p><strong>Red team 1 obalał: „nie forkuj, buduj od zera w wariancie terminal-first”.</strong>
+- <strong>T3 ma już trudną hydraulikę.</strong> Wbudowany MCP w sesjach, delegowanie subagentów, linkowanie PR-ów, zadania cykliczne, przełączanie dostawcy z jawnym przekazaniem kontekstu (ContextHandoff) <a class="cite" href="#src-8">[8]</a><a class="cite" href="#src-13">[13]</a>. W recenzji jest system pluginów z narzędziami MCP i statusami wątków <a class="cite" href="#src-81">[81]</a>.
+- <strong>Fork potrafi szybko dowieźć.</strong> t3kanban wydał tablicę zadań z wydaniami na trzy systemy w dniu utworzenia repo <a class="cite" href="#src-82">[82]</a>. Ile trwała praca przed publikacją, nie wiadomo. mtcode jest 1 492 commity do przodu i tylko 6 z tyłu <a class="cite" href="#src-83">[83]</a>.
+- <strong>PTY na Windows ma zmierzone awarie:</strong>
+  - ucinanie i dzielenie wiadomości <a class="cite" href="#src-77">[77]</a>;
+  - osierocone procesy <code>claude.exe</code> <a class="cite" href="#src-78">[78]</a>;
+  - Shift+Enter nieodróżnialny od Enter <a class="cite" href="#src-79">[79]</a>;
+  - brak wiarygodnego sygnału stanu sesji: „months battling detection bugs”, a prośba o API stanu zamknięta jako NOT_PLANNED <a class="cite" href="#src-80">[80]</a>.
+- <strong>Projekty budowane od zera utykały albo zmieniały platformę</strong> (opcode <a class="cite" href="#src-85">[85]</a>, Crystal <a class="cite" href="#src-54">[54]</a>). To były jednak zespoły, nie samotni autorzy, więc analogia jest słaba.
+- <strong>Co z tego wynika.</strong> Wariant terminal-first spadł (B1 = 3,50) i wydzieliłem B2. <strong>Zarzut się utrzymuje w części:</strong> wysiłek B jest realnie wysoki. <strong>Nie utrzymuje się w części o forku:</strong> t3kanban po szybkim starcie przestał się synchronizować i jest 1 650 commitów z tyłu <a class="cite" href="#src-82">[82]</a>. Szybkość forka kupuje v1, ale nie utrzymanie.</p>
+<p><strong>Red team 2 obalał: „v1 = sidecar sterujący T3 z zewnątrz”.</strong>
+- <strong>Interfejs jest bardzo świeży.</strong> Istnieje tylko w nightly, ma 6 dni, a klienci trafiali już na błędy protokołu <a class="cite" href="#src-88">[88]</a><a class="cite" href="#src-89">[89]</a>. Kontrakt uruchamiania wątku wciąż się zmienia <a class="cite" href="#src-91">[91]</a>. Deep linki działają dopiero od dnia pisania raportu <a class="cite" href="#src-87">[87]</a>.
+- <strong>Ryzyko utraty danych</strong> worktree dołączonych z zewnątrz, przez okno usuwania wątku i #14990 <a class="cite" href="#src-34">[34]</a><a class="cite" href="#src-90">[90]</a>.
+- <strong>Upstream inwestuje w pluginy</strong>, nie w integrację z zewnątrz <a class="cite" href="#src-81">[81]</a><a class="cite" href="#src-92">[92]</a>.
+- <strong>Co z tego wynika.</strong> C spadło do 3,13, a werdykt przeszedł na B2. C zostaje jako opcja warunkowa.</p>
+<p><strong>Czego red team szukał i nie znalazł</strong> (to też ustalenia):
+- planów T3 dotyczących multi-repo albo zależności zadań;
+- relacji samotnego autora, który porzucił budowę takiego GUI od zera;
+- danych o czasie budowy w którąkolwiek stronę;
+- deklaracji stabilności lub wersjonowania interfejsu <code>/mcp</code> dla zewnętrznych agentów;
+- dowodów, że agenci systematycznie ignorują narzędzia MCP aplikacji. Problemem bywa ładowanie narzędzi <a class="cite" href="#src-84">[84]</a>, a nie ich ignorowanie.</p>
+<h2 id="14-rekomendacja">14. Rekomendacja</h2>
+<p><strong>Rekomendacja: nie forkuj T3 Code. Buduj własną aplikację (opcja B, wariant B2): rdzeń domeny z serwerem MCP jako niezależny serwis, a host sesji za portem <code>SessionHost</code>. Domyślnym hostem w v1 jest host strukturalny: Claude Agent SDK z Twoją lokalną subskrypcją oraz <code>opencode serve</code> z SSE. Osadzony terminal służy tylko jako wyjście awaryjne</strong> („otwórz tę sesję w terminalu” przez <code>claude --resume</code>).</p>
+<p>Podstawa pewności:
+- <strong>Wysoka</strong> dla odrzucenia A. Koszt utrzymania i utrata kontroli są zmierzone na kodzie i na realnych forkach <a class="cite" href="#src-22">[22]</a><a class="cite" href="#src-26">[26]</a><a class="cite" href="#src-28">[28]</a>.
+- <strong>Średnia</strong> dla wyboru B2 zamiast C. Rozstrzyga niedojrzałość interfejsu T3, potwierdzona w issues <a class="cite" href="#src-87">[87]</a><a class="cite" href="#src-88">[88]</a><a class="cite" href="#src-89">[89]</a>.
+- <strong>Niska</strong> dla wysiłku, bo wszystkie oceny wysiłku są pośrednie.</p>
+<p><strong>Drugi wybór: C (sidecar na T3), warunkowo.</strong> Wygrywa, gdy spełnione są oba warunki:
+1. Interfejs <code>/mcp</code> dla zewnętrznych agentów trafi do stabilnego wydania T3 i przejdzie spike S3.
+2. Spike'i S2 i S7 pokażą, że własny host sesji na Windows kosztuje więcej, niż jesteś gotów zapłacić.</p>
+<p><strong>Warunkowa opcja D:</strong> jeśli T3 scali system pluginów <a class="cite" href="#src-81">[81]</a>, ponownie oceń wpięcie rdzenia domeny jako pluginu T3. Rdzeń napisany jako niezależny serwis to umożliwia.</p>
+<p><strong>Najmocniejszy argument przeciwko rekomendacji.</strong> Budujesz sam, po godzinach, warstwę, którą T3 już ma, a utrzymuje ją zespół robiący ok. 1 500 commitów miesięcznie. Chodzi o strukturalne sesje dwóch dostawców na Windows, zatwierdzenia, przełączanie dostawcy, tryb zdalny i aplikację mobilną <a class="cite" href="#src-5">[5]</a><a class="cite" href="#src-12">[12]</a><a class="cite" href="#src-13">[13]</a>. Robisz to na platformie, na której Agent SDK ma otwarte błędy awarii <a class="cite" href="#src-45">[45]</a>. Wcześniejsze GUI tego typu budowane od zera utykały albo zmieniały platformę <a class="cite" href="#src-54">[54]</a><a class="cite" href="#src-85">[85]</a>, a fork t3kanban pokazał, że tablicę zadań da się wpiąć w T3 i wydać na trzy systemy <a class="cite" href="#src-82">[82]</a>.</p>
+<p>Ten argument jest prawdziwy co do <em>wysiłku do v1</em> i dlatego wysiłek ma w macierzy ocenę 1,5. Nie przeważa, bo:
+- Twoje wymagania v1 potrzebują tylko 2 dostawców i minimalnego widoku rozmowy;
+- wymaganie 7 spełnia stan domeny, nie przełączanie rozmowy;
+- historia forków pokazuje, że szybki start forka kończy się dryfem albo stałą synchronizacją <a class="cite" href="#src-26">[26]</a><a class="cite" href="#src-82">[82]</a>;
+- kontrola nad architekturą ma wagę 20, nadaną z powodu rozjazdu poprzedniego prototypu.</p>
+<p><strong>Najtańsze zabezpieczenie odwracalności.</strong> Kolejność budowy: najpierw rdzeń domeny + MCP + GUI stanu, z hostem sesji jako portem. Pierwsza implementacja portu powinna być najtańsza z tych, które przejdą spike'i. Jeśli S7 (host strukturalny) wypadnie źle, a S3 dobrze, podmieniasz host na adapter T3 bez ruszania domeny.</p>
+<h3 id="wejscia-dla-bmad-spec-i-bmad-architecture">Wejścia dla <code>bmad-spec</code> i <code>bmad-architecture</code></h3>
+<p><strong>Dla <code>bmad-spec</code></strong> (kryteria akceptacji i zakres):
+- Wymaganie 7 sformułuj jako trwałość <em>stanu domeny</em> (Task, Artifact, Handoff) niezależnie od sesji i dostawcy, a nie jako przenoszenie rozmowy <a class="cite" href="#src-13">[13]</a>.
+- Zapisz, że sesje uruchamia aplikacja z profilu Agenta (prompt, dostawca, model) i z zakresem (Workspace = katalog z worktree jako podkatalogami; Worktree = jeden worktree).
+- Handoff musi być wymuszalny (hook <code>Stop</code> lub równoważny), jeśli S6 pokaże, że agenci go pomijają.
+- Doprecyzuj Windows jako platformę v1 i to, że worktree mogą zawierać junction, np. node_modules <a class="cite" href="#src-34">[34]</a>.</p>
+<p><strong>Dla <code>bmad-architecture</code></strong> (decyzje i ograniczenia):
+- <strong>Proces.</strong> Wzorzec z T3 jest wart skopiowania <a class="cite" href="#src-2">[2]</a>: jeden lokalny serwer jest właścicielem stanu, procesów agentów i gita; GUI jest cienkim klientem po typowanym RPC lub WebSocket. Daje to drogę do trybu serwera i telefonu bez przepisywania.
+- <strong>Porty.</strong> <code>SessionHost</code> (implementacje: AgentSdk, OpenCodeServe; w razie potrzeby PTY lub T3-outside) oraz <code>Forge</code> (poza v1; CR rejestrują agenci).
+- <strong>Persystencja.</strong> SQLite z własnymi migracjami. Stan domeny jest źródłem prawdy, a sesja jest tylko referencją.
+- <strong>MCP.</strong> Serwer w procesie (MCP TS SDK v2 <a class="cite" href="#src-50">[50]</a>), wstrzykiwany per sesja (<code>mcpServers</code> w SDK <a class="cite" href="#src-40">[40]</a>; <code>OPENCODE_CONFIG_CONTENT</code> lub <code>mcp.add</code> <a class="cite" href="#src-46">[46]</a><a class="cite" href="#src-63">[63]</a>). Token powiąż z sesją, wzorem T3 <a class="cite" href="#src-9">[9]</a>.
+- <strong>Worktree.</strong> Wywołania <code>git</code> z retry, walidacją ścieżek i rollbackiem, wzorem Emdash <a class="cite" href="#src-53">[53]</a>. Worktree jako podkatalogi katalogu Workspace, dzięki czemu sesja w zakresie Workspace widzi całą inicjatywę.
+- <strong>Czego nie kopiować.</strong> Effect-TS jako warunek wejścia (to wybór zespołu T3, nie wymóg domeny) i normy, że już w v1 każda funkcja działa na webie, desktopie i mobile.
+- <strong>Wzorce projektowe do przejrzenia:</strong> model „View Dir” z ivar <a class="cite" href="#src-59">[59]</a>, multi-repo i MCP w Vibe Kanban <a class="cite" href="#src-56">[56]</a>, ADR-y Emdash <a class="cite" href="#src-53">[53]</a>.</p>
+<h2 id="15-czego-siec-nie-rozstrzygnie-lista-spikeow">15. Czego sieć nie rozstrzygnie: lista spike'ów</h2>
+<p><strong>Priorytet: najpierw S1 → S7 → S2</strong> (przed <code>bmad-architecture</code>). S3 tylko wtedy, gdy rozważasz C; S5 tylko wtedy, gdy wraca A. Numery spike'ów nie oznaczają kolejności. Dla każdego: co sprawdzić i po czym poznać wynik.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Spike</th>
+<th>Co sprawdzić</th>
+<th>Po czym poznać wynik</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S1</td>
+<td><strong>Własny MCP widoczny w sesjach</strong> (rozstrzyga B i C)</td>
+<td>Postaw minimalny serwer MCP z 2 narzędziami (<code>workspace_read</code>, <code>handoff_write</code>). Podepnij go do <code>claude</code> przez <code>--mcp-config</code> i do <code>opencode</code> przez <code>OPENCODE_CONFIG_CONTENT</code> <a class="cite" href="#src-61">[61]</a><a class="cite" href="#src-63">[63]</a>. Osobno przez <code>~/.claude.json</code> / <code>opencode.json</code> w sesji uruchomionej z T3 <a class="cite" href="#src-73">[73]</a></td>
+<td>Agent w każdej z 4 konfiguracji wywołuje oba narzędzia bez przypominania. Porażka: narzędzia nie ładują się albo agent je ignoruje (znane błędy OpenCode w T3 <a class="cite" href="#src-32">[32]</a>)</td>
+</tr>
+<tr>
+<td>S2</td>
+<td><strong>Terminal-first na Windows</strong> (B)</td>
+<td>Electron + node-pty + xterm.js. Uruchom <code>claude --session-id &lt;uuid&gt; --mcp-config … --add-dir … --settings &lt;hooki&gt;</code> i <code>opencode --port</code>. Hooki <code>Stop</code> / <code>PermissionRequest</code> / <code>Notification</code> mają trafiać przez HTTP do aplikacji <a class="cite" href="#src-62">[62]</a><a class="cite" href="#src-64">[64]</a></td>
+<td>Status working / needs-permission / done jest poprawny w ≥95% przejść w 20-minutowej sesji. Resize, Shift+Enter i kolory działają (znane problemy ConPTY <a class="cite" href="#src-67">[67]</a>). Hooki z <code>--settings</code> działają bez edycji konfiguracji użytkownika: to inferencja, niesprawdzona</td>
+</tr>
+<tr>
+<td>S3</td>
+<td><strong>Sterowanie T3 z zewnątrz</strong> (C)</td>
+<td>Własny skrypt: OAuth z kodem parowania → <code>t3_project_create</code> (katalog Workspace, niegitowy) → <code>t3_project_create</code> (repo) → <code>git worktree add &lt;workspace&gt;/&lt;repo&gt;-1</code> → <code>t3_thread_launch</code> z <code>existing_worktree</code> → <code>t3_thread_wait</code> / <code>read</code> → deep link <code>t3code://threads/…</code> <a class="cite" href="#src-15">[15]</a><a class="cite" href="#src-16">[16]</a><a class="cite" href="#src-17">[17]</a>. Do tego: czy token z <code>t3 auth session issue</code> działa na <code>/mcp</code></td>
+<td>Wątek startuje w worktree spoza <code>~/.t3/worktrees</code>, a deep link otwiera go w GUI. Testuj wyłącznie na <strong>stabilnym</strong> wydaniu, w którym jest OAuth dla zewnętrznych agentów <a class="cite" href="#src-88">[88]</a>. Czerwone flagi: okno usuwania wątku proponuje skasowanie Twojego worktree <a class="cite" href="#src-90">[90]</a>; po 30 dniach wymagane ponowne parowanie bez obejścia</td>
+</tr>
+<tr>
+<td>S7</td>
+<td><strong>Host strukturalny na Windows</strong> (B2, rekomendacja)</td>
+<td>W Electronie: Claude Agent SDK <code>query()</code> z <code>cwd</code> = worktree, <code>additionalDirectories</code>, <code>mcpServers</code> (własny MCP), <code>resume</code> i <code>interrupt</code>; zatwierdzenia przez <code>canUseTool</code> <a class="cite" href="#src-40">[40]</a>. Do tego <code>opencode serve</code> z <code>/event</code> SSE i odpowiedziami na uprawnienia przez HTTP <a class="cite" href="#src-46">[46]</a>. Logowanie: Twoja subskrypcja przez lokalne Claude Code</td>
+<td>Sesja Claude i sesja OpenCode przechodzą: start → narzędzie MCP → zatwierdzenie → przerwanie → wznowienie, bez awarii (sprawdź #444 interrupt i #359 stream closed <a class="cite" href="#src-45">[45]</a>). Minimalny widok rozmowy da się zrobić w kilka wieczorów. Jeśli nie, rozważ C po S3</td>
+</tr>
+<tr>
+<td>S4</td>
+<td><strong>Zakres Workspace w T3</strong> (A i C)</td>
+<td>Projekt T3 na katalogu Workspace z zagnieżdżonymi worktree kilku repo. Agent dostaje zadanie obejmujące 2 repo <a class="cite" href="#src-31">[31]</a></td>
+<td>Agent widzi i edytuje oba repo. Wiesz dokładnie, które funkcje gita T3 przestają działać (diff, PR, checkpoint) i czy Ci ich brakuje</td>
+</tr>
+<tr>
+<td>S5</td>
+<td><strong>Koszt jednej funkcji domenowej w forku</strong> (tylko jeśli A wraca do gry)</td>
+<td>W forku dodaj byt <code>Task</code> z zależnościami według wzorca commita 1f6df6b <a class="cite" href="#src-69">[69]</a>: osobny rejestr migracji <a class="cite" href="#src-70">[70]</a><a class="cite" href="#src-76">[76]</a>, toolkit MCP, widok web. Po tygodniu zmerguj upstream</td>
+<td>Mierzysz godziny implementacji i godziny merge'a. Jeśli merge po tygodniu kosztuje więcej niż ok. 1 h albo psuje hook bez konfliktu (zjawisko opisane w <a class="cite" href="#src-28">[28]</a>), A odpada definitywnie</td>
+</tr>
+<tr>
+<td>S6</td>
+<td><strong>Dyscyplina agentów wobec stanu</strong> (wszystkie opcje)</td>
+<td>Prompt workera wymaga <code>handoff_write</code> na końcu pracy. 10 przebiegów na Claude i OpenCode</td>
+<td>Handoff zapisany w ≥9/10 przebiegów z wypełnionymi polami (zmiany, dowody weryfikacji, pytania). Inaczej potrzebny jest hook <code>Stop</code>, który wymusza handoff</td>
+</tr>
+</tbody>
+</table>
+<h2 id="16-pytania-otwarte-i-miejsca-o-cienkich-dowodach">16. Pytania otwarte i miejsca o cienkich dowodach</h2>
+<ul>
+<li><strong>Godziny pracy.</strong> Żadne źródło nie podaje czasu budowy GUI dla agentów ani czasu utrzymania forka. Wszystkie oceny wysiłku to proxy: historia repo i liczba plików. <em>Rozstrzygają S2 i S5.</em></li>
+<li><strong>Czy <code>--settings</code> / <code>--plugin-dir</code> wstrzykuje hooki bez edycji konfiguracji użytkownika.</strong> To inferencja z dokumentacji <a class="cite" href="#src-61">[61]</a><a class="cite" href="#src-62">[62]</a>. <em>Rozstrzyga S2.</em></li>
+<li><strong>Projektowy <code>.mcp.json</code> w sesjach Claude uruchamianych przez T3</strong> jest <span class="badge unverified">niezweryfikowany</span>. Działanie <code>~/.claude.json</code> potwierdza tylko zgłoszenie użytkownika <a class="cite" href="#src-73">[73]</a>. <em>Rozstrzyga S1.</em></li>
+<li><strong>Długoterminowy token do <code>/mcp</code> T3</strong> jest <span class="badge unverified">niezweryfikowany</span> <a class="cite" href="#src-15">[15]</a>. <em>Rozstrzyga S3.</em></li>
+<li><strong>Warunki Anthropic dla osobistego narzędzia na Agent SDK z subskrypcją.</strong> Brak jednoznacznego stanowiska. Ścieżka CLI jest jednoznacznie dozwolona <a class="cite" href="#src-41">[41]</a><a class="cite" href="#src-42">[42]</a>, a zmiana rozliczeń SDK jest wstrzymana <a class="cite" href="#src-44">[44]</a> (pojedyncze źródło). <em>Korzystaj z CLI albo klucza API, dopóki Anthropic tego nie doprecyzuje.</em></li>
+<li><strong>Plany T3 wobec multi-repo i zadań.</strong> Nie znaleziono wypowiedzi Theo ani Juliusa poza komentarzem <a class="cite" href="#src-71">[71]</a>. Wyszukiwanie na X i YouTube było ograniczone (X zwraca 402). <em>Obserwuj #7041 i #15752.</em></li>
+<li><strong>Wypowiedź o braku płatnego planu T3</strong> pochodzi tylko ze źródła wtórnego. <em>Niezweryfikowane.</em></li>
+<li><strong>Stan Vibe Kanban na Windows</strong> i działanie jego MCP po wyłączeniu chmury: <em>niezweryfikowane</em> <a class="cite" href="#src-56">[56]</a>.</li>
+<li><strong>Dojrzałość OpenCode 2 SDK</strong> (istnieje od ok. 6 tygodni, dokumentacja tylko w README) <a class="cite" href="#src-47">[47]</a>. Dla B to argument, żeby zacząć od CLI, TUI i SSE, a nie od SDK 2.x.</li>
+</ul>
+<h2 id="zrodla">Źródła</h2>
+<p>Repozytorium T3 Code cytowane jest jako `pingdotgg/t3code@0e7346c`, a data publikacji to data ostatniego commita dotykającego pliku. Dostęp do wszystkich źródeł: 2026-10-12.</p>
+<details><summary>Pokaż tabelę źródeł (92)</summary><table class="sources"><thead><tr><th>[n]</th><th>Twierdzenie</th><th>Wydawca / źródło</th><th>Publ.</th><th>Dostęp</th><th>Pewność</th></tr></thead><tbody><tr id="src-1"><td>[1]</td><td>Pozycjonowanie, stack, normy (multi-surface, forki), autorstwo przez agentów</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/AGENTS.md" target="_blank" rel="noopener">pingdotgg/t3code AGENTS.md</a></td><td>2026-10-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-2"><td>[2]</td><td>Procesy, granica serwer–klient, event sourcing, checkpointy</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/docs/internals/overview.md" target="_blank" rel="noopener">t3code docs/internals/overview.md</a></td><td>2026-10-02</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-3"><td>[3]</td><td>Schemat wątku i projektu (1 projekt, ≤1 worktree), linki PR</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/packages/contracts/src/orchestrationV2.ts" target="_blank" rel="noopener">t3code contracts/orchestrationV2.ts</a></td><td>2026-10-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-4"><td>[4]</td><td>cwd = worktreePath ?? workspaceRoot</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/apps/server/src/orchestration-v2/RuntimePolicy.ts" target="_blank" rel="noopener">t3code RuntimePolicy.ts</a></td><td>2026-10-09</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-5"><td>[5]</td><td>Adapter Claude (Agent SDK, additionalDirectories, 9,3 tys. linii)</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts" target="_blank" rel="noopener">t3code ClaudeAdapterV2.ts</a></td><td>2026-10-11</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-6"><td>[6]</td><td>Architektura docelowa V2, „ignores backward compatibility”</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/docs/orchestration-v2/README.md" target="_blank" rel="noopener">t3code docs/orchestration-v2/README.md</a></td><td>2026-10-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-7"><td>[7]</td><td>Warstwa driverów i adapterów dostawców, transporty</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/docs/internals/providers.md" target="_blank" rel="noopener">t3code docs/internals/providers.md</a></td><td>2026-10-08</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-8"><td>[8]</td><td>MCP orkiestratora wstrzykiwany do sesji; narzędzia</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/docs/orchestration-v2/orchestrator-mcp-server.md" target="_blank" rel="noopener">t3code orchestrator-mcp-server.md</a></td><td>2026-10-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-9"><td>[9]</td><td>11 toolkitów MCP, rejestracja przez Layer.mergeAll, wersja = wersja aplikacji</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/apps/server/src/mcp/McpHttpServer.ts" target="_blank" rel="noopener">t3code McpHttpServer.ts</a></td><td>2026-10-09</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-10"><td>[10]</td><td>SQLite, jeden rejestr migracji</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/apps/server/src/persistence/Migrations.ts" target="_blank" rel="noopener">t3code persistence/Migrations.ts</a></td><td>2026-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-11"><td>[11]</td><td>Tworzenie worktree przy starcie wątku, strategie</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/apps/server/src/orchestration-v2/ThreadLaunchService.ts" target="_blank" rel="noopener">t3code ThreadLaunchService.ts</a></td><td>2026-10-11</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-12"><td>[12]</td><td>Zdalny dostęp: LAN, Tailscale, SSH, T3 Connect (relay, Clerk)</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/docs/user/remote-access.md" target="_blank" rel="noopener">t3code docs/user/remote-access.md</a></td><td>2026-10-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-13"><td>[13]</td><td>Przełączanie dostawcy i ContextHandoff</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/docs/orchestration-v2/provider-switching-and-context.md" target="_blank" rel="noopener">t3code provider-switching-and-context.md</a></td><td>2026-10-02</td><td>2026-10-12</td><td><span class="badge medium">średnia (dokumentacja, nie test)</span></td></tr><tr id="src-14"><td>[14]</td><td>Zewnętrzni agenci przez /mcp</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/docs/user/outside-agents.md" target="_blank" rel="noopener">t3code docs/user/outside-agents.md</a></td><td>2026-10-06</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-15"><td>[15]</td><td>OAuth tylko z authorization_code, bez refresh tokena, 30 dni</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/apps/server/src/auth/McpOAuth.ts" target="_blank" rel="noopener">t3code auth/McpOAuth.ts</a></td><td>2026-10-06</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-16"><td>[16]</td><td>Klasy dostępu do narzędzi; t3_thread_launch, existing_worktree, niegitowe projekty</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/apps/server/src/mcp/McpToolAccess.ts" target="_blank" rel="noopener">t3code McpToolAccess.ts</a></td><td>2026-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka (kod) / średnia (zachowanie)</span></td></tr><tr id="src-17"><td>[17]</td><td>Deep linki t3code://, `t3 app`</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/apps/desktop/src/app/DesktopClerk.ts" target="_blank" rel="noopener">t3code DesktopClerk.ts</a></td><td>2026-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-18"><td>[18]</td><td>Licencja MIT, T3 Tools Inc.</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/LICENSE" target="_blank" rel="noopener">t3code LICENSE</a></td><td>2026-03-05</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-19"><td>[19]</td><td>Cytat o forkach, „very very early”</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/README.md" target="_blank" rel="noopener">t3code README.md</a></td><td>2026-07-28</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-20"><td>[20]</td><td>Brak zainteresowania kontrybucjami z zewnątrz</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/CONTRIBUTING.md" target="_blank" rel="noopener">t3code CONTRIBUTING.md</a></td><td>2026-09-30</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-21"><td>[21]</td><td>Brak bezpiecznego zakresu migracji dla forków; noty licencji</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/docs/internals/legacy-orchestration-migration.md" target="_blank" rel="noopener">t3code legacy-orchestration-migration.md</a></td><td>2026-10-02</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-22"><td>[22]</td><td>Metryki z gita: tempo, autorzy, rotacja, LOC, udział Effect</td><td><a href="https://github.com/pingdotgg/t3code/commits/main" target="_blank" rel="noopener">lokalny klon, git log/shortlog @0e7346c</a></td><td>2026-10-12</td><td>2026-10-12</td><td><span class="badge verified">wysoka (pomiar zgrubny)</span></td></tr><tr id="src-23"><td>[23]</td><td>PR #2829 nowy orkiestrator, importer V1→V2</td><td><a href="https://github.com/pingdotgg/t3code/pull/2829" target="_blank" rel="noopener">GitHub pingdotgg/t3code#2829</a></td><td>2026-10-02</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-24"><td>[24]</td><td>Statystyki repo, issues, PR</td><td><a href="https://github.com/pingdotgg/t3code" target="_blank" rel="noopener">GitHub API pingdotgg/t3code</a></td><td>2026-10-12</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-25"><td>[25]</td><td>Rozjazd forków (compare API)</td><td><a href="https://github.com/pingdotgg/t3code/forks" target="_blank" rel="noopener">GitHub forks pingdotgg/t3code</a></td><td>2026-10-12</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-26"><td>[26]</td><td>TrogonStack: porzucone rozbieżności przy V2</td><td><a href="https://github.com/TrogonStack/t3code/pull/71" target="_blank" rel="noopener">TrogonStack/t3code#71</a></td><td>2026-10-02</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-27"><td>[27]</td><td>Fork aaditagrawal zarchiwizowany (upstream wchłonął funkcje)</td><td><a href="https://github.com/aaditagrawal/t3code" target="_blank" rel="noopener">aaditagrawal/t3code README</a></td><td>2026-10-09</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-28"><td>[28]</td><td>Wzorzec „Fork add-on”, kontrola markerów, automatyczny merge</td><td><a href="https://github.com/travisjneuman/t3code/blob/main/docs/internals/fork-add-ons.md" target="_blank" rel="noopener">travisjneuman/t3code fork-add-ons.md</a></td><td>2026-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka (istnienie) / niska (skuteczność długoterminowa)</span></td></tr><tr id="src-29"><td>[29]</td><td>Prośba o multi-repo otwarta, bez maintainera</td><td><a href="https://github.com/pingdotgg/t3code/discussions/7041" target="_blank" rel="noopener">pingdotgg/t3code discussion #7041</a></td><td>2026-03-27</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-30"><td>[30]</td><td>PR multi-repo otwarty, bez recenzji, `vouch:unvouched`</td><td><a href="https://github.com/pingdotgg/t3code/pull/15752" target="_blank" rel="noopener">pingdotgg/t3code#15752</a></td><td>2026-10-04</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-31"><td>[31]</td><td>Niegitowy katalog z zagnieżdżonymi repo działa, git UX nie</td><td><a href="https://github.com/pingdotgg/t3code/issues/12902" target="_blank" rel="noopener">pingdotgg/t3code#12902</a></td><td>2026-09-25</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-32"><td>[32]</td><td>Błędy MCP i współdzielonej bazy w OpenCode</td><td><a href="https://github.com/pingdotgg/t3code/issues/16141" target="_blank" rel="noopener">pingdotgg/t3code#16141</a></td><td>2026-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-33"><td>[33]</td><td>CI tylko Linux; testy Windows ręczne i czerwone; lint na „warn”</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/.github/workflows/windows-tests.yml" target="_blank" rel="noopener">t3code windows-tests.yml</a></td><td>2026-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-34"><td>[34]</td><td>Utrata danych na Windows przy usuwaniu worktree; triage przez AI</td><td><a href="https://github.com/pingdotgg/t3code/issues/14990" target="_blank" rel="noopener">pingdotgg/t3code#14990</a></td><td>2026-10-03</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-35"><td>[35]</td><td>Uszkodzenie SQLite na macOS</td><td><a href="https://github.com/pingdotgg/t3code/issues/13544" target="_blank" rel="noopener">pingdotgg/t3code#13544</a></td><td>2026-09-25</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-36"><td>[36]</td><td>Regresje stanu po V2</td><td><a href="https://github.com/pingdotgg/t3code/issues/15017" target="_blank" rel="noopener">pingdotgg/t3code#15017</a></td><td>2026-10-03</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-37"><td>[37]</td><td>Recenzja użytkowa po kilku tygodniach</td><td><a href="https://bmateas.com/blog/t3-code-review" target="_blank" rel="noopener">bmateas.com</a></td><td>2026-07-28</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-38"><td>[38]</td><td>Analiza architektury: alfa, adaptery to najtrudniejsza część</td><td><a href="https://flaviocopes.com/t3-code" target="_blank" rel="noopener">flaviocopes.com</a></td><td>2026-08-28</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-39"><td>[39]</td><td>Komentarze HN (cienkie, mieszane)</td><td><a href="https://hn.algolia.com/?q=t3%20code" target="_blank" rel="noopener">Hacker News via Algolia</a></td><td>2026-04..10</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-40"><td>[40]</td><td>Możliwości Claude Agent SDK; zakaz logowania claude.ai w produktach</td><td><a href="https://code.claude.com/docs/en/agent-sdk/overview" target="_blank" rel="noopener">Anthropic agent-sdk overview</a></td><td>b.d. (dok. żywa)</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-41"><td>[41]</td><td>OAuth tylko dla użycia zwykłego; niezmodyfikowane CLI dozwolone</td><td><a href="https://code.claude.com/docs/en/legal-and-compliance" target="_blank" rel="noopener">Anthropic legal-and-compliance</a></td><td>b.d. (dok. żywa)</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-42"><td>[42]</td><td>Niezależne potwierdzenie zakazu (cytat Anthropic)</td><td><a href="https://gigazine.net/gsc_news/en/20260220-anthropic-third-party-block" target="_blank" rel="noopener">GIGAZINE</a></td><td>2026-02-20</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-43"><td>[43]</td><td>Oś czasu egzekwowania wobec narzędzi zewnętrznych</td><td><a href="https://falcao.org/posts/anthropic-claude-access-crackdown-ecosystem-fallout/" target="_blank" rel="noopener">falcao.org</a></td><td>2026-05-24</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-44"><td>[44]</td><td>Wstrzymana zmiana rozliczeń Agent SDK</td><td><a href="https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan" target="_blank" rel="noopener">Anthropic Help Center</a></td><td>2026-10-07</td><td>2026-10-12</td><td><span class="badge medium">średnia (pojedyncze źródło)</span></td></tr><tr id="src-45"><td>[45]</td><td>Agent SDK TS 0.3.296; błędy Windows #444, #359</td><td><a href="https://github.com/anthropics/claude-agent-sdk-typescript/releases" target="_blank" rel="noopener">anthropics/claude-agent-sdk-typescript</a></td><td>2026-10-09</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-46"><td>[46]</td><td>`opencode serve`: OpenAPI, SSE, MCP dynamicznie</td><td><a href="https://opencode.ai/docs/server/" target="_blank" rel="noopener">OpenCode docs: server</a></td><td>2026-10-12</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-47"><td>[47]</td><td>OpenCode 1.19.0, przejście na v2, SDK 2.x w procesie</td><td><a href="https://github.com/anomalyco/opencode/releases/tag/v1.19.0" target="_blank" rel="noopener">anomalyco/opencode v1.19.0</a></td><td>2026-10-11</td><td>2026-10-12</td><td><span class="badge verified">wysoka (istnienie) / niska (dojrzałość v2)</span></td></tr><tr id="src-48"><td>[48]</td><td>ACP 1.25.0, metody stabilne i niestabilne</td><td><a href="https://github.com/agentclientprotocol/agent-client-protocol" target="_blank" rel="noopener">agentclientprotocol/agent-client-protocol</a></td><td>2026-10-09</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-49"><td>[49]</td><td>Adapter Claude dla ACP i jego ograniczenia</td><td><a href="https://github.com/agentclientprotocol/claude-agent-acp" target="_blank" rel="noopener">agentclientprotocol/claude-agent-acp</a></td><td>2026-10-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-50"><td>[50]</td><td>MCP TS SDK v2 stabilne</td><td><a href="https://github.com/modelcontextprotocol/typescript-sdk" target="_blank" rel="noopener">modelcontextprotocol/typescript-sdk</a></td><td>2026-10-05</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-51"><td>[51]</td><td>node-pty: ConPTY, ostrzeżenia</td><td><a href="https://github.com/microsoft/node-pty" target="_blank" rel="noopener">microsoft/node-pty</a></td><td>2026-08-03</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-52"><td>[52]</td><td>Tauri: Node tylko jako sidecar</td><td><a href="https://v2.tauri.app/learn/sidecar-nodejs/" target="_blank" rel="noopener">Tauri docs: sidecar-nodejs</a></td><td>2026-09-21</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-53"><td>[53]</td><td>Emdash: Electron, node-pty, worktree przez git, ryzyka PTY</td><td><a href="https://github.com/generalaction/emdash" target="_blank" rel="noopener">generalaction/emdash</a></td><td>2026-10-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-54"><td>[54]</td><td>Crystal: v0.1 w 7 dni, jeden autor, wycofany</td><td><a href="https://github.com/stravu/crystal" target="_blank" rel="noopener">stravu/crystal</a></td><td>2026-02-26</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-55"><td>[55]</td><td>Zamknięcie firmy Vibe Kanban</td><td><a href="https://www.vibekanban.com/blog/shutdown" target="_blank" rel="noopener">vibekanban.com/blog/shutdown</a></td><td>2026-04-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-56"><td>[56]</td><td>Vibe Kanban: multi-repo, lokalny MCP, ostatnie commity</td><td><a href="https://github.com/BloopAI/vibe-kanban" target="_blank" rel="noopener">BloopAI/vibe-kanban</a></td><td>2026-09-19</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-57"><td>[57]</td><td>Pane: AGPL, Windows, CLI + MCP</td><td><a href="https://github.com/greenfield-inc/Pane" target="_blank" rel="noopener">greenfield-inc/Pane</a></td><td>2026-10-11</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-58"><td>[58]</td><td>Superset: ELv2, brak Windows</td><td><a href="https://github.com/superset-sh/superset" target="_blank" rel="noopener">superset-sh/superset</a></td><td>2026-10-08</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-59"><td>[59]</td><td>ivar: multi-repo worktree, tylko macOS i Linux</td><td><a href="https://github.com/mnzsss/ivar" target="_blank" rel="noopener">mnzsss/ivar</a></td><td>2026-10-08</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-60"><td>[60]</td><td>Conductor: tylko Mac</td><td><a href="https://www.conductor.build/docs/" target="_blank" rel="noopener">conductor.build docs</a></td><td>b.d.</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-61"><td>[61]</td><td>Flagi Claude Code CLI (MCP, add-dir, session-id, settings, plugin-dir)</td><td><a href="https://code.claude.com/docs/en/cli-reference" target="_blank" rel="noopener">Anthropic CLI reference</a></td><td>b.d. (dok. żywa)</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-62"><td>[62]</td><td>33 zdarzenia hooków, typy, notification_type, transcript_path</td><td><a href="https://code.claude.com/docs/en/hooks" target="_blank" rel="noopener">Anthropic hooks</a></td><td>b.d. (dok. żywa)</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-63"><td>[63]</td><td>OPENCODE_CONFIG_CONTENT, scalanie konfiguracji</td><td><a href="https://opencode.ai/docs/config/" target="_blank" rel="noopener">OpenCode docs: config</a></td><td>2026-10-12</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-64"><td>[64]</td><td>Zdarzenia pluginów OpenCode</td><td><a href="https://opencode.ai/docs/plugins/" target="_blank" rel="noopener">OpenCode docs: plugins</a></td><td>2026-10-12</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-65"><td>[65]</td><td>Status agentów przez hooki w produkcji (Superset), ograniczenia</td><td><a href="https://docs.superset.sh/agent-status" target="_blank" rel="noopener">Superset docs: agent-status</a></td><td>b.d.</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-66"><td>[66]</td><td>Zmiany w hookach między wersjami, OSC 7501</td><td><a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md" target="_blank" rel="noopener">anthropics/claude-code CHANGELOG</a></td><td>2026-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-67"><td>[67]</td><td>Błędy ConPTY w Claude Code (resize, mysz, Shift+Enter)</td><td><a href="https://github.com/anthropics/claude-code/issues/80123" target="_blank" rel="noopener">anthropics/claude-code#80123</a></td><td>2026-07..10</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-68"><td>[68]</td><td>ConPTY gubi lub przestawia sekwencje (historia)</td><td><a href="https://www.warp.dev/blog/building-warp-on-windows" target="_blank" rel="noopener">Warp blog</a></td><td>2025-01-22</td><td>2026-10-12</td><td><span class="badge medium">średnia (historia)</span></td></tr><tr id="src-69"><td>[69]</td><td>Rozmiar przykładowej funkcji domenowej (~50 plików)</td><td><a href="https://github.com/pingdotgg/t3code/commit/1f6df6b" target="_blank" rel="noopener">t3code commit 1f6df6b</a></td><td>2026-10-11</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-70"><td>[70]</td><td>Osobny rejestr migracji forka (precedens)</td><td><a href="https://github.com/TrogonStack/t3code/pull/13" target="_blank" rel="noopener">TrogonStack/t3code#13</a></td><td>2026-07-31</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-71"><td>[71]</td><td>Maintainer: brak zmian w orkiestracji przed V2; zaproszenie do nowego PR</td><td><a href="https://github.com/pingdotgg/t3code/pull/11251" target="_blank" rel="noopener">pingdotgg/t3code#11251</a></td><td>2026-09-19</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-72"><td>[72]</td><td>V2 odrzuca stare klienty mobilne</td><td><a href="https://smartscope.blog/en/blog/t3-code-client-not-supported-mobile-v2-2026/" target="_blank" rel="noopener">SmartScope</a></td><td>2026-10-03</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-73"><td>[73]</td><td>Serwery MCP użytkownika działają w sesjach Claude w T3</td><td><a href="https://github.com/pingdotgg/t3code/issues/6632" target="_blank" rel="noopener">pingdotgg/t3code#6632</a></td><td>2026-08-14</td><td>2026-10-12</td><td><span class="badge medium">średnia (zgłoszenie użytkownika)</span></td></tr><tr id="src-74"><td>[74]</td><td>T3 używa logowania i konfiguracji Claude Code</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/docs/user/providers-claude.md" target="_blank" rel="noopener">t3code docs/user/providers-claude.md</a></td><td>2026-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-75"><td>[75]</td><td>OpenCode: wymagane wersje, „Limited support” dla 1.x</td><td><a href="https://github.com/pingdotgg/t3code/blob/0e7346c/docs/user/providers-opencode.md" target="_blank" rel="noopener">t3code docs/user/providers-opencode.md</a></td><td>2026-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-76"><td>[76]</td><td>`Migrator.make({ table })` w Effect</td><td><a href="https://github.com/pingdotgg/t3code/tree/0e7346c/.repos" target="_blank" rel="noopener">t3code .repos/effect-smol Migrator.ts</a></td><td>2026-10</td><td>2026-10-12</td><td><span class="badge unverified">średnia (kopia dołączona, wersja <span class="badge unverified">niezweryfikowana</span>)</span></td></tr><tr id="src-77"><td>[77]</td><td>`claude` w PTY na Windows/ConPTY: ucinanie i dzielenie wiadomości</td><td><a href="https://github.com/nimbalyst/nimbalyst/issues/987" target="_blank" rel="noopener">nimbalyst/nimbalyst#987</a></td><td>2026-07-25</td><td>2026-10-12</td><td><span class="badge verified">wysoka (jeden projekt)</span></td></tr><tr id="src-78"><td>[78]</td><td>Osierocone drzewa `claude.exe`, pętla awarii renderera w trybie CLI</td><td><a href="https://github.com/nimbalyst/nimbalyst/issues/903" target="_blank" rel="noopener">nimbalyst/nimbalyst#903</a></td><td>2026-07-17</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-79"><td>[79]</td><td>Shift+Enter nieodróżnialny od Enter na Windows (Electron + xterm + ConPTY)</td><td><a href="https://github.com/anthropics/claude-code/issues/92771" target="_blank" rel="noopener">anthropics/claude-code#92771</a></td><td>2026-09-08</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-80"><td>[80]</td><td>Brak wiarygodnego sygnału stanu sesji; „months battling detection bugs”; NOT_PLANNED</td><td><a href="https://github.com/anthropics/claude-code/issues/38184" target="_blank" rel="noopener">anthropics/claude-code#38184</a></td><td>2026-03-24</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-81"><td>[81]</td><td>System pluginów T3 w recenzji (stos PR, niescalony)</td><td><a href="https://github.com/pingdotgg/t3code/pull/16047" target="_blank" rel="noopener">pingdotgg/t3code#16047</a></td><td>2026-10-05</td><td>2026-10-12</td><td><span class="badge medium">średnia (niescalone)</span></td></tr><tr id="src-82"><td>[82]</td><td>Fork t3kanban: tablica zadań wydana w dniu utworzenia repo (2026-08-31), potem 1 650 commitów z tyłu</td><td><a href="https://github.com/what1f/t3kanban" target="_blank" rel="noopener">what1f/t3kanban</a></td><td>2026-09-10</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-83"><td>[83]</td><td>Fork mtcode: 1 492 do przodu, 6 z tyłu, merge&#x27;e paczkami</td><td><a href="https://github.com/munimtechnologies/mtcode" target="_blank" rel="noopener">munimtechnologies/mtcode</a></td><td>2026-10-12</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-84"><td>[84]</td><td>Narzędzia MCP nie zawsze docierają do modelu/subagentów w Claude Code</td><td><a href="https://github.com/anthropics/claude-code/issues/30280" target="_blank" rel="noopener">anthropics/claude-code#30280</a></td><td>2026-02..04</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-85"><td>[85]</td><td>opcode (Claudia): brak commitów kodu od 2025-10 (historia)</td><td><a href="https://github.com/winfunc/opcode" target="_blank" rel="noopener">winfunc/opcode</a></td><td>2025-10-13</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-86"><td>[86]</td><td>Zewnętrzna aplikacja sterująca T3: każdy wątek wymaga projektu</td><td><a href="https://github.com/pingdotgg/t3code/issues/17894" target="_blank" rel="noopener">pingdotgg/t3code#17894</a></td><td>2026-10-10</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr><tr id="src-87"><td>[87]</td><td>Deep linki `t3code://` nie działały od 0.0.38 do 2026-10-12</td><td><a href="https://github.com/pingdotgg/t3code/issues/9745" target="_blank" rel="noopener">pingdotgg/t3code#9745</a></td><td>2026-09-04</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-88"><td>[88]</td><td>OAuth dla zewnętrznych agentów scalony 2026-10-06; ostatnie stabilne v0.0.45 (2026-10-02)</td><td><a href="https://github.com/pingdotgg/t3code/pull/16336" target="_blank" rel="noopener">pingdotgg/t3code#16336</a></td><td>2026-10-06</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-89"><td>[89]</td><td>Klient OAuth bez nagłówka MCP-Protocol-Version dostawał 400 (naprawione 10-09)</td><td><a href="https://github.com/pingdotgg/t3code/issues/16906" target="_blank" rel="noopener">pingdotgg/t3code#16906</a></td><td>2026-10-07</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-90"><td>[90]</td><td>Okno usuwania wątku bez sprawdzenia katalogu zarządzanego; cleanup automatyczny omija obce worktree</td><td><a href="https://github.com/pingdotgg/t3code/blob/main/apps/web/src/worktreeCleanup.ts" target="_blank" rel="noopener">t3code apps/web/src/worktreeCleanup.ts</a></td><td>2026-10-12</td><td>2026-10-12</td><td><span class="badge medium">średnia (odczyt kodu red teamu)</span></td></tr><tr id="src-91"><td>[91]</td><td>`t3_thread_launch` bez klucza ponowienia; PR otwarty</td><td><a href="https://github.com/pingdotgg/t3code/pull/16654" target="_blank" rel="noopener">pingdotgg/t3code#16654</a></td><td>2026-10-07</td><td>2026-10-12</td><td><span class="badge verified">wysoka</span></td></tr><tr id="src-92"><td>[92]</td><td>RFC: zewnętrzne aplikacje renderowane wewnątrz T3</td><td><a href="https://github.com/pingdotgg/t3code/issues/6419" target="_blank" rel="noopener">pingdotgg/t3code#6419</a></td><td>2026-08-13</td><td>2026-10-12</td><td><span class="badge medium">średnia</span></td></tr></tbody></table></details>
+<h2 id="mapa-nieaktualnosci">Mapa nieaktualności</h2>
+<p>Raport opisuje stan upstreamu z 2026-10-12 (commit <code>0e7346c</code>). Upstream dostaje ok. 50–80 commitów dziennie, więc twierdzenia o kodzie T3 Code starzeją się w tygodniach, nie w miesiącach.</p>
+<p><strong>Dwie reguły odświeżania:</strong></p>
+<ul>
+<li><strong>Ponowne sprawdzenie interfejsu zewnętrznego T3</strong> (twierdzenia o kodzie): do 2026-11-06 albo natychmiast, gdy T3 scali system pluginów <a class="cite" href="#src-81">[81]</a>.</li>
+<li><strong>Odświeżenie całego raportu (Refresh):</strong> raport wyboru starszy niż dwa kwartały trzeba odświeżyć przed działaniem, czyli przed decyzją podjętą po 2027-04-12.</li>
+</ul>
+<p>Mapę wyliczył <code>recon_kit.py staleness</code>. Okna w miesiącach: kod i architektura upstreamu (code-architecture) 1, wersje (version) 1, sygnały ekosystemu (velocity) 6, licencja (license) 12, warunki dostawców (terms) 3, krajobraz AI (landscape) 3, wzorce (pattern) 24.</p>
+<table>
+<thead>
+<tr>
+<th>Twierdzenie</th>
+<th>Klasa</th>
+<th>Publ.</th>
+<th>Ponowne sprawdzenie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a class="cite" href="#src-14">[14]</a><a class="cite" href="#src-15">[15]</a> /mcp dla zewnętrznych agentów, OAuth 30 dni</td>
+<td>code-architecture</td>
+<td>2026-10-06</td>
+<td><strong>2026-11-06</strong></td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-9">[9]</a> /mcp wstrzykiwany do sesji, własny toolkit</td>
+<td>code-architecture</td>
+<td>2026-10-09</td>
+<td>2026-11-09</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-45">[45]</a> Agent SDK 0.3.296</td>
+<td>version</td>
+<td>2026-10-09</td>
+<td>2026-11-09</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-3">[3]</a> wątek = 1 projekt, ≤1 worktree</td>
+<td>code-architecture</td>
+<td>2026-10-10</td>
+<td>2026-11-10</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-47">[47]</a> OpenCode 1.19 / przejście na v2</td>
+<td>version</td>
+<td>2026-10-11</td>
+<td>2026-11-11</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-16">[16]</a> <code>existing_worktree</code> poza katalogiem T3</td>
+<td>code-architecture</td>
+<td>2026-10-12</td>
+<td>2026-11-12</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-61">[61]</a><a class="cite" href="#src-62">[62]</a> flagi i hooki Claude Code</td>
+<td>version</td>
+<td>2026-10-12</td>
+<td>2026-11-12</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-55">[55]</a> Vibe Kanban bez firmy</td>
+<td>landscape</td>
+<td>2026-09-19</td>
+<td>2026-12-19</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-44">[44]</a> wstrzymana zmiana rozliczeń SDK</td>
+<td>terms</td>
+<td>2026-10-07</td>
+<td>2027-01-07</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-58">[58]</a> Superset ELv2, brak Windows</td>
+<td>landscape</td>
+<td>2026-10-08</td>
+<td>2027-01-08</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-41">[41]</a> warunki Anthropic: CLI z subskrypcją</td>
+<td>terms</td>
+<td>2026-10-12</td>
+<td>2027-01-12</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-18">[18]</a> licencja MIT</td>
+<td>license</td>
+<td>2026-03-05</td>
+<td>2027-03-05</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-22">[22]</a> tempo upstreamu</td>
+<td>velocity</td>
+<td>2026-10-12</td>
+<td>2027-04-12</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-29">[29]</a><a class="cite" href="#src-30">[30]</a> multi-repo niezaimplementowane</td>
+<td>velocity</td>
+<td>2026-10-12</td>
+<td>2027-04-12</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-33">[33]</a><a class="cite" href="#src-34">[34]</a> Windows poza CI, #14990</td>
+<td>velocity</td>
+<td>2026-10-12</td>
+<td>2027-04-12</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-19">[19]</a> autorzy popierają forki</td>
+<td>license</td>
+<td>2026-07-28</td>
+<td>2027-07-28</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-54">[54]</a> Crystal</td>
+<td>pattern</td>
+<td>2026-02-26</td>
+<td>2028-02-26</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-28">[28]</a> wzorzec forka plug-in</td>
+<td>pattern</td>
+<td>2026-10-12</td>
+<td>2028-10-12</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Najwcześniejsze ponowne sprawdzenie: 2026-11-06.</strong> Dotyczy interfejsu <code>/mcp</code> dla zewnętrznych agentów w T3. Jeśli wybierasz C, sprawdź go przed spike'iem S3.</p></main></div></body></html>

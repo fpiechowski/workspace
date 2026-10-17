@@ -17,6 +17,8 @@ class Branch {
 class Workspace {
     id
     name
+    intent
+    status
 }
 
 class Worktree {
@@ -25,6 +27,7 @@ class Worktree {
 
 class ChangeRequest {
     id
+    url
 }
 
 class Agent {
@@ -46,6 +49,24 @@ class Task {
     acceptanceCriteria
 }
 
+class Artifact {
+    id
+    name
+    kind
+}
+
+class ArtifactVersion {
+    number
+    content
+    createdAt
+}
+
+class Handoff {
+    id
+    summary
+    verification
+    openQuestions
+}
 
 
 Project ..|> SessionScope
@@ -59,6 +80,15 @@ Workspace "1" *-- "0..*" Task
 Workspace ..|> SessionScope
 Workspace "1" *-- "0..*" ChangeRequest
 Workspace "1" *-- "0..*" Worktree
+Workspace "1" *-- "0..*" Artifact
+Workspace "1" *-- "0..*" Handoff
+
+Artifact "1" *-- "1..*" ArtifactVersion
+ArtifactVersion "0..*" --> "0..1" Session : produced by
+
+Handoff "0..*" --> "1" Session : from
+Handoff "0..*" --> "0..1" Task : concerns
+Handoff "0..*" --> "0..*" ArtifactVersion : references
 
 ChangeRequest "0..*" --> "1" Branch : source
 ChangeRequest "0..*" --> "1" Branch : target
